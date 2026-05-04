@@ -106,19 +106,6 @@ const schemas = [
     },
   },
   {
-    name: 'send_sticker_as_user',
-    description: '[User Identity] Send a sticker/emoji as the logged-in user.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        chat_id: { type: 'string', description: 'Target chat ID' },
-        sticker_id: { type: 'string', description: 'Sticker ID' },
-        sticker_set_id: { type: 'string', description: 'Sticker set ID' },
-      },
-      required: ['chat_id', 'sticker_id', 'sticker_set_id'],
-    },
-  },
-  {
     name: 'send_post_as_user',
     description: '[User Identity] Send a rich text (POST) message with title and formatted paragraphs. Supports real @-mentions that trigger notifications.',
     inputSchema: {
@@ -134,18 +121,6 @@ const schemas = [
         root_id: { type: 'string', description: 'Thread root message ID (optional)' },
       },
       required: ['chat_id', 'paragraphs'],
-    },
-  },
-  {
-    name: 'send_audio_as_user',
-    description: '[User Identity] Send an audio message as the logged-in user. Requires audio_key.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        chat_id: { type: 'string', description: 'Target chat ID' },
-        audio_key: { type: 'string', description: 'Audio key from upload' },
-      },
-      required: ['chat_id', 'audio_key'],
     },
   },
   {
@@ -257,20 +232,10 @@ const handlers = {
     const r = await c.sendFile(args.chat_id, args.file_key, args.file_name, { rootId: args.root_id });
     return sendResult(r, `File "${args.file_name}" sent to ${args.chat_id}`);
   },
-  async send_sticker_as_user(args, ctx) {
-    const c = await ctx.getUserClient();
-    const r = await c.sendSticker(args.chat_id, args.sticker_id, args.sticker_set_id);
-    return sendResult(r, `Sticker sent to ${args.chat_id}`);
-  },
   async send_post_as_user(args, ctx) {
     const c = await ctx.getUserClient();
     const r = await c.sendPost(args.chat_id, args.title || '', args.paragraphs, { rootId: args.root_id });
     return sendResult(r, `Post sent to ${args.chat_id}`);
-  },
-  async send_audio_as_user(args, ctx) {
-    const c = await ctx.getUserClient();
-    const r = await c.sendAudio(args.chat_id, args.audio_key);
-    return sendResult(r, `Audio sent to ${args.chat_id}`);
   },
   async send_card_as_user(args, ctx) {
     const via = args.via || 'bot';

@@ -201,9 +201,9 @@
 
 ##### C2. 工具删除(共 4 个)
 
-- [ ] **删 `send_sticker_as_user`** — 任意 id 都失败 + agent 极少用 + 修复成本高于价值
-- [ ] **删 `send_audio_as_user`** — Cookie 路径坏 + agent 极少发语音 + bot 路径已有 `send_message_as_bot(msg_type='audio')` 兜底
-- [ ] **删 `find_user`** — 与 `search_contacts` 完全重叠,且更弱(只接受 email/mobile,不回 open_id)。把 search_contacts 加上 email/mobile 过滤参数即可
+- [x] **删 `send_sticker_as_user`** — 任意 id 都失败 + agent 极少用 + 修复成本高于价值 (v1.3.7)
+- [x] **删 `send_audio_as_user`** — Cookie 路径坏 + agent 极少发语音 + bot 路径已有 `send_message_as_bot(msg_type='audio')` 兜底 (v1.3.7)
+- [x] **删 `find_user`** — 与 `search_contacts` 完全重叠,且更弱(只接受 email/mobile,不回 open_id) (v1.3.7)
 - [ ] **删 `download_image`** — 与 `download_file` 完全重叠。合并为单一 `download_message_resource(message_id, key, kind=image|file, save_path?)`,kind 从 message content 自动判别也行;**MUST 强制要求 save_path 当文件 > 2 MB 时,避免再次撞 Anthropic API 5 MB 上限**
 
 ##### C3. 工具合并(净减约 6 个,但语义更干净)

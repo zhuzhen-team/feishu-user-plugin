@@ -280,18 +280,6 @@ class LarkUserClient {
     return this._sendMsg(MsgType.FILE, chatId, { fileKey, fileName }, opts);
   }
 
-  // --- Send Audio ---
-
-  async sendAudio(chatId, audioKey, opts = {}) {
-    return this._sendMsg(MsgType.AUDIO, chatId, { audioKey }, opts);
-  }
-
-  // --- Send Sticker ---
-
-  async sendSticker(chatId, stickerId, stickerSetId, opts = {}) {
-    return this._sendMsg(MsgType.STICKER, chatId, { stickerId, stickerSetId }, opts);
-  }
-
   // --- Send Rich Text / POST ---
 
   async sendPost(chatId, title, paragraphs, opts = {}) {

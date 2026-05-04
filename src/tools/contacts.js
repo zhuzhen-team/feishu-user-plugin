@@ -33,17 +33,6 @@ const schemas = [
       required: ['user_id'],
     },
   },
-  {
-    name: 'find_user',
-    description: '[Official API] Find a Feishu user by email or mobile number.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        email: { type: 'string', description: 'User email (optional)' },
-        mobile: { type: 'string', description: 'User mobile with country code like +86xxx (optional)' },
-      },
-    },
-  },
 ];
 
 const handlers = {
@@ -69,9 +58,6 @@ const handlers = {
       } catch {}
     }
     return text(n ? `User ${args.user_id}: ${n}` : `Could not resolve user ${args.user_id}. This user may be from an external tenant. Try search_contacts with the user's display name instead.`);
-  },
-  async find_user(args, ctx) {
-    return json(await ctx.getOfficialClient().findUserByIdentity({ emails: args.email, mobiles: args.mobile }));
   },
 };
 

@@ -24,7 +24,7 @@ The 9 Claude Code skills are also exposed as MCP prompts (`prompts/list` + `prom
 
 Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUMENTS` convention used by Claude Code skills). `status` has no arguments.
 
-## Tool Categories (81 tools)
+## Tool Categories (78 tools)
 
 ### User Identity — Messaging (reverse-engineered, cookie-based)
 - `send_to_user` — Search user + send text (one step, most common). Returns candidates if multiple matches.
@@ -35,8 +35,6 @@ Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUM
 - `send_file_as_user` — Send file (requires file_key from `upload_file`)
 - `send_post_as_user` — Send rich text with title + formatted paragraphs. Elements: `{tag:"text"}`, `{tag:"a",href,text}`, `{tag:"at",userId,name}`. **@-mentions trigger real notifications** (fixed by registering AT element IDs in RichText.atIds field 6 — reverse-engineered from Feishu Web bundle's AtProperty + RichText schemas).
 - `send_as_user` / `send_to_user` / `send_to_group` — plain text sends now accept optional `ats: [{userId, name}]`; the text must contain the `@<name>` marker for each entry. The marker is spliced into a real AT element so the mentioned user is notified. Identity is the cookie user (not bot).
-- `send_sticker_as_user` — Send sticker/emoji
-- `send_audio_as_user` — Send audio message
 
 ### User Identity — Contacts & Info
 - `search_contacts` — Search users/groups by name
@@ -78,7 +76,6 @@ Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUM
 - `download_file` — Download a file (msg_type=file) attachment. Returns base64 + mimeType + byte count; optional `save_path` writes the file to disk. Same parent-id rule for merge_forward children as download_image.
 - `list_user_okrs` / `get_okrs` / `list_okr_periods` — OKR read. UAT-first (works for the authenticated user's OKRs) with app fallback when OKR scope is granted.
 - `list_calendars` / `list_calendar_events` / `get_calendar_event` — Calendar read. UAT-first (primary + shared + subscribed); app identity only sees calendars the bot was explicitly invited to.
-- `find_user` — Contact lookup by email/mobile
 
 ## Usage Patterns
 

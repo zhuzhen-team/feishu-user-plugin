@@ -654,23 +654,6 @@
     }
   },
   {
-    "name": "find_user",
-    "description": "[Official API] Find a Feishu user by email or mobile number.",
-    "inputSchema": {
-      "properties": {
-        "email": {
-          "description": "User email (optional)",
-          "type": "string"
-        },
-        "mobile": {
-          "description": "User mobile with country code like +86xxx (optional)",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    }
-  },
-  {
     "name": "forward_message",
     "description": "[Official API] Forward a message to another chat or user. `receive_id` may be a group chat_id (oc_xxx), an open_id (ou_xxx), a union_id, a user_id, or an email — set `receive_id_type` to match (default: chat_id).",
     "inputSchema": {
@@ -1505,27 +1488,6 @@
     }
   },
   {
-    "name": "send_audio_as_user",
-    "description": "[User Identity] Send an audio message as the logged-in user. Requires audio_key.",
-    "inputSchema": {
-      "properties": {
-        "audio_key": {
-          "description": "Audio key from upload",
-          "type": "string"
-        },
-        "chat_id": {
-          "description": "Target chat ID",
-          "type": "string"
-        }
-      },
-      "required": [
-        "audio_key",
-        "chat_id"
-      ],
-      "type": "object"
-    }
-  },
-  {
     "name": "send_card_as_user",
     "description": "[v1.3.6: bot-routed default] Send an interactive card to a chat. **As of v1.3.6, identity defaults to BOT** because user-identity card sending requires reverse-engineering the Feishu web protobuf and is deferred to v1.3.7. The tool name keeps the \"as_user\" suffix so callers don't have to migrate when v1.3.7 lands; once user-identity is implemented the default flips. Pass `card` as a JSON object (Feishu card schema). To force bot explicitly set via=\"bot\".",
     "inputSchema": {
@@ -1676,32 +1638,6 @@
       "required": [
         "chat_id",
         "paragraphs"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "send_sticker_as_user",
-    "description": "[User Identity] Send a sticker/emoji as the logged-in user.",
-    "inputSchema": {
-      "properties": {
-        "chat_id": {
-          "description": "Target chat ID",
-          "type": "string"
-        },
-        "sticker_id": {
-          "description": "Sticker ID",
-          "type": "string"
-        },
-        "sticker_set_id": {
-          "description": "Sticker set ID",
-          "type": "string"
-        }
-      },
-      "required": [
-        "chat_id",
-        "sticker_id",
-        "sticker_set_id"
       ],
       "type": "object"
     }

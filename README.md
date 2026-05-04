@@ -3,10 +3,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-green.svg)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-purple.svg)](https://modelcontextprotocol.io)
-[![Tools](https://img.shields.io/badge/Tools-81-orange.svg)](#tools)
+[![Tools](https://img.shields.io/badge/Tools-78-orange.svg)](#tools)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**All-in-one Feishu/Lark MCP Server -- 81 tools, 9 skills, 3 auth layers for messaging, docs, bitable, calendar, tasks, drive, OKR, and more.**
+**All-in-one Feishu/Lark MCP Server -- 78 tools, 9 skills, 3 auth layers for messaging, docs, bitable, calendar, tasks, drive, OKR, and more.**
 
 The only MCP server that lets you send messages as your **personal identity** (not a bot), while also integrating the full official Feishu API. Works with Claude Code, Cursor, Windsurf, OpenClaw, and any MCP-compatible client.
 
@@ -337,7 +337,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 }
 ```
 
-## Tools (81 total)
+## Tools (78 total)
 
 ### User Identity -- Messaging (10 tools, cookie auth)
 
@@ -349,8 +349,6 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 | `send_image_as_user` | Send image (requires `image_key` from `upload_image`) |
 | `send_file_as_user` | Send file (requires `file_key` from `upload_file`) |
 | `send_post_as_user` | Send rich text with title + formatted paragraphs |
-| `send_sticker_as_user` | Send sticker/emoji |
-| `send_audio_as_user` | Send audio message |
 | `batch_send` | Fan-out send to multiple targets in one call (text / image / file / post). v1.3.6 |
 | `send_card_as_user` | Send a Feishu interactive card. v1.3.6 default routes through bot identity; user-identity is reserved for v1.3.7. |
 
@@ -465,12 +463,11 @@ All docx / bitable tools' `document_id` / `app_token` parameter also accepts a W
 | `delete_file` | Delete a file/folder |
 | `upload_drive_file` | Upload a local file into a Drive folder (`drive/v1/files/upload_all`). Optional `wiki_space_id` attaches the upload as a Wiki node atomically. v1.3.6 |
 
-### Official API -- Wiki & Contacts (4 tools)
+### Official API -- Wiki (4 tools)
 
 | Tool | Description |
 |------|-------------|
-| `list_wiki_spaces` / `search_wiki` / `list_wiki_nodes` | Wiki spaces, search, browse |
-| `find_user` | Find user by email or mobile number |
+| `list_wiki_spaces` / `search_wiki` / `list_wiki_nodes` / `get_wiki_node` | Wiki spaces, search, browse + resolve a wiki node to underlying obj_token |
 
 ### Plugin -- Profiles (2 tools, v1.3.6)
 
@@ -537,7 +534,7 @@ feishu-user-plugin/
 │       ├── SKILL.md         # Main skill definition (trigger, tools, auth)
 │       └── references/      # 8 skill reference docs + CLAUDE.md
 ├── src/
-│   ├── index.js             # MCP server entry point (81 tools)
+│   ├── index.js             # MCP server entry point (78 tools)
 │   ├── client.js            # User identity client (Protobuf gateway)
 │   ├── official.js          # Official API client (REST, UAT)
 │   ├── utils.js             # ID generators, cookie parser
