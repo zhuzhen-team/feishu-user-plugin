@@ -6,6 +6,24 @@ All-in-one Feishu plugin for Claude Code with three auth layers:
 - **Official API** (app credentials): Read group messages, docs, tables, wiki, drive, contacts, upload files
 - **User OAuth UAT** (user_access_token): Read P2P chat history, list all user's chats
 
+## MCP Prompts (v1.3.7)
+
+The 9 Claude Code skills are also exposed as MCP prompts (`prompts/list` + `prompts/get`) so Codex, Cursor, OpenClaw, and Windsurf — which cannot load Claude Code skills — get the same guided UX. Prompt bodies are read at server start from `skills/feishu-user-plugin/references/`.
+
+| Prompt | Description |
+|--------|-------------|
+| `/send` | Send a message as yourself (non-bot) |
+| `/reply` | Read recent messages and reply |
+| `/digest` | Summarise recent group or P2P messages |
+| `/search` | Search Feishu contacts or groups |
+| `/doc` | Search, read, or create a Feishu document |
+| `/table` | Operate on a Feishu Bitable (multi-dimensional table) |
+| `/wiki` | Search and browse a Feishu Wiki space |
+| `/drive` | List files or create folders in Feishu Drive |
+| `/status` | Check all three auth layers (cookie, app, UAT) |
+
+Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUMENTS` convention used by Claude Code skills). `status` has no arguments.
+
 ## Tool Categories (81 tools)
 
 ### User Identity — Messaging (reverse-engineered, cookie-based)

@@ -25,6 +25,14 @@ switch (cmd) {
   case 'keepalive':
     keepalive();
     break;
+  case 'list-prompts': {
+    const { listPrompts } = require('./prompts');
+    for (const p of listPrompts()) {
+      console.log(`/${p.name} — ${p.description}`);
+      for (const a of (p.arguments || [])) console.log(`  - ${a.name}${a.required ? ' (required)' : ''}: ${a.description}`);
+    }
+    break;
+  }
   case 'help':
   case '--help':
   case '-h':

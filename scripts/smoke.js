@@ -3,6 +3,7 @@
 // Spawns src/index.js as a child via stdio, sends:
 //   1. tools/list                   → dumps sorted (name, description, inputSchema) to stdout
 //   2. tools/call get_login_status  → dumps recursive Object.keys (not values) to stdout
+//   3. prompts/list                 → dumps sorted (name, description, arguments) to stdout
 // Exits 0 on success, 1 on protocol error. Diff output against tests/baseline/*.json.
 //
 // Cred sourcing: src/index.js only reads process.env.LARK_*; this script injects
@@ -24,6 +25,7 @@ const SERVER_PATH = path.join(__dirname, '..', 'src', 'index.js');
 const BASELINE_DIR = path.join(__dirname, '..', 'tests', 'baseline');
 const TOOLS_BASELINE = path.join(BASELINE_DIR, 'tools-list.json');
 const LOGIN_BASELINE = path.join(BASELINE_DIR, 'login-status-shape.json');
+const PROMPTS_BASELINE = path.join(BASELINE_DIR, 'prompts-list.json');
 
 function jsonrpc(id, method, params) {
   return JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n';
@@ -109,6 +111,10 @@ async function runSmoke() {
   await waitFor(() => responses.has(3) || exitErr, 15000);
   if (exitErr) throw exitErr;
 
+  child.stdin.write(jsonrpc(4, 'prompts/list', {}));
+  await waitFor(() => responses.has(4) || exitErr, 8000);
+  if (exitErr) throw exitErr;
+
   child.kill('SIGTERM');
 
   const tools = (responses.get(2)?.result?.tools || []).map((t) => ({
@@ -130,7 +136,13 @@ async function runSmoke() {
     loginShape = { _error: 'no response', _raw: shapeOnly(responses.get(3)?.result) };
   }
 
-  return { tools, loginShape };
+  const prompts = (responses.get(4)?.result?.prompts || []).map((p) => ({
+    name: p.name,
+    description: p.description,
+    ...(p.arguments && p.arguments.length > 0 ? { arguments: p.arguments } : {}),
+  })).sort((a, b) => a.name.localeCompare(b.name));
+
+  return { tools, loginShape, prompts };
 }
 
 (async () => {
@@ -151,7 +163,8 @@ async function runSmoke() {
     fs.mkdirSync(BASELINE_DIR, { recursive: true });
     fs.writeFileSync(TOOLS_BASELINE, JSON.stringify(snap.tools, null, 2) + '\n');
     fs.writeFileSync(LOGIN_BASELINE, JSON.stringify(snap.loginShape, null, 2) + '\n');
-    console.error(`Baseline written: ${snap.tools.length} tools, login_status shape captured`);
+    fs.writeFileSync(PROMPTS_BASELINE, JSON.stringify(snap.prompts, null, 2) + '\n');
+    console.error(`Baseline written: ${snap.tools.length} tools, ${snap.prompts.length} prompts, login_status shape captured`);
     return;
   }
   if (cmd === 'diff') {
@@ -161,6 +174,9 @@ async function runSmoke() {
     }
     const expectedTools = JSON.parse(fs.readFileSync(TOOLS_BASELINE, 'utf8'));
     const expectedLogin = JSON.parse(fs.readFileSync(LOGIN_BASELINE, 'utf8'));
+    const expectedPrompts = fs.existsSync(PROMPTS_BASELINE)
+      ? JSON.parse(fs.readFileSync(PROMPTS_BASELINE, 'utf8'))
+      : null;
     const actualToolsStr = JSON.stringify(snap.tools, null, 2);
     const expectedToolsStr = JSON.stringify(expectedTools, null, 2);
     let ok = true;
@@ -185,8 +201,22 @@ async function runSmoke() {
       console.error('expected:', JSON.stringify(expectedLogin, null, 2));
       console.error('actual:  ', JSON.stringify(snap.loginShape, null, 2));
     }
+    if (expectedPrompts !== null && JSON.stringify(snap.prompts, null, 2) !== JSON.stringify(expectedPrompts, null, 2)) {
+      ok = false;
+      const expectedNames = new Set(expectedPrompts.map(p => p.name));
+      const actualNames = new Set(snap.prompts.map(p => p.name));
+      const added = [...actualNames].filter(n => !expectedNames.has(n));
+      const removed = [...expectedNames].filter(n => !actualNames.has(n));
+      console.error('PROMPTS MISMATCH');
+      console.error(`expected ${expectedPrompts.length} prompts, got ${snap.prompts.length}`);
+      if (added.length) console.error(`  added:   ${added.join(', ')}`);
+      if (removed.length) console.error(`  removed: ${removed.join(', ')}`);
+      const expByName = Object.fromEntries(expectedPrompts.map(p => [p.name, p]));
+      const changed = snap.prompts.filter(p => expByName[p.name] && JSON.stringify(p) !== JSON.stringify(expByName[p.name])).map(p => p.name);
+      if (changed.length) console.error(`  changed: ${changed.join(', ')}`);
+    }
     if (!ok) process.exit(1);
-    console.error(`OK: ${snap.tools.length} tools, login_status shape matches`);
+    console.error(`OK: ${snap.tools.length} tools, ${snap.prompts.length} prompts, login_status shape matches`);
     return;
   }
   console.error('usage: smoke.js [dump|diff|write-baseline]');

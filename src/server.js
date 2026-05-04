@@ -15,7 +15,7 @@
 const path = require('path');
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
-const { CallToolRequestSchema, ListToolsRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
+const { CallToolRequestSchema, ListToolsRequestSchema, ListPromptsRequestSchema, GetPromptRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
 
 // Local dev fallback: MCP clients inject env vars from config's env block at
 // spawn time. This dotenv line only matters when running locally with a .env.
@@ -24,6 +24,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const { LarkUserClient } = require('./clients/user');
 const { LarkOfficialClient } = require('./clients/official');
 const { resolveToken } = require('./resolver');
+const { listPrompts, getPrompt } = require('./prompts');
 
 // --- Tool modules ---
 // Adding a new domain: create src/tools/<x>.js exporting { schemas, handlers }
@@ -161,7 +162,7 @@ function buildCtx() {
 
 const server = new Server(
   { name: 'feishu-user-plugin', version: require('../package.json').version },
-  { capabilities: { tools: {} } }
+  { capabilities: { tools: {}, prompts: {} } }
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
@@ -177,6 +178,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   } catch (err) {
     return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
   }
+});
+
+server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: listPrompts() }));
+
+server.setRequestHandler(GetPromptRequestSchema, async (req) => {
+  const { name, arguments: args } = req.params;
+  return getPrompt(name, args || {});
 });
 
 // --- Process-level error handlers ---
@@ -199,7 +207,7 @@ async function main() {
   const hasCookie = !!process.env.LARK_COOKIE;
   const hasApp = !!(process.env.LARK_APP_ID && process.env.LARK_APP_SECRET);
   const hasUAT = !!process.env.LARK_USER_ACCESS_TOKEN;
-  console.error(`[feishu-user-plugin] MCP Server v${require('../package.json').version} — ${TOOLS.length} tools`);
+  console.error(`[feishu-user-plugin] MCP Server v${require('../package.json').version} — ${TOOLS.length} tools, ${listPrompts().length} prompts`);
   console.error(`[feishu-user-plugin] Auth: Cookie=${hasCookie ? 'YES' : 'NO'} App=${hasApp ? 'YES' : 'NO'} UAT=${hasUAT ? 'YES' : 'NO'}`);
   if (!hasCookie) console.error('[feishu-user-plugin] WARNING: LARK_COOKIE not set — user identity tools (send_to_user, etc.) will fail');
   if (!hasApp) console.error('[feishu-user-plugin] WARNING: LARK_APP_ID/SECRET not set — official API tools (read_messages, docs, etc.) will fail');
