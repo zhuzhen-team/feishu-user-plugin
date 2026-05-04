@@ -98,6 +98,18 @@ const schemas = [
       required: ['space_id', 'node_token'],
     },
   },
+  {
+    name: 'delete_wiki_node',
+    description: '[Official API, v1.3.7] Delete a Wiki node. Calls `DELETE /open-apis/wiki/v2/spaces/{space_id}/nodes/{node_token}`. The Feishu SDK does not type this endpoint, so the call goes through raw REST (UAT-first; bot fallback uses `client.request`). **The underlying drive resource (docx / sheet / bitable / file) is NOT deleted** — Feishu treats wiki nodes as pointers. To delete the actual resource as well, follow up with `manage_drive_file(action=delete, type=<obj_type>, file_token=<obj_token>)` (use `get_wiki_node` first to get obj_type / obj_token).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        space_id: { type: 'string', description: 'Wiki space ID' },
+        node_token: { type: 'string', description: 'Wiki node token to delete' },
+      },
+      required: ['space_id', 'node_token'],
+    },
+  },
 ];
 
 const { parseFeishuInput } = require('../resolver');
@@ -136,6 +148,9 @@ const handlers = {
       target_space_id: args.target_space_id,
       title: args.title,
     }));
+  },
+  async delete_wiki_node(args, ctx) {
+    return json(await ctx.getOfficialClient().deleteWikiNode(args.space_id, args.node_token));
   },
   async get_wiki_node(args, ctx) {
     const parsed = parseFeishuInput(args.node_token);

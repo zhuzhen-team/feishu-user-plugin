@@ -24,7 +24,7 @@ The 9 Claude Code skills are also exposed as MCP prompts (`prompts/list` + `prom
 
 Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUMENTS` convention used by Claude Code skills). `status` has no arguments.
 
-## Tool Categories (79 tools)
+## Tool Categories (80 tools)
 
 ### User Identity — Messaging (reverse-engineered, cookie-based)
 - `send_to_user` — Search user + send text (one step, most common). Returns candidates if multiple matches.
@@ -65,7 +65,7 @@ Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUM
 - `manage_bitable_view(action=list|create|delete)` — Views (grid / kanban / gallery / form / gantt / calendar).
 - `manage_bitable_record(action=search|get|create|update|delete)` — Record CRUD. create/update/delete accept arrays (single or up to 500 per call).
 - `list_wiki_spaces` / `search_wiki` / `list_wiki_nodes` / `get_wiki_node` — Wiki read (v1.3.4 adds `get_wiki_node` which resolves a wiki node token to its underlying `obj_type` + `obj_token`, so you can feed the node straight into `read_doc`, bitable tools, etc. v1.3.7 hardens this: `get_wiki_node` now also accepts underlying `obj_token`s from `search_wiki` (synthesizes a node-shape so callers don't have to know which ID space they hold), and `list_wiki_spaces` is UAT-first with a `scopeHint` field surfaced when the bot returns an empty list — typically because `wiki:wiki:readonly` is missing or the bot was never invited.)
-- `create_wiki_node` / `update_wiki_node` / `move_wiki_node` / `copy_wiki_node` — Wiki write (v1.3.7). UAT-first so resources are owned by the user. `create_wiki_node` builds a fresh `doc/sheet/bitable/mindnote/file/docx/slides` inside a wiki space (or a `node_type=shortcut` pointer to an existing node). `update_wiki_node` renames (only `title` is updatable via wiki API; content edits go through docx/bitable/sheet tools). `move_wiki_node` and `copy_wiki_node` accept `target_parent_token` + optional `target_space_id` to re-parent within the same space or migrate to another. Note: there is no `delete_wiki_node` — Feishu's open API has no documented wiki node delete endpoint; deletion is done by removing the underlying resource via the docx/sheet/bitable delete path or moving the node out of the wiki space.
+- `create_wiki_node` / `update_wiki_node` / `move_wiki_node` / `copy_wiki_node` / `delete_wiki_node` — Wiki write (v1.3.7). UAT-first so resources are owned by the user. `create_wiki_node` builds a fresh `doc/sheet/bitable/mindnote/file/docx/slides` inside a wiki space (or a `node_type=shortcut` pointer to an existing node). `update_wiki_node` renames (only `title` is updatable via wiki API; content edits go through docx/bitable/sheet tools). `move_wiki_node` and `copy_wiki_node` accept `target_parent_token` + optional `target_space_id` to re-parent within the same space or migrate to another. `delete_wiki_node` calls `DELETE /open-apis/wiki/v2/spaces/{space_id}/nodes/{token}` via raw REST (the SDK doesn't type it); **only the wiki node pointer is removed — the underlying drive resource is NOT deleted**, follow up with `manage_drive_file(action=delete, type=...)` if you also want the resource gone.
 - `list_files` / `create_folder` — Drive
 - `manage_drive_file(action=copy|move|delete)` — Drive file operations (v1.3.7 consolidates v1.3.6 copy_file / move_file / delete_file). UAT-first. `type` is always required (`file/folder/docx/sheet/bitable/mindnote/slides`) — Feishu rejects with 1061002 / 1062501 otherwise.
 - `upload_image` / `upload_file` — Upload image/file, returns key for send_image/send_file
@@ -603,4 +603,5 @@ If a tool returns `access_denied` or error code `99991672` (scope not granted), 
 - Refresh token expires after 7 days without use — set up `keepalive` cron to prevent this
 - `manage_bitable_field(action=update)` requires `type` parameter even when only changing field name (Feishu API requirement)
 - `list_wiki_spaces` may return empty if bot lacks `wiki:wiki:readonly` permission (v1.3.7+: `scopeHint` field is appended to the response when this happens)
+- `delete_wiki_node` calls an undocumented-in-SDK endpoint (`DELETE /wiki/v2/spaces/{id}/nodes/{token}`); v1.3.7 ships it because Feishu's API console exposes it, but if Feishu retires the endpoint the tool will fail with a clear 404 — fall back to `manage_drive_file(action=delete)` on the underlying obj_token in that case.
 - `search_wiki` uses same API as `search_docs` — `docs_types` filter may not work as expected
