@@ -1,4 +1,8 @@
-// src/tools/docs.js — Feishu document operations (search, read, create, edit blocks).
+// src/tools/docs.js — Feishu document operations.
+//
+// 5 tools (was 7 in v1.3.6): search_docs, read_doc, get_doc_blocks, create_doc,
+// and the consolidated manage_doc_block (action=create|update|delete) which
+// replaces the v1.3.6 trio create_doc_block / update_doc_block / delete_doc_blocks.
 
 const { text, json } = require('./_registry');
 
@@ -47,53 +51,35 @@ const schemas = [
     },
   },
   {
-    name: 'create_doc_block',
-    description: '[Official API] Insert content blocks into a document. Five modes:\n  (A) Generic — pass `children` array (e.g. [{block_type:2, text:{...}}]) for text/heading/list/etc.\n  (B) Image from local file — pass `image_path` (absolute path); the plugin creates an image block, uploads the file to drive, and patches the block with the token. Returns block_id + image_token.\n  (C) Image from uploaded token — pass `image_token` to reuse an already-uploaded image.\n  (D) File attachment from local file — pass `file_path`; the plugin creates a file block (block_type=23), uploads via parent_type=docx_file, and patches with replace_file.\n  (E) File from uploaded token — pass `file_token` to reuse an already-uploaded file.\n`document_id` accepts native document_id, wiki node token, or Feishu URL.',
+    name: 'manage_doc_block',
+    description: '[Official API] Manage content blocks in a document. Single tool replaces v1.3.6 create_doc_block / update_doc_block / delete_doc_blocks.\n  action=create — five modes:\n    (A) Generic — pass `children` array (e.g. [{block_type:2, text:{...}}]).\n    (B) Image from local file — pass `image_path`; plugin uploads and patches.\n    (C) Image from token — pass `image_token` (already uploaded).\n    (D) File attachment from local file — pass `file_path`; plugin handles VIEW-wrap + replace_file.\n    (E) File from token — pass `file_token`.\n  action=update — generic (pass `update_body`), image-replace (pass `image_token`), or file-replace (pass `file_token`).\n  action=delete — pass `parent_block_id` + `start_index` + `end_index` (range delete).\n`document_id` accepts native ID, wiki node token, or Feishu URL.',
     inputSchema: {
       type: 'object',
       properties: {
-        document_id: { type: 'string', description: 'Document ID, wiki node token, or Feishu URL' },
-        parent_block_id: { type: 'string', description: 'Parent block ID (use document_id for root)' },
-        children: { type: 'array', description: 'Generic block objects — mode A. E.g. [{block_type:2, text:{elements:[{text_run:{content:"Hello"}}]}}]', items: { type: 'object' } },
-        image_path: { type: 'string', description: 'Local image path — mode B (mutually exclusive with other modes)' },
-        image_token: { type: 'string', description: 'Pre-uploaded docx image token — mode C (mutually exclusive with other modes)' },
-        file_path: { type: 'string', description: 'Local file path for an attachment block — mode D (mutually exclusive with other modes)' },
-        file_token: { type: 'string', description: 'Pre-uploaded docx file token — mode E (mutually exclusive with other modes)' },
-        index: { type: 'number', description: 'Insert position (optional, appends to end if omitted)' },
+        action: { type: 'string', enum: ['create', 'update', 'delete'], description: 'Operation to perform' },
+        document_id: { type: 'string', description: 'Document ID, wiki node token, or Feishu URL (required for all actions)' },
+        block_id: { type: 'string', description: 'Block ID — required for action=update.' },
+        parent_block_id: { type: 'string', description: 'Parent block ID — required for create/delete (use document_id for the doc root).' },
+        index: { type: 'number', description: 'Insert position for create (optional, appends to end if omitted).' },
+        start_index: { type: 'number', description: 'Range start (inclusive) — required for delete.' },
+        end_index: { type: 'number', description: 'Range end (exclusive) — required for delete.' },
+        children: { type: 'array', description: 'Generic blocks for create mode A. E.g. [{block_type:2, text:{elements:[{text_run:{content:"Hello"}}]}}]', items: { type: 'object' } },
+        image_path: { type: 'string', description: 'Local image path — create mode B (mutually exclusive with other create modes).' },
+        image_token: { type: 'string', description: 'Pre-uploaded docx image token — create mode C, or update image-replace.' },
+        file_path: { type: 'string', description: 'Local file path — create mode D (mutually exclusive with other create modes).' },
+        file_token: { type: 'string', description: 'Pre-uploaded docx file token — create mode E, or update file-replace.' },
+        update_body: { type: 'object', description: 'Generic update payload for action=update. E.g. {update_text_elements:{elements:[{text_run:{content:"new text"}}]}}.' },
       },
-      required: ['document_id', 'parent_block_id'],
-    },
-  },
-  {
-    name: 'update_doc_block',
-    description: '[Official API] Update a specific block in a document. Generic mode: pass update_body. Image-replace mode: pass image_token to swap the picture in an existing image block. File-replace mode: pass file_token to swap an existing file block. document_id accepts native ID, wiki node token, or Feishu URL.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        document_id: { type: 'string', description: 'Document ID, wiki node token, or Feishu URL' },
-        block_id: { type: 'string', description: 'Block ID to update' },
-        update_body: { type: 'object', description: 'Generic update payload. E.g. {update_text_elements:{elements:[{text_run:{content:"new text"}}]}}' },
-        image_token: { type: 'string', description: 'Pre-uploaded image token — if provided, update_body is ignored and the block is patched with {replace_image:{token}}' },
-        file_token: { type: 'string', description: 'Pre-uploaded file token — patches the block with {replace_file:{token}}' },
-      },
-      required: ['document_id', 'block_id'],
-    },
-  },
-  {
-    name: 'delete_doc_blocks',
-    description: '[Official API] Delete a range of blocks from a document.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        document_id: { type: 'string', description: 'Document ID' },
-        parent_block_id: { type: 'string', description: 'Parent block ID containing the blocks to delete' },
-        start_index: { type: 'number', description: 'Start index (inclusive)' },
-        end_index: { type: 'number', description: 'End index (exclusive)' },
-      },
-      required: ['document_id', 'parent_block_id', 'start_index', 'end_index'],
+      required: ['action', 'document_id'],
     },
   },
 ];
+
+function need(arg, name, action) {
+  if (arg === undefined || arg === null || arg === '') {
+    throw new Error(`manage_doc_block: ${name} required for action=${action}`);
+  }
+}
 
 const handlers = {
   async search_docs(args, ctx) {
@@ -118,46 +104,54 @@ const handlers = {
     const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
     return text(`Document created${ownership}: ${r.documentId}${wikiNote}${warn}`);
   },
-  async create_doc_block(args, ctx) {
+  async manage_doc_block(args, ctx) {
     const official = ctx.getOfficialClient();
     const docId = await ctx.resolveDocId(args.document_id);
-    const modes = [args.children, args.image_path, args.image_token, args.file_path, args.file_token].filter(Boolean);
-    if (modes.length > 1) return text('create_doc_block: pass exactly ONE of children / image_path / image_token / file_path / file_token.');
-    if (args.image_path || args.image_token) {
-      const r = await official.createDocBlockWithImage(docId, args.parent_block_id, {
-        imagePath: args.image_path,
-        imageToken: args.image_token,
-        index: args.index,
-      });
-      return json(r);
+    switch (args.action) {
+      case 'create': {
+        need(args.parent_block_id, 'parent_block_id', 'create');
+        const modes = [args.children, args.image_path, args.image_token, args.file_path, args.file_token].filter(Boolean);
+        if (modes.length > 1) return text('manage_doc_block(create): pass exactly ONE of children / image_path / image_token / file_path / file_token.');
+        if (args.image_path || args.image_token) {
+          const r = await official.createDocBlockWithImage(docId, args.parent_block_id, {
+            imagePath: args.image_path,
+            imageToken: args.image_token,
+            index: args.index,
+          });
+          return json(r);
+        }
+        if (args.file_path || args.file_token) {
+          const r = await official.createDocBlockWithFile(docId, args.parent_block_id, {
+            filePath: args.file_path,
+            fileToken: args.file_token,
+            index: args.index,
+          });
+          return json(r);
+        }
+        if (!args.children) return text('manage_doc_block(create): children, image_path, image_token, file_path, or file_token is required.');
+        return json(await official.createDocBlock(docId, args.parent_block_id, args.children, args.index));
+      }
+      case 'update': {
+        need(args.block_id, 'block_id', 'update');
+        const modes = [args.update_body, args.image_token, args.file_token].filter(Boolean);
+        if (modes.length > 1) return text('manage_doc_block(update): pass exactly ONE of update_body / image_token / file_token.');
+        if (args.image_token) {
+          return json(await official.updateDocBlockImage(docId, args.block_id, args.image_token));
+        }
+        if (args.file_token) {
+          return json(await official.updateDocBlockFile(docId, args.block_id, args.file_token));
+        }
+        if (!args.update_body) return text('manage_doc_block(update): update_body, image_token, or file_token is required.');
+        return json(await official.updateDocBlock(docId, args.block_id, args.update_body));
+      }
+      case 'delete': {
+        need(args.parent_block_id, 'parent_block_id', 'delete');
+        if (typeof args.start_index !== 'number' || typeof args.end_index !== 'number') {
+          throw new Error('manage_doc_block(delete): start_index and end_index (numbers) required.');
+        }
+        return text(`Blocks deleted: ${(await official.deleteDocBlocks(docId, args.parent_block_id, args.start_index, args.end_index)).deleted}`);
+      }
     }
-    if (args.file_path || args.file_token) {
-      const r = await official.createDocBlockWithFile(docId, args.parent_block_id, {
-        filePath: args.file_path,
-        fileToken: args.file_token,
-        index: args.index,
-      });
-      return json(r);
-    }
-    if (!args.children) return text('create_doc_block: children, image_path, image_token, file_path, or file_token is required.');
-    return json(await official.createDocBlock(docId, args.parent_block_id, args.children, args.index));
-  },
-  async update_doc_block(args, ctx) {
-    const official = ctx.getOfficialClient();
-    const docId = await ctx.resolveDocId(args.document_id);
-    const modes = [args.update_body, args.image_token, args.file_token].filter(Boolean);
-    if (modes.length > 1) return text('update_doc_block: pass exactly ONE of update_body / image_token / file_token.');
-    if (args.image_token) {
-      return json(await official.updateDocBlockImage(docId, args.block_id, args.image_token));
-    }
-    if (args.file_token) {
-      return json(await official.updateDocBlockFile(docId, args.block_id, args.file_token));
-    }
-    if (!args.update_body) return text('update_doc_block: update_body, image_token, or file_token is required.');
-    return json(await official.updateDocBlock(docId, args.block_id, args.update_body));
-  },
-  async delete_doc_blocks(args, ctx) {
-    return text(`Blocks deleted: ${(await ctx.getOfficialClient().deleteDocBlocks(await ctx.resolveDocId(args.document_id), args.parent_block_id, args.start_index, args.end_index)).deleted}`);
   },
 };
 

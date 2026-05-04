@@ -3,10 +3,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-green.svg)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-purple.svg)](https://modelcontextprotocol.io)
-[![Tools](https://img.shields.io/badge/Tools-82-orange.svg)](#tools)
+[![Tools](https://img.shields.io/badge/Tools-64-orange.svg)](#tools)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**All-in-one Feishu/Lark MCP Server -- 82 tools, 9 skills, 3 auth layers for messaging, docs, bitable, calendar, tasks, drive, OKR, and more.**
+**All-in-one Feishu/Lark MCP Server -- 64 tools, 9 skills, 3 auth layers for messaging, docs, bitable, calendar, tasks, drive, OKR, and more.**
 
 The only MCP server that lets you send messages as your **personal identity** (not a bot), while also integrating the full official Feishu API. Works with Claude Code, Cursor, Windsurf, OpenClaw, and any MCP-compatible client.
 
@@ -337,7 +337,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 }
 ```
 
-## Tools (82 total)
+## Tools (64 total)
 
 ### User Identity -- Messaging (10 tools, cookie auth)
 
@@ -407,7 +407,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 
 All docx / bitable tools' `document_id` / `app_token` parameter also accepts a Wiki node token or a full Feishu URL — the plugin resolves it transparently.
 
-### Official API -- Documents (7 tools)
+### Official API -- Documents (5 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -415,22 +415,18 @@ All docx / bitable tools' `document_id` / `app_token` parameter also accepts a W
 | `read_doc` | Read raw text content |
 | `get_doc_blocks` | Get structured block tree |
 | `create_doc` | Create a new document |
-| `create_doc_block` | Insert content blocks: generic `children`, `image_path` / `image_token` (image block), `file_path` / `file_token` (file attachment block, v1.3.6) |
-| `update_doc_block` | Update a specific block: generic `update_body`, `image_token`, or `file_token` (v1.3.6) |
-| `delete_doc_blocks` | Delete a range of blocks |
+| `manage_doc_block` | Insert / update / delete blocks (`action=create|update|delete`). Supports generic `children`, image (`image_path`/`image_token`), and file (`file_path`/`file_token`) shortcuts. v1.3.7 consolidates the v1.3.6 trio create_doc_block / update_doc_block / delete_doc_blocks. |
 
-### Official API -- Bitable (18 tools)
+### Official API -- Bitable (6 tools, v1.3.7 consolidation)
 
-| Tool | Description |
-|------|-------------|
-| `create_bitable` | Create a new Bitable app |
-| `list_bitable_tables` / `create_bitable_table` / `delete_bitable_table` | Table management |
-| `list_bitable_fields` / `create_bitable_field` / `update_bitable_field` / `delete_bitable_field` | Field management |
-| `list_bitable_views` | List views |
-| `search_bitable_records` / `get_bitable_record` | Query records |
-| `create_bitable_record` / `update_bitable_record` / `delete_bitable_record` | Single record CRUD |
-| `batch_create_bitable_records` / `batch_update_bitable_records` / `batch_delete_bitable_records` | Batch operations (max 500/call) |
-| `upload_bitable_attachment` | Upload a file into a Bitable Attachment-type field. Returns `file_token` to write into the field as `[{file_token}]`. v1.3.6 |
+| Tool | Actions | Description |
+|------|---------|-------------|
+| `manage_bitable_app` | create / copy / get_meta | App-level operations (v1.3.7 consolidates create_bitable / copy_bitable / get_bitable_meta) |
+| `manage_bitable_table` | list / create / update / delete | Table CRUD (rename via update) |
+| `manage_bitable_field` | list / create / update / delete | Field (column) management. `type` required for both create AND update. |
+| `manage_bitable_view` | list / create / delete | Views (grid, kanban, gallery, form, gantt, calendar) |
+| `manage_bitable_record` | search / get / create / update / delete | Record CRUD. create/update/delete accept arrays — single record or up to 500/call. |
+| `upload_bitable_attachment` | — | Upload a file into a Bitable Attachment-type field. Returns `file_token` to write into the field as `[{file_token}]`. v1.3.6 |
 
 ### Official API -- Calendar (5 tools)
 
@@ -452,15 +448,13 @@ All docx / bitable tools' `document_id` / `app_token` parameter also accepts a W
 | `update_task` | Update a task |
 | `complete_task` | Mark task as complete |
 
-### Official API -- Drive (6 tools)
+### Official API -- Drive (4 tools)
 
 | Tool | Description |
 |------|-------------|
 | `list_files` | List files in a folder |
 | `create_folder` | Create a new folder |
-| `copy_file` | Copy a file |
-| `move_file` | Move a file |
-| `delete_file` | Delete a file/folder |
+| `manage_drive_file` | Copy / move / delete a Drive file (`action=copy|move|delete`, `type` required). v1.3.7 consolidates v1.3.6 copy_file / move_file / delete_file. |
 | `upload_drive_file` | Upload a local file into a Drive folder (`drive/v1/files/upload_all`). Optional `wiki_space_id` attaches the upload as a Wiki node atomically. v1.3.6 |
 
 ### Official API -- Wiki (8 tools)
