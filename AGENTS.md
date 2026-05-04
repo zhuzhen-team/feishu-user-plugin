@@ -454,13 +454,16 @@ cp .claude-plugin/plugin.json /Users/abble/team-skills/plugins/feishu-user-plugi
 - When a version is released (tag pushed), move completed items under the "已完成" section with the version number
 - When researching a direction and deciding not to implement, add it to "已调研但暂不实施" with the reasoning
 
-### When adding new tools
-1. Add method to `src/official.js`（Official API）or `src/client.js`（Cookie 身份）
-2. Add tool definition to `TOOLS` array in `src/index.js`
-3. Add handler case in `handleTool()` switch in `src/index.js`
-4. Run `node -c src/official.js && node -c src/index.js` to verify syntax
-5. Update this file (CLAUDE.md) — tool count, tool list, usage patterns
-6. Update ROADMAP.md if relevant
+### When adding new tools (post-v1.3.7 layout)
+1. Add the underlying API method to the right domain file:
+   - Official API → `src/clients/official/<domain>.js` (im, docs, bitable, drive, wiki, calendar, okr, uploads, contacts, groups). Cross-domain helpers stay in `src/clients/official/base.js`.
+   - Cookie identity → `src/clients/user.js`.
+2. Add the MCP tool schema + handler to `src/tools/<domain>.js`. Each module exports `{ schemas: [...], handlers: { [name]: async (args, ctx) => MCPResponse } }` — see existing tools for the pattern. Handlers receive `ctx` (factories, profile state, resolveDocId — see `src/tools/_registry.js` docstring).
+3. If the new file is a brand-new domain (rare), also append it to the `TOOL_MODULES` list in `src/server.js`.
+4. Run smoke: `npm run smoke:baseline` to update the baseline (only when adding/removing/renaming tools is intentional), then `npm run smoke` to verify no other regression. For pure body changes (no schema delta) just `npm run smoke` should pass against the existing baseline.
+5. `node -c` lint each touched file.
+6. Update this file (CLAUDE.md) — tool count, tool list, usage patterns. See `docs/REFACTOR-NOTES.md` for the file-responsibility matrix.
+7. Update ROADMAP.md if relevant.
 
 ### When fixing bugs
 1. Write a standalone test script (`node -e "..."`) to reproduce the bug before fixing

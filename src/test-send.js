@@ -9,7 +9,7 @@
  *   node src/test-send.js info <chatId>    # Get chat info
  */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
-const { LarkUserClient } = require('./client');
+const { LarkUserClient } = require('./clients/user');
 
 async function main() {
   const cookie = process.env.LARK_COOKIE;

@@ -11,6 +11,8 @@
     "test": "node src/test-all.js",
     "test:quick": "node src/test-send.js",
     "oauth": "node src/oauth.js",
+    "smoke": "node scripts/smoke.js diff",
+    "smoke:baseline": "node scripts/smoke.js write-baseline",
     "prepublishOnly": "node scripts/confirm-version.js"
   },
   "keywords": [

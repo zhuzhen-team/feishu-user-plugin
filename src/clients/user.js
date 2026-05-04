@@ -1,6 +1,6 @@
 const path = require('path');
 const protobuf = require('protobufjs');
-const { generateRequestId, generateCid, parseCookie, formatCookie, fetchWithTimeout } = require('./utils');
+const { generateRequestId, generateCid, parseCookie, formatCookie, fetchWithTimeout } = require('../utils');
 
 const GATEWAY_URL = 'https://internal-api-lark-api.feishu.cn/im/gateway/';
 const CSRF_URL = 'https://internal-api-lark-api.feishu.cn/accounts/csrf';
@@ -91,7 +91,7 @@ class LarkUserClient {
       try {
         await this._getCsrfToken();
         // Lazy require to avoid circular dependency at module load time
-        const { persistToConfig } = require('./config');
+        const { persistToConfig } = require('../config');
         persistToConfig({ LARK_COOKIE: this.cookieStr });
         console.error('[feishu-user-plugin] Cookie heartbeat: session refreshed and persisted');
       } catch (e) {

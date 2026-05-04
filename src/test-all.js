@@ -4,8 +4,8 @@
  * Sends test messages to "飞书plugin测试群".
  */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
-const { LarkUserClient } = require('./client');
-const { LarkOfficialClient } = require('./official');
+const { LarkUserClient } = require('./clients/user');
+const { LarkOfficialClient } = require('./clients/official');
 
 const TEST_GROUP = '飞书plugin测试群';
 const results = [];
