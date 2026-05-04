@@ -22,9 +22,13 @@ const { resolveToObj, resolveToken, parseFeishuInput } = require('./resolver');
 // src/server.js's registry-based one.
 const EXTERNAL_TOOL_MODULES = [
   require('./tools/calendar'),
+  require('./tools/contacts'),
   require('./tools/diagnostics'),
+  require('./tools/drive'),
+  require('./tools/groups'),
   require('./tools/okr'),
   require('./tools/profile'),
+  require('./tools/uploads'),
   require('./tools/wiki'),
 ];
 
@@ -349,25 +353,8 @@ const TOOLS = [
     },
   },
 
-  // ========== User Identity — Contacts & Info ==========
-  {
-    name: 'search_contacts',
-    description: '[User Identity] Search Feishu users, bots, or group chats by name. Returns IDs.',
-    inputSchema: {
-      type: 'object',
-      properties: { query: { type: 'string', description: 'Search keyword' } },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'create_p2p_chat',
-    description: '[User Identity] Create or get a P2P (direct message) chat. Returns numeric chat_id.',
-    inputSchema: {
-      type: 'object',
-      properties: { user_id: { type: 'string', description: 'Target user ID from search_contacts' } },
-      required: ['user_id'],
-    },
-  },
+  // search_contacts / create_p2p_chat / get_user_info → src/tools/contacts.js
+  // get_chat_info stays here — it'll move with im-read in the next batch.
   {
     name: 'get_chat_info',
     description: '[Official API + User Identity fallback] Get chat details: name, description, member count, owner. Supports both oc_xxx and numeric chat_id.',
@@ -375,18 +362,6 @@ const TOOLS = [
       type: 'object',
       properties: { chat_id: { type: 'string', description: 'Chat ID (oc_xxx or numeric)' } },
       required: ['chat_id'],
-    },
-  },
-  {
-    name: 'get_user_info',
-    description: '[User Identity] Look up a user\'s display name by user ID.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        user_id: { type: 'string', description: 'User ID' },
-        chat_id: { type: 'string', description: 'Chat context (optional)' },
-      },
-      required: ['user_id'],
     },
   },
   // get_login_status → src/tools/diagnostics.js
@@ -683,94 +658,7 @@ const TOOLS = [
 
   // ========== Wiki — extracted to src/tools/wiki.js ==========
 
-  // ========== Drive — Official API ==========
-  {
-    name: 'list_files',
-    description: '[Official API] List files in a Drive folder.',
-    inputSchema: {
-      type: 'object',
-      properties: { folder_token: { type: 'string', description: 'Folder token (empty for root)' } },
-    },
-  },
-  {
-    name: 'create_folder',
-    description: '[Official API] Create a new folder in Drive.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Folder name' },
-        parent_token: { type: 'string', description: 'Parent folder token (optional)' },
-      },
-      required: ['name'],
-    },
-  },
-
-  // ========== Upload — Official API ==========
-  {
-    name: 'upload_image',
-    description: '[Official API] Upload an image file to Feishu. Returns image_key for use with send_image_as_user.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        image_path: { type: 'string', description: 'Absolute path to the image file on disk' },
-        image_type: { type: 'string', enum: ['message', 'avatar'], description: 'Image usage type (default: message)' },
-      },
-      required: ['image_path'],
-    },
-  },
-  {
-    name: 'upload_file',
-    description: '[Official API] Upload a file to Feishu. Returns file_key for use with send_file_as_user.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        file_path: { type: 'string', description: 'Absolute path to the file on disk' },
-        file_type: { type: 'string', enum: ['opus', 'mp4', 'pdf', 'doc', 'xls', 'ppt', 'stream'], description: 'File type (default: stream for generic files)' },
-        file_name: { type: 'string', description: 'Display file name (optional, defaults to basename)' },
-      },
-      required: ['file_path'],
-    },
-  },
-  {
-    name: 'upload_drive_file',
-    description: '[Official API] Upload a file from disk to a Feishu Drive folder (drive/v1/files/upload_all, parent_type=explorer). Returns file_token + url. If wiki_space_id is provided, the uploaded file is then attached to that Wiki space via move_docs_to_wiki (obj_type=file). UAT-first with app fallback.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        file_path: { type: 'string', description: 'Absolute path to the file on disk' },
-        folder_token: { type: 'string', description: 'Destination folder token. Use list_files to find one, or pass the user "我的空间" root token.' },
-        wiki_space_id: { type: 'string', description: 'Optional. If set, also attach the uploaded file to this Wiki space.' },
-        wiki_parent_node_token: { type: 'string', description: 'Optional. Parent node under which to attach in the Wiki space.' },
-      },
-      required: ['file_path', 'folder_token'],
-    },
-  },
-  {
-    name: 'upload_bitable_attachment',
-    description: '[Official API] Upload a file as a Bitable attachment (drive/v1/medias/upload_all with parent_type=bitable_image or bitable_file). Returns file_token suitable for writing into a Bitable Attachment-type field via batch_create/update_bitable_records (the field value should be [{file_token}]).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token (the bascn... or basc... id)' },
-        file_path: { type: 'string', description: 'Absolute path to the file on disk' },
-        kind: { type: 'string', enum: ['image', 'file'], description: 'Whether the attachment is an image (bitable_image) or a generic file (bitable_file). Default: file.' },
-      },
-      required: ['app_token', 'file_path'],
-    },
-  },
-
-  // ========== Contact — Official API ==========
-  {
-    name: 'find_user',
-    description: '[Official API] Find a Feishu user by email or mobile number.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        email: { type: 'string', description: 'User email (optional)' },
-        mobile: { type: 'string', description: 'User mobile with country code like +86xxx (optional)' },
-      },
-    },
-  },
+  // ========== Drive / Upload / Contact — extracted to src/tools/{drive,uploads,contacts}.js ==========
 
   // ========== IM — Bot Send / Edit / Delete ==========
   {
@@ -862,59 +750,7 @@ const TOOLS = [
     },
   },
 
-  // ========== IM — Chat Management ==========
-  {
-    name: 'create_group',
-    description: '[Official API] Create a new group chat (as bot). Can add initial members.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Group name' },
-        description: { type: 'string', description: 'Group description (optional)' },
-        user_ids: { type: 'array', items: { type: 'string' }, description: 'Initial member open_ids (optional)' },
-      },
-      required: ['name'],
-    },
-  },
-  {
-    name: 'update_group',
-    description: '[Official API] Update group chat name or description.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        chat_id: { type: 'string', description: 'Chat ID (oc_xxx)' },
-        name: { type: 'string', description: 'New group name (optional)' },
-        description: { type: 'string', description: 'New description (optional)' },
-      },
-      required: ['chat_id'],
-    },
-  },
-  {
-    name: 'list_members',
-    description: '[Official API] List all members in a group chat.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        chat_id: { type: 'string', description: 'Chat ID (oc_xxx)' },
-        page_size: { type: 'number', description: 'Items per page (default 50)' },
-        page_token: { type: 'string', description: 'Pagination token' },
-      },
-      required: ['chat_id'],
-    },
-  },
-  {
-    name: 'manage_members',
-    description: '[Official API] Add or remove members from a group chat.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        chat_id: { type: 'string', description: 'Group chat ID (oc_xxx)' },
-        member_ids: { type: 'array', items: { type: 'string' }, description: 'Array of user open_ids' },
-        action: { type: 'string', enum: ['add', 'remove'], description: 'Action to perform' },
-      },
-      required: ['chat_id', 'member_ids', 'action'],
-    },
-  },
+  // ========== IM — Chat Management — extracted to src/tools/groups.js ==========
 
   // ========== Docs — Block Editing ==========
   {
@@ -1057,45 +893,7 @@ const TOOLS = [
     },
   },
 
-  // ========== Drive — File Operations ==========
-  {
-    name: 'copy_file',
-    description: '[Official API] Copy a file/doc in Drive.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        file_token: { type: 'string', description: 'File token to copy' },
-        name: { type: 'string', description: 'New file name' },
-        folder_token: { type: 'string', description: 'Destination folder token (optional)' },
-        type: { type: 'string', description: 'File type: file, doc, sheet, bitable, docx, mindnote, slides (optional)' },
-      },
-      required: ['file_token', 'name'],
-    },
-  },
-  {
-    name: 'move_file',
-    description: '[Official API] Move a file to another folder in Drive.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        file_token: { type: 'string', description: 'File token to move' },
-        folder_token: { type: 'string', description: 'Destination folder token' },
-      },
-      required: ['file_token', 'folder_token'],
-    },
-  },
-  {
-    name: 'delete_file',
-    description: '[Official API] Delete a file/folder from Drive.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        file_token: { type: 'string', description: 'File token to delete' },
-        type: { type: 'string', description: 'Type: file, folder, doc, sheet, bitable, docx, mindnote, slides' },
-      },
-      required: ['file_token'],
-    },
-  },
+  // ========== Drive — File Operations — extracted to src/tools/drive.js ==========
 
   // download_image / download_file → src/tools/diagnostics.js
   // get_wiki_node → src/tools/wiki.js
@@ -1265,15 +1063,8 @@ async function handleTool(name, args) {
 
     // --- User Identity: Contacts & Info ---
 
-    case 'search_contacts': {
-      const c = await getUserClient();
-      return json(await c.search(args.query));
-    }
-    case 'create_p2p_chat': {
-      const c = await getUserClient();
-      const chatId = await c.createChat(args.user_id);
-      return text(chatId ? `P2P chat: ${chatId}` : 'Failed to create P2P chat');
-    }
+    // search_contacts / create_p2p_chat → src/tools/contacts.js
+
     case 'get_chat_info': {
       // Strategy 1: Official API im.chat.get (supports oc_xxx format)
       if (args.chat_id.startsWith('oc_')) {
@@ -1294,22 +1085,7 @@ async function handleTool(name, args) {
       }
       return text(`No info for chat ${args.chat_id}`);
     }
-    case 'get_user_info': {
-      let n = null;
-      // Strategy 1: Official API contact lookup (works for same-tenant users by open_id)
-      try {
-        const official = getOfficialClient();
-        n = await official.getUserById(args.user_id, 'open_id');
-      } catch {}
-      // Strategy 2: User identity client cache (populated by previous search/init calls)
-      if (!n) {
-        try {
-          const c = await getUserClient();
-          n = await c.getUserName(args.user_id);
-        } catch {}
-      }
-      return text(n ? `User ${args.user_id}: ${n}` : `Could not resolve user ${args.user_id}. This user may be from an external tenant. Try search_contacts with the user's display name instead.`);
-    }
+    // get_user_info → src/tools/contacts.js
     // get_login_status → src/tools/diagnostics.js (dispatched via default branch)
 
     // --- User UAT: IM ---
@@ -1467,53 +1243,7 @@ async function handleTool(name, args) {
 
     // list_wiki_spaces / search_wiki / list_wiki_nodes → src/tools/wiki.js
 
-    // --- Official API: Drive ---
-
-    case 'list_files':
-      return json(await getOfficialClient().listFiles(args.folder_token));
-    case 'create_folder': {
-      const r = await getOfficialClient().createFolder(args.name, args.parent_token);
-      const ownership = r.viaUser ? ' (as user)' : ' (as app — UAT unavailable or failed; folder owned by the app, not you)';
-      const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
-      return text(`Folder created${ownership}: ${r.token}${warn}`);
-    }
-
-    // --- Official API: Contact ---
-
-    case 'find_user':
-      return json(await getOfficialClient().findUserByIdentity({ emails: args.email, mobiles: args.mobile }));
-
-    // --- Upload ---
-
-    case 'upload_image': {
-      const r = await getOfficialClient().uploadImage(args.image_path, args.image_type);
-      return text(`Image uploaded: ${r.imageKey}\nUse this image_key with send_image_as_user to send it.`);
-    }
-    case 'upload_file': {
-      const r = await getOfficialClient().uploadFile(args.file_path, args.file_type, args.file_name);
-      return text(`File uploaded: ${r.fileKey}\nUse this file_key with send_file_as_user to send it.`);
-    }
-    case 'upload_drive_file': {
-      const official = getOfficialClient();
-      const up = await official.uploadDriveFile(args.file_path, args.folder_token);
-      const out = { fileToken: up.fileToken, viaUser: up.viaUser, url: `https://feishu.cn/file/${up.fileToken}` };
-      if (args.wiki_space_id) {
-        try {
-          const node = await official.attachToWiki(args.wiki_space_id, 'file', up.fileToken, args.wiki_parent_node_token);
-          out.wikiNodeToken = node.node_token || null;
-          out.wikiAttachTaskId = node.task_id || null;
-        } catch (e) {
-          out.wikiAttachError = e.message;
-        }
-      }
-      return json(out);
-    }
-    case 'upload_bitable_attachment': {
-      const kind = args.kind === 'image' ? 'bitable_image' : 'bitable_file';
-      const appToken = await resolveDocId(args.app_token);
-      const up = await getOfficialClient().uploadMedia(args.file_path, appToken, kind);
-      return json({ fileToken: up.fileToken, viaUser: up.viaUser, parentType: kind, hint: `Pass [{ file_token: "${up.fileToken}" }] as the value of an Attachment-type Bitable field.` });
-    }
+    // Drive / Contact / Upload handlers → src/tools/{drive,contacts,uploads}.js
 
     // --- Official API: Bot Send / Edit / Delete ---
 
@@ -1548,19 +1278,7 @@ async function handleTool(name, args) {
 
     // --- Official API: Chat Management ---
 
-    case 'create_group':
-      return text(`Group created: ${(await getOfficialClient().createChat({ name: args.name, description: args.description, userIds: args.user_ids })).chatId}`);
-    case 'update_group':
-      return text(`Group updated: ${(await getOfficialClient().updateChat(args.chat_id, { name: args.name, description: args.description })).updated}`);
-    case 'list_members':
-      return json(await getOfficialClient().listChatMembers(args.chat_id, { pageSize: args.page_size, pageToken: args.page_token }));
-    case 'manage_members': {
-      const official = getOfficialClient();
-      if (args.action === 'remove') {
-        return json(await official.removeChatMembers(args.chat_id, args.member_ids));
-      }
-      return json(await official.addChatMembers(args.chat_id, args.member_ids));
-    }
+    // create_group / update_group / list_members / manage_members → src/tools/groups.js
 
     // --- Official API: Doc Block Editing ---
 
@@ -1622,14 +1340,7 @@ async function handleTool(name, args) {
     case 'copy_bitable':
       return json(await getOfficialClient().copyBitable(await resolveDocId(args.app_token), args.name, args.folder_id));
 
-    // --- Official API: Drive File Operations ---
-
-    case 'copy_file':
-      return json(await getOfficialClient().copyFile(args.file_token, args.name, args.folder_token, args.type));
-    case 'move_file':
-      return text(`File moved: task=${(await getOfficialClient().moveFile(args.file_token, args.folder_token)).taskId}`);
-    case 'delete_file':
-      return text(`File deleted: task=${(await getOfficialClient().deleteFile(args.file_token, args.type)).taskId}`);
+    // copy_file / move_file / delete_file → src/tools/drive.js
 
     // download_image / download_file → src/tools/diagnostics.js
     // get_wiki_node → src/tools/wiki.js
