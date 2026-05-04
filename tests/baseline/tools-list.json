@@ -441,52 +441,60 @@
     }
   },
   {
-    "name": "download_file",
-    "description": "[User Identity / Official API] Download a file attached to a message (msg_type=file). Returns base64 bytes + mimeType + filename. Tries user identity first, falls back to app. For merge_forward children, pass the child's `parentMessageId` (NOT the child message id) — Feishu keys media by the parent merge_forward id.",
+    "name": "download_doc_image",
+    "description": "[User Identity / Official API] Download an image embedded in a docx document so the model can see it. Pass the `image_token` from `get_doc_blocks` (block.image.token), and optionally the doc/wiki/URL token to scope the lookup. UAT-first.\n\n**Size cap:** payloads > 2 MiB MUST pass `save_path`.",
     "inputSchema": {
       "properties": {
-        "file_key": {
-          "description": "File key from message content (content.file_key for msg_type=file)",
+        "doc_token": {
+          "description": "Document ID, wiki node token, or Feishu URL (optional but recommended for permission scoping).",
           "type": "string"
         },
-        "message_id": {
-          "description": "Message ID (om_xxx). For merge_forward children use the parent merge_forward message id.",
+        "image_token": {
+          "description": "Image token (from get_doc_blocks image block)",
           "type": "string"
         },
         "save_path": {
-          "description": "Optional absolute local path to save the file to. If omitted, file is only returned as inline base64 in the response.",
+          "description": "Absolute local path. Required when image bytes > 2 MiB.",
           "type": "string"
         }
       },
       "required": [
-        "file_key",
-        "message_id"
+        "image_token"
       ],
       "type": "object"
     }
   },
   {
-    "name": "download_image",
-    "description": "[User Identity / Official API] Download an image so the model can actually see it. Two modes: (1) message image — pass message_id + image_key from read_messages / read_p2p_messages. (2) docx image — pass doc_token + image_token (the block.image.token from get_doc_blocks). doc_token accepts native document_id, wiki node token, or Feishu URL. Tries user identity first, falls back to app. NOTE: for merge_forward children, pass the child's `parentMessageId` (NOT the child message id) — Feishu keys media by the parent merge_forward id.",
+    "name": "download_message_resource",
+    "description": "[User Identity / Official API] Download an image or file attached to a message so the model can see / store it. v1.3.7 (C2.4) consolidates the v1.3.6 download_image (mode 1) + download_file. UAT-first, falls back to app.\n\nFor images, the response includes an inline `image` content block so the model sees pixels. For files, the response includes the bytes as base64 (truncated for display) plus an optional save_path write.\n\n**Size cap:** payloads > 2 MiB MUST pass `save_path`. The Anthropic API rejects responses > 5 MB; we cap at 2 MiB so multipart wrapping has headroom.\n\n**merge_forward children:** Feishu keys media by the parent merge_forward id, not the child id. Use the child's `parentMessageId` field (returned by read_messages with expand_merge_forward) — not the child id.",
     "inputSchema": {
       "properties": {
-        "doc_token": {
-          "description": "Document ID, wiki node token, or Feishu URL — for mode 2 only",
+        "key": {
+          "description": "image_key (img_xxx) for kind=image, file_key for kind=file. From read_messages content.",
           "type": "string"
         },
-        "image_key": {
-          "description": "Image key (img_xxx) from message content — for mode 1 only",
-          "type": "string"
-        },
-        "image_token": {
-          "description": "Image token from a docx image block (block.image.token via get_doc_blocks) — for mode 2 only",
+        "kind": {
+          "description": "image or file",
+          "enum": [
+            "image",
+            "file"
+          ],
           "type": "string"
         },
         "message_id": {
-          "description": "Message ID (om_xxx) — for mode 1 only. For merge_forward children use the parent merge_forward message id.",
+          "description": "Message ID (om_xxx). For merge_forward children, use the child's `parentMessageId`.",
+          "type": "string"
+        },
+        "save_path": {
+          "description": "Absolute local path. Required when downloaded bytes > 2 MiB (else the response would exceed the Anthropic API 5 MB inline limit).",
           "type": "string"
         }
       },
+      "required": [
+        "key",
+        "kind",
+        "message_id"
+      ],
       "type": "object"
     }
   },
@@ -1480,7 +1488,7 @@
           "type": "string"
         },
         "expand_merge_forward": {
-          "description": "Auto-expand merge_forward placeholders into their child messages (default true). Children carry parentMessageId; use that id (not the child id) with download_image / download_file.",
+          "description": "Auto-expand merge_forward placeholders into their child messages (default true). Children carry parentMessageId; use that id (not the child id) with download_message_resource (kind=image or file).",
           "type": "boolean"
         },
         "page_size": {
@@ -1520,7 +1528,7 @@
           "type": "string"
         },
         "expand_merge_forward": {
-          "description": "Auto-expand merge_forward placeholders into their child messages (default true). Children carry parentMessageId; use that id (not the child id) with download_image / download_file.",
+          "description": "Auto-expand merge_forward placeholders into their child messages (default true). Children carry parentMessageId; use that id (not the child id) with download_message_resource (kind=image or file).",
           "type": "boolean"
         },
         "page_size": {
