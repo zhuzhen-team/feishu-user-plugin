@@ -93,7 +93,7 @@
 - [x] 多 profile:`list_profiles` / `switch_profile` 工具,通过 `LARK_PROFILES_JSON` 注册多套凭证,热切换不重启
 - [x] `send_card_as_user`(bot-default):via=bot 走 `send_message_as_bot('interactive', card)`,via=user 在 v1.3.6 显式返回 deferred 错误。一旦 v1.3.7 实现 user-identity 卡片必须**移除 bot-default**
 
-### v1.3.7 — 计划中（v1.3.6 实测发现 + 架构重构 + 跨 harness + 自动化）
+### v1.3.7 — 已发布 (2026-05-04)（v1.3.6 实测发现 + 架构重构 + 跨 harness + 自动化）
 
 > **基础约定**:本版工作量很大,一次性合并风险高。建议拆三个子分支,分别 PR 合入:
 > A. `refactor/structure` — 代码目录重构(风险最高,先单独跑)
@@ -254,11 +254,11 @@
 
 ##### C7. 必须重测的工具(v1.3.6 实测因外因没测彻底,v1.3.7 修完 bug 必须回归)
 
-- [ ] **`download_image`** — 本会话被 Anthropic API 大图 400 反复打断,最终用 download_file 的 round-trip 间接验证,download_image 本身没跑通端到端。修法:增 `save_path`(必传 when size > 2MB),回归测试用一张小 PNG
+- [x] **`download_image`** → 已在 v1.3.7 (C2.4) 合并到 `download_message_resource(kind=image)` + `download_doc_image`,带 2 MiB 上限提示
 - [ ] **`switch_profile`** — 当前只配了 default profile,没有第二个能切。设置 LARK_PROFILES_JSON 加 alt profile 后重测
-- [ ] **`get_calendar_event`** — 个人日历无任何事件,无 event_id 可拿。C4 写日历完成后,先 create 再 get
-- [ ] **`list_wiki_nodes`** — `list_wiki_spaces` 静默返空,无 space_id 可喂。C1 修完 wiki scope 警告后回归
-- [ ] **`delete_bitable_table`** — "The last table cannot be deleted" 是飞书 API 限制(非 bug),回归时先创建第二张表再删原表
+- [x] **`get_calendar_event`** — C4 写日历完成,create→get 链路可用 (v1.3.7)
+- [x] **`list_wiki_nodes`** — 改为 UAT-first,与 list_wiki_spaces 对齐 (v1.3.7 PR #22)
+- [x] **`manage_bitable_table(action=delete)`** — 复测通过(先创建第二张表再删) (v1.3.7)
 - [ ] **`upload_drive_file` 带 `wiki_space_id` 模式** — wiki scope 不全时直接 attach 失败的兜底路径未测
 
 ##### C8. 测试方法论(避免下次再踩)
@@ -267,7 +267,7 @@
   - Playwright `browser_take_screenshot` 默认 fullPage 会撞 Anthropic API 5MB / 8000px 上限 → 用 `browser_snapshot`(文本 DOM)优先,实在要图就 viewport-only + resize 到 1280×800
   - download_image / download_file 同样要 save_path 优先,base64 inline 仅当 < 2MB
   - 测试沙箱固定:飞书plugin测试群(`oc_6ae081b457d07e9651d615493b7f1096`),临时 bitable / docx / folder 名带 `test-YYYY-MM-DD` 前缀,便于 grep 清理
-- [ ] 写 `scripts/test-all-tools.js` — 半自动化全回归脚本,创建临时资源 → 每个工具调一次 → 收集成功/失败 → 自动清理。手动跑 `npm run test:tools` 在每次发版前
+- [x] 写 `scripts/test-all-tools.js` — 半自动化全回归脚本,创建临时资源 → 每个工具调一次 → 收集成功/失败 → 自动清理。手动跑 `npm run test:tools` 在每次发版前 (v1.3.7)
 
 #### D. 文档与版本同步规则(用户已批,留在 CLAUDE.md 不拆,但要补全)
 
@@ -276,17 +276,17 @@
   - team-skills 同步走 hook,不再人工 cp
   - CLAUDE.md / AGENTS.md 走 pre-commit hook 自动同步
   - README 工具数走 CI 校验(对照 TOOLS.length)
-- [ ] CHANGELOG.md 补 v1.3.5 / v1.3.6 漏记的小节(从 git log 反推)
-- [ ] 修 README 过时:Calendar 写"5 tools"(实际 v1.3.6 是 3 只读,v1.3.7 补到 8) / Tasks 写"5 tools"(实际 v1.3.6 是 0,v1.3.7 补到 7) / unpin_message 不存在(应是 pin_message(pinned=false))
+- [x] CHANGELOG.md 补 v1.3.5 / v1.3.6 漏记的小节(从 git log 反推)+ v1.3.7 完整章节 (v1.3.7)
+- [x] 修 README 过时:Calendar / Tasks / pin_message 写法更新 (v1.3.7)
 - [ ] 修 server.json 过时:写"v1.2.0 + 33 tools",应反映本版实际数
 
 #### E. 工具数预估(本版本)
 
-- v1.3.6:81
-- 删 4(sticker / audio / find_user / download_image)= 77
-- 合并 bitable 21→5、doc block 3→1、drive 3→1 净减 20 = 57
-- 加写日历 5 + tasks 7 + wiki 写 5 + okr 写 3 = 20 → 77
-- 最终预估 **~77 个工具**,语义更干净,LLM 选工具更快
+- v1.3.6:82
+- 删 4(sticker / audio / find_user / download_image)= 78
+- 合并 bitable 21→5、doc block 3→1、drive 3→1、download 2→2(改名)
+- 加写日历 5 + tasks 7 + wiki 写 5 + okr 写 3 = 20
+- **实际落地:80 个工具**(net -2),语义更干净,LLM 选工具更快
 - 注:`send_card_as_user` 真·用户身份、`search_messages`、`get_new_events` 推迟到 v1.3.8(见下),不计入本版工具数
 
 ### v1.3.8 — WebSocket 实时事件 + 逆向工程 + 本地 md 同步(从 v1.3.7 拆出)
