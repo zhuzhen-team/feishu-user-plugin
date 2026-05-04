@@ -51,14 +51,22 @@ module.exports = {
   },
 
   async listWikiNodes(spaceId, { parentNodeToken, pageToken } = {}) {
-    const params = { page_size: 50 };
-    if (parentNodeToken) params.parent_node_token = parentNodeToken;
-    if (pageToken) params.page_token = pageToken;
-    const res = await this._safeSDKCall(
-      () => this.client.wiki.spaceNode.list({ path: { space_id: spaceId }, params }),
-      'listNodes'
-    );
-    return { items: res.data.items || [], hasMore: res.data.has_more };
+    // UAT-first (v1.3.7): bot identity hits 131006 "wiki space permission
+    // denied" for spaces it wasn't explicitly invited to, even when the user
+    // has access. listWikiSpaces is already UAT-first; this matches.
+    const queryParams = { page_size: '50' };
+    if (parentNodeToken) queryParams.parent_node_token = parentNodeToken;
+    if (pageToken) queryParams.page_token = pageToken;
+    const sdkParams = { page_size: 50 };
+    if (parentNodeToken) sdkParams.parent_node_token = parentNodeToken;
+    if (pageToken) sdkParams.page_token = pageToken;
+    const res = await this._asUserOrApp({
+      uatPath: `/open-apis/wiki/v2/spaces/${encodeURIComponent(spaceId)}/nodes`,
+      query: queryParams,
+      sdkFn: () => this.client.wiki.spaceNode.list({ path: { space_id: spaceId }, params: sdkParams }),
+      label: 'listWikiNodes',
+    });
+    return { items: res.data.items || [], hasMore: res.data.has_more, viaUser: !!res._viaUser };
   },
 
   // --- Wiki write (v1.3.7) ---
