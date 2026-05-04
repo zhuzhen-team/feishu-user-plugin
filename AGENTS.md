@@ -2,7 +2,7 @@
 
 ## What This Is
 All-in-one Feishu plugin for Claude Code with three auth layers:
-- **User Identity** (cookie auth): Send messages (text, image, file, post, sticker, audio) as yourself
+- **User Identity** (cookie auth): Send messages (text, image, file, post) as yourself
 - **Official API** (app credentials): Read group messages, docs, tables, wiki, drive, contacts, upload files
 - **User OAuth UAT** (user_access_token): Read P2P chat history, list all user's chats
 
@@ -422,59 +422,42 @@ NPM_TOKEN is stored as a GitHub repo secret.
 
 **IMPORTANT: team-skills 仓库禁止直接推送 main。所有变更必须走 PR。**
 
-team-skills 推送规范:
-1. **创建 feature branch**: `git checkout -b fix/feishu-xxx` 或 `sync/feishu-v1.x.x`
-2. **提交变更并推送 branch**: `git push -u origin <branch-name>`
-3. **创建 PR 并设置 auto-merge**: `gh pr create --title "..." --body "..."` 然后 `gh pr merge <number> --auto --merge`
-4. **CI 通过后自动合并**: validate workflow 检查三方版本一致性,通过即自动 merge,无需手动操作
-5. **如 CI 失败**: 修复后 push 到同一 branch,CI 会重跑,通过后自动合并
+What is automatic now (Phase B3 hooks):
+- **pre-commit (this repo)**: any change to `CLAUDE.md` auto-syncs `AGENTS.md` + `skills/feishu-user-plugin/references/CLAUDE.md` (script: `scripts/sync-claude-md.sh`).
+- **post-merge (this repo, on main)**: copies `skills/` + `.claude-plugin/plugin.json` into `team-skills/plugins/feishu-user-plugin/`, creates `sync/feishu-v<version>` branch, opens a PR with `--auto --merge` (script: `scripts/sync-team-skills.sh`).
 
-三方版本一致性规则:
-- `plugins/feishu-user-plugin/.claude-plugin/plugin.json` 的 `version`
-- `plugins/feishu-user-plugin/skills/feishu-user-plugin/SKILL.md` frontmatter 的 `version`
-- `plugins/feishu-user-plugin/README.md` 更新日志里第一个 `### vX.Y.Z` 标题
-- 这三个版本号必须相同,否则 CI 会失败。每次 npm 发包后,team-skills 的版本号也要同步更新。
+What still needs a manual touch in team-skills:
+- `README.md` — team-skills has its own README (with team-shared APP_ID/SECRET hardcoded). Tool count, changelog, install prompt all need hand edits.
+- `skills/feishu-user-plugin/SKILL.md` — version + `allowed-tools` list.
 
-同步内容（每次发版后执行）:
+team-skills PR 流程:
+1. 创建 branch: `git checkout -b sync/feishu-v1.x.x` 或 `fix/feishu-xxx`
+2. push branch + `gh pr create` + `gh pr merge <number> --auto --merge`
+3. CI (`validate.yml`) checks the three-way version triangle (`plugin.json` / `SKILL.md` / first `### vX.Y.Z` in README) — must match or CI fails.
+4. If CI fails: fix + push to same branch, CI re-runs, auto-merge proceeds.
+
+Manual sync fallback (hook failed / dry-run / first-time):
 ```bash
-# 1. 同步 skills + plugin.json
-cp CLAUDE.md skills/feishu-user-plugin/references/CLAUDE.md
-cp -r skills/ /Users/abble/team-skills/plugins/feishu-user-plugin/skills/
+# CLAUDE.md → AGENTS.md + skill ref now handled by pre-commit hook
+cp -r skills/. /Users/abble/team-skills/plugins/feishu-user-plugin/skills/
 cp .claude-plugin/plugin.json /Users/abble/team-skills/plugins/feishu-user-plugin/.claude-plugin/
-# 2. 手动更新 team-skills 的 README.md（工具数、更新日志）和 SKILL.md（version + allowed-tools）
-# 3. 走 PR 流程推送
 # Do NOT copy .mcp.json — team-skills plugin should not have one
 ```
 
 ## Development Workflow
 
 ### Keeping all docs in sync
-When making ANY code change (new tools, bug fixes, features), update ALL of these:
 
-**本仓库内：**
+When making ANY code change (new tools, bug fixes, features), update these in this repo:
 - `CLAUDE.md` — tool count, tool list, usage patterns, known limitations
-- `AGENTS.md` — **每次改 CLAUDE.md 必须同步**：正文（第 2 行起）与 CLAUDE.md 完全一致，仅首行标题保留 `# feishu-user-plugin — Codex Instructions`。同步命令：`tail -n +2 CLAUDE.md > /tmp/body.md && { echo "# feishu-user-plugin — Codex Instructions"; cat /tmp/body.md; } > AGENTS.md`
-- `README.md` — tool count (badge + heading + tool table), feature highlights, OpenClaw/Claude Code config examples
+- `README.md` — tool count badge + heading + tool table, feature highlights, OpenClaw/Claude Code config examples
 - `ROADMAP.md` — check off completed items, add new findings
-- `package.json` — version, description (tool count)
-- `skills/feishu-user-plugin/references/CLAUDE.md` — always copy from root: `cp CLAUDE.md skills/feishu-user-plugin/references/CLAUDE.md`
-- `prompts/openclaw-setup.md` — if OpenClaw 相关配置变了要更新
+- `package.json` — version + description (tool count). All three of `package.json`, `.claude-plugin/plugin.json`, and `skills/feishu-user-plugin/SKILL.md` must agree on version (CI enforces).
+- `prompts/openclaw-setup.md` — only if OpenClaw config changed
 
-**team-skills 仓库 (`/Users/abble/team-skills/plugins/feishu-user-plugin/`)：**
-- `skills/` — 同步技能文件: `cp -r skills/ /Users/abble/team-skills/plugins/feishu-user-plugin/skills/`
-- `README.md` — team-skills 有自己的 README（含团队 APP_ID/SECRET），需要同步更新：工具数量、功能列表、更新日志、安装 prompt
-- 两个 README 都必须包含 Claude Code 安装 prompt 和 OpenClaw 安装 prompt
-- team-skills README 的安装 prompt 包含团队共享的 APP_ID/SECRET（hardcoded），本仓库 README 用占位符
+`AGENTS.md` (Codex) and `skills/feishu-user-plugin/references/CLAUDE.md` are auto-derived from `CLAUDE.md` by the pre-commit hook — do **not** edit them by hand.
 
-**同步命令（每次发版后执行）：**
-```bash
-# 1. 同步 skills + plugin.json
-cp CLAUDE.md skills/feishu-user-plugin/references/CLAUDE.md
-cp -r skills/ /Users/abble/team-skills/plugins/feishu-user-plugin/skills/
-cp .claude-plugin/plugin.json /Users/abble/team-skills/plugins/feishu-user-plugin/.claude-plugin/
-# 2. 手动更新 team-skills README（工具数、功能列表、更新日志）+ SKILL.md（version + allowed-tools）
-# 3. 走 PR 流程推送 team-skills（禁止直接推 main）
-```
+For team-skills repo: see [Syncing to team-skills](#syncing-to-team-skills) above. Bottom line: `skills/` + `plugin.json` auto-sync via post-merge hook; team-skills README + SKILL.md still need manual edits per release.
 
 ### Keeping ROADMAP.md up to date
 - When completing a feature or fixing a bug, check the corresponding item in ROADMAP.md as `[x]` done
@@ -568,13 +551,6 @@ feishu-user-plugin vX.Y.Z 发布
 **结尾**：不加 CHANGELOG 链接（v1.3.2 风格未含链接，群内读者不需要）。
 
 **发送前**：始终先用 `send_to_user` 或类似工具发给用户自己审核，或直接以文本形式贴在对话里等用户批准。用户说"发"才调 `send_post_as_user` 到目标群。
-
-### Syncing to team-skills (after any CLAUDE.md or skills change)
-1. Copy CLAUDE.md to skill reference: `cp CLAUDE.md skills/feishu-user-plugin/references/CLAUDE.md`
-2. Sync to team-skills repo: `cp -r skills/ /Users/abble/team-skills/plugins/feishu-user-plugin/skills/`
-3. Also sync plugin.json: `cp .claude-plugin/plugin.json /Users/abble/team-skills/plugins/feishu-user-plugin/.claude-plugin/`
-4. Update SKILL.md version + allowed-tools, README.md changelog + tool count
-5. **走 PR 流程**（创建 branch → push → PR → 等 CI 通过 → merge），禁止直接推 main
 
 ### Testing a tool
 - For Official API tools: can test directly via MCP tool call or standalone script using `readCredentials()` from `src/config.js`
