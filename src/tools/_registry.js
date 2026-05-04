@@ -7,7 +7,6 @@
 // the v1.3.7 phase A migration, temporarily in src/index.js) and provides:
 //   - getUserClient():   Promise<LarkUserClient>
 //   - getOfficialClient(): LarkOfficialClient
-//   - chatIdMapper:      ChatIdMapper instance (fuzzy chat ID memo)
 //   - resolveDocId(x):   Promise<string>  — wiki-node / URL → native token
 //   - listProfiles():    string[]         — names from LARK_PROFILES_JSON + 'default'
 //   - getActiveProfile():string

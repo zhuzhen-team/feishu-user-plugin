@@ -28,6 +28,7 @@ const EXTERNAL_TOOL_MODULES = [
   require('./tools/docs'),
   require('./tools/drive'),
   require('./tools/groups'),
+  require('./tools/im-read'),
   require('./tools/messaging-bot'),
   require('./tools/messaging-user'),
   require('./tools/okr'),
@@ -36,101 +37,10 @@ const EXTERNAL_TOOL_MODULES = [
   require('./tools/wiki'),
 ];
 
-// --- Chat ID Mapper ---
-
-class ChatIdMapper {
-  constructor() {
-    this.nameCache = new Map(); // oc_id → chat name
-    this.lastRefresh = 0;
-    this.TTL = 5 * 60 * 1000; // 5 min cache
-  }
-
-  async _refresh(official) {
-    if (Date.now() - this.lastRefresh < this.TTL) return;
-    try {
-      const chats = await official.listAllChats();
-      this.nameCache.clear();
-      for (const chat of chats) {
-        this.nameCache.set(chat.chat_id, chat.name || '');
-      }
-      this.lastRefresh = Date.now();
-    } catch (e) {
-      console.error('[feishu-user-plugin] ChatIdMapper refresh failed:', e.message);
-    }
-  }
-
-  // Case-insensitive name matching helper
-  static _nameMatch(haystack, needle, exact = false) {
-    if (!haystack || !needle) return false;
-    const h = haystack.toLowerCase(), n = needle.toLowerCase();
-    return exact ? h === n : h.includes(n);
-  }
-
-  async findByName(name, official) {
-    await this._refresh(official);
-    // Exact match first (case-insensitive)
-    for (const [ocId, chatName] of this.nameCache) {
-      if (ChatIdMapper._nameMatch(chatName, name, true)) return ocId;
-    }
-    // Partial match (case-insensitive)
-    for (const [ocId, chatName] of this.nameCache) {
-      if (ChatIdMapper._nameMatch(chatName, name)) return ocId;
-    }
-    return null;
-  }
-
-  async resolveToOcId(chatIdOrName, official) {
-    if (!chatIdOrName) return null;
-    if (chatIdOrName.startsWith('oc_')) return chatIdOrName;
-    // Also accept raw numeric IDs (from search_contacts)
-    if (/^\d+$/.test(chatIdOrName)) return chatIdOrName;
-    // Strategy 1: Search in bot's group list cache
-    const cached = await this.findByName(chatIdOrName, official);
-    if (cached) return cached;
-    // Strategy 2: Use im.v1.chat.search API (finds groups even if not in cache)
-    try {
-      const results = await official.chatSearch(chatIdOrName);
-      for (const chat of results) {
-        this.nameCache.set(chat.chat_id, chat.name || '');
-        if (ChatIdMapper._nameMatch(chat.name, chatIdOrName, true)) return chat.chat_id;
-      }
-      // Partial match on search results (case-insensitive)
-      for (const chat of results) {
-        if (ChatIdMapper._nameMatch(chat.name, chatIdOrName)) return chat.chat_id;
-      }
-    } catch (e) {
-      console.error('[feishu-user-plugin] chatSearch fallback failed:', e.message);
-    }
-    return null;
-  }
-
-  // Strategy 3: Use search_contacts (cookie-based) to find external groups by name
-  // Returns numeric chat_id that works with UAT readMessagesAsUser
-  async resolveViaContacts(chatName, userClient) {
-    if (!userClient) return null;
-    try {
-      const results = await userClient.search(chatName);
-      const groups = results.filter(r => r.type === 'group');
-      // Exact match first (case-insensitive)
-      for (const g of groups) {
-        if (ChatIdMapper._nameMatch(g.title, chatName, true)) return String(g.id);
-      }
-      // Partial match (case-insensitive)
-      for (const g of groups) {
-        if (ChatIdMapper._nameMatch(g.title, chatName)) return String(g.id);
-      }
-    } catch (e) {
-      console.error('[feishu-user-plugin] search_contacts fallback failed:', e.message);
-    }
-    return null;
-  }
-}
-
 // --- Client Singletons + Profiles ---
 
 let userClient = null;
 let officialClient = null;
-const chatIdMapper = new ChatIdMapper();
 
 // Profile system (v1.3.6).
 // Default behaviour is identical to pre-1.3.6: LARK_COOKIE / LARK_APP_ID / etc.
@@ -219,75 +129,10 @@ const TOOLS = [
   // ========== User Identity / batch / card — extracted to src/tools/messaging-user.js ==========
 
   // search_contacts / create_p2p_chat / get_user_info → src/tools/contacts.js
-  // get_chat_info stays here — it'll move with im-read in the next batch.
-  {
-    name: 'get_chat_info',
-    description: '[Official API + User Identity fallback] Get chat details: name, description, member count, owner. Supports both oc_xxx and numeric chat_id.',
-    inputSchema: {
-      type: 'object',
-      properties: { chat_id: { type: 'string', description: 'Chat ID (oc_xxx or numeric)' } },
-      required: ['chat_id'],
-    },
-  },
+  // get_chat_info / read_p2p_messages / list_user_chats / list_chats / read_messages → src/tools/im-read.js
   // get_login_status → src/tools/diagnostics.js
 
-  // ========== IM — Official API (User Identity via UAT) ==========
-  {
-    name: 'read_p2p_messages',
-    description: '[User UAT] Read P2P (direct message) chat history using user_access_token. Works for chats the bot cannot access. Returns newest messages first by default. Auto-expands merge_forward messages into their child messages by default — disable with expand_merge_forward=false. Requires OAuth setup.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        chat_id: { type: 'string', description: 'Chat ID (numeric from create_p2p_chat, or oc_xxx from list_user_chats). Both formats work.' },
-        page_size: { type: 'number', description: 'Messages to fetch (default 20, max 50)' },
-        start_time: { type: 'string', description: 'Start timestamp in seconds (optional)' },
-        end_time: { type: 'string', description: 'End timestamp in seconds (optional)' },
-        sort_type: { type: 'string', enum: ['ByCreateTimeDesc', 'ByCreateTimeAsc'], description: 'Sort order (default: ByCreateTimeDesc = newest first)' },
-        expand_merge_forward: { type: 'boolean', description: 'Auto-expand merge_forward placeholders into their child messages (default true). Children carry parentMessageId; use that id (not the child id) with download_image / download_file.' },
-      },
-      required: ['chat_id'],
-    },
-  },
-  {
-    name: 'list_user_chats',
-    description: '[User UAT] List group chats the user is in. Note: only returns groups, not P2P. For P2P chats, use search_contacts → create_p2p_chat → read_p2p_messages. Requires OAuth setup.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        page_size: { type: 'number', description: 'Items per page (default 20)' },
-        page_token: { type: 'string', description: 'Pagination token' },
-      },
-    },
-  },
-
-  // ========== IM — Official API (Bot Identity) ==========
-  {
-    name: 'list_chats',
-    description: '[Official API] List all chats the bot has joined. Returns chat_id, name, type.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        page_size: { type: 'number', description: 'Items per page (default 20, max 100)' },
-        page_token: { type: 'string', description: 'Pagination token' },
-      },
-    },
-  },
-  {
-    name: 'read_messages',
-    description: '[Official API + UAT fallback] Read message history from any group. Accepts oc_xxx ID, numeric ID, or chat name (auto-searched). Auto-falls back to UAT for external groups the bot cannot access. Returns newest messages first by default, with sender names resolved. Auto-expands merge_forward messages into their child messages (with original sender / time / content preserved) by default — disable with expand_merge_forward=false. Text messages have URLs extracted into `urls`; Feishu doc links are additionally surfaced as `feishuDocs` so agents can feed them straight into read_doc / get_doc_blocks.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        chat_id: { type: 'string', description: 'Chat ID (oc_xxx), numeric ID, or chat name (auto-searched via bot groups, im.chat.search, and user contacts)' },
-        page_size: { type: 'number', description: 'Messages to fetch (default 20, max 50)' },
-        start_time: { type: 'string', description: 'Start timestamp in seconds (optional)' },
-        end_time: { type: 'string', description: 'End timestamp in seconds (optional)' },
-        sort_type: { type: 'string', enum: ['ByCreateTimeDesc', 'ByCreateTimeAsc'], description: 'Sort order (default: ByCreateTimeDesc = newest first)' },
-        expand_merge_forward: { type: 'boolean', description: 'Auto-expand merge_forward placeholders into their child messages (default true). Children carry parentMessageId; use that id (not the child id) with download_image / download_file.' },
-      },
-      required: ['chat_id'],
-    },
-  },
+  // ========== IM — Read paths — extracted to src/tools/im-read.js ==========
   // reply_message / forward_message → src/tools/messaging-bot.js
 
   // ========== Docs — extracted to src/tools/docs.js ==========
@@ -368,100 +213,11 @@ async function handleTool(name, args) {
 
     // search_contacts / create_p2p_chat → src/tools/contacts.js
 
-    case 'get_chat_info': {
-      // Strategy 1: Official API im.chat.get (supports oc_xxx format)
-      if (args.chat_id.startsWith('oc_')) {
-        try {
-          const info = await getOfficialClient().getChatInfo(args.chat_id);
-          return info ? json(info) : text(`No info for chat ${args.chat_id}`);
-        } catch (e) {
-          console.error(`[feishu-user-plugin] Official getChatInfo failed: ${e.message}`);
-        }
-      }
-      // Strategy 2: Protobuf gateway (supports numeric chat_id)
-      try {
-        const c = await getUserClient();
-        const info = await c.getGroupInfo(args.chat_id);
-        if (info) return json(info);
-      } catch (e) {
-        console.error(`[feishu-user-plugin] Protobuf getChatInfo failed: ${e.message}`);
-      }
-      return text(`No info for chat ${args.chat_id}`);
-    }
+    // get_chat_info / read_p2p_messages / list_user_chats / list_chats / read_messages
+    //   → src/tools/im-read.js (dispatched via default branch)
     // get_user_info → src/tools/contacts.js
     // get_login_status → src/tools/diagnostics.js (dispatched via default branch)
 
-    // --- User UAT: IM ---
-
-    case 'read_p2p_messages': {
-      const official = getOfficialClient();
-      let chatId = args.chat_id;
-      let uc = null;
-      let ucError = null;
-      try { uc = await getUserClient(); } catch (e) { ucError = e; }
-      // If chat_id is not numeric or oc_, try to resolve as user name → P2P chat
-      if (!/^\d+$/.test(chatId) && !chatId.startsWith('oc_')) {
-        if (uc) {
-          const results = await uc.search(chatId);
-          const user = results.find(r => r.type === 'user');
-          if (user) {
-            const pChatId = await uc.createChat(String(user.id));
-            if (pChatId) chatId = String(pChatId);
-            else return text(`Found user "${user.title}" but failed to create P2P chat.`);
-          } else {
-            // Maybe it's a group name
-            const group = results.find(r => r.type === 'group');
-            if (group) chatId = String(group.id);
-            else return text(`Cannot resolve "${args.chat_id}" to a chat. Use search_contacts to find the ID first.`);
-          }
-        } else {
-          const hint = ucError ? `Cookie auth failed: ${ucError.message}. Fix LARK_COOKIE first, or p` : 'P';
-          return text(`"${args.chat_id}" is not a valid chat ID. ${hint}rovide a numeric ID or oc_xxx format. Use search_contacts + create_p2p_chat to get the ID.`);
-        }
-      }
-      return json(await official.readMessagesAsUser(chatId, {
-        pageSize: args.page_size, startTime: args.start_time, endTime: args.end_time,
-        sortType: args.sort_type,
-        expandMergeForward: args.expand_merge_forward !== false,
-      }, uc));
-    }
-    case 'list_user_chats':
-      return json(await getOfficialClient().listChatsAsUser({ pageSize: args.page_size, pageToken: args.page_token }));
-
-    // --- Official API: IM ---
-
-    case 'list_chats':
-      return json(await getOfficialClient().listChats({ pageSize: args.page_size, pageToken: args.page_token }));
-    case 'read_messages': {
-      const official = getOfficialClient();
-      const msgOpts = {
-        pageSize: args.page_size, startTime: args.start_time, endTime: args.end_time,
-        sortType: args.sort_type,
-        expandMergeForward: args.expand_merge_forward !== false,
-      };
-      // Get userClient for name resolution fallback (best-effort)
-      let uc = null;
-      try { uc = await getUserClient(); } catch (_) {}
-
-      // Path A — chat_id that resolves inside bot's / official search scope.
-      const resolvedChatId = await chatIdMapper.resolveToOcId(args.chat_id, official);
-      if (resolvedChatId) {
-        return json(await official.readMessagesWithFallback(resolvedChatId, msgOpts, uc));
-      }
-
-      // Path B — external group discovered only via cookie search_contacts.
-      // When we got here the bot definitely can't see it, so skip bot entirely
-      // and go straight to UAT with a `contacts` via label.
-      if (official.hasUAT) {
-        if (!uc) try { uc = await getUserClient(); } catch (_) {}
-        const contactChatId = await chatIdMapper.resolveViaContacts(args.chat_id, uc);
-        if (contactChatId) {
-          return json(await official.readMessagesWithFallback(contactChatId, msgOpts, uc, { skipBot: true, via: 'contacts' }));
-        }
-      }
-
-      return text(`Cannot resolve "${args.chat_id}" to a chat ID.\nSearched: bot's group list, im.chat.search API, and user contacts (search_contacts).\nTry: provide the oc_xxx or numeric chat ID directly.`);
-    }
     // reply_message / forward_message → src/tools/messaging-bot.js (dispatched via default branch)
 
     // search_docs / read_doc / get_doc_blocks / create_doc → src/tools/docs.js (dispatched via default branch)
@@ -507,7 +263,6 @@ async function handleTool(name, args) {
           userClient = null;
           officialClient = null;
         },
-        chatIdMapper,
         resolveDocId,
       };
       for (const mod of EXTERNAL_TOOL_MODULES) {
