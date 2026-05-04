@@ -1802,7 +1802,7 @@
           "type": "array"
         },
         "chat_id": {
-          "description": "Target chat ID (numeric)",
+          "description": "Target chat ID. Numeric (from create_p2p_chat / search) preferred; oc_xxx is auto-resolved via getChatInfo + cookie search since v1.3.7 (C1.4).",
           "type": "string"
         },
         "parent_id": {
@@ -1859,7 +1859,7 @@
     "inputSchema": {
       "properties": {
         "chat_id": {
-          "description": "Target chat ID",
+          "description": "Target chat ID. Numeric preferred; oc_xxx is auto-resolved (v1.3.7 C1.4).",
           "type": "string"
         },
         "file_key": {
@@ -1889,7 +1889,7 @@
     "inputSchema": {
       "properties": {
         "chat_id": {
-          "description": "Target chat ID",
+          "description": "Target chat ID. Numeric preferred; oc_xxx is auto-resolved (v1.3.7 C1.4).",
           "type": "string"
         },
         "image_key": {
@@ -1951,7 +1951,7 @@
     "inputSchema": {
       "properties": {
         "chat_id": {
-          "description": "Target chat ID",
+          "description": "Target chat ID. Numeric preferred; oc_xxx is auto-resolved (v1.3.7 C1.4).",
           "type": "string"
         },
         "paragraphs": {

@@ -8,6 +8,41 @@
 
 const { text, sendResult, json } = require('./_registry');
 
+// v1.3.7 C1.4: send_*_as_user (cookie protobuf) requires NUMERIC chat_id.
+// When callers pass `oc_xxx` (Open API format), resolve it via
+//   getChatInfo(oc_xxx) → name → cookie search(name) → numeric id
+// and cache the mapping for the session. Without resolution, the cookie
+// gateway accepts the call but the message goes nowhere (server treats
+// the chatId field as unknown and returns an empty packet).
+const _ocCache = new Map();
+
+async function _resolveCookieChatId(chatId, ctx) {
+  if (!chatId || typeof chatId !== 'string') return chatId;
+  if (!chatId.startsWith('oc_')) return chatId;
+  if (_ocCache.has(chatId)) return _ocCache.get(chatId);
+  let name;
+  try {
+    const info = await ctx.getOfficialClient().getChatInfo(chatId);
+    name = info?.name;
+  } catch (e) {
+    throw new Error(`Cannot resolve ${chatId} to a numeric chat_id (cookie protobuf needs numeric): getChatInfo failed (${e.message}). Pass a numeric chat_id directly — get one via search_contacts + create_p2p_chat (P2P) or list_user_chats (group).`);
+  }
+  if (!name) {
+    throw new Error(`Cannot resolve ${chatId}: getChatInfo returned no name. Pass a numeric chat_id directly.`);
+  }
+  const c = await ctx.getUserClient();
+  const results = await c.search(name);
+  // Prefer exact name match on a group; fall back to first group / user with this name.
+  const exact = results.find((r) => r.title === name && r.type === 'group');
+  const looser = exact || results.find((r) => r.type === 'group') || results.find((r) => r.title === name);
+  if (!looser) {
+    throw new Error(`Cannot resolve ${chatId} (chat "${name}"): no matching chat in cookie search. The chat may be a P2P with someone outside your search index, or you may not be a member. Use create_p2p_chat for P2P, or pass numeric chat_id directly.`);
+  }
+  const numeric = String(looser.id);
+  _ocCache.set(chatId, numeric);
+  return numeric;
+}
+
 const schemas = [
   {
     name: 'send_as_user',
@@ -15,7 +50,7 @@ const schemas = [
     inputSchema: {
       type: 'object',
       properties: {
-        chat_id: { type: 'string', description: 'Target chat ID (numeric)' },
+        chat_id: { type: 'string', description: 'Target chat ID. Numeric (from create_p2p_chat / search) preferred; oc_xxx is auto-resolved via getChatInfo + cookie search since v1.3.7 (C1.4).' },
         text: { type: 'string', description: 'Message text. If `ats` is provided, include the display marker for each @ in this text (default marker is `@<name>`).' },
         ats: {
           type: 'array',
@@ -84,7 +119,7 @@ const schemas = [
     inputSchema: {
       type: 'object',
       properties: {
-        chat_id: { type: 'string', description: 'Target chat ID' },
+        chat_id: { type: 'string', description: 'Target chat ID. Numeric preferred; oc_xxx is auto-resolved (v1.3.7 C1.4).' },
         image_key: { type: 'string', description: 'Image key from upload (img_v2_xxx or img_v3_xxx)' },
         root_id: { type: 'string', description: 'Thread root message ID (optional)' },
       },
@@ -97,7 +132,7 @@ const schemas = [
     inputSchema: {
       type: 'object',
       properties: {
-        chat_id: { type: 'string', description: 'Target chat ID' },
+        chat_id: { type: 'string', description: 'Target chat ID. Numeric preferred; oc_xxx is auto-resolved (v1.3.7 C1.4).' },
         file_key: { type: 'string', description: 'File key from upload' },
         file_name: { type: 'string', description: 'Display file name' },
         root_id: { type: 'string', description: 'Thread root message ID (optional)' },
@@ -111,7 +146,7 @@ const schemas = [
     inputSchema: {
       type: 'object',
       properties: {
-        chat_id: { type: 'string', description: 'Target chat ID' },
+        chat_id: { type: 'string', description: 'Target chat ID. Numeric preferred; oc_xxx is auto-resolved (v1.3.7 C1.4).' },
         title: { type: 'string', description: 'Post title (optional)' },
         paragraphs: {
           type: 'array',
@@ -141,7 +176,8 @@ const schemas = [
 const handlers = {
   async send_as_user(args, ctx) {
     const c = await ctx.getUserClient();
-    const r = await c.sendMessage(args.chat_id, args.text, { rootId: args.root_id, parentId: args.parent_id, ats: args.ats });
+    const chatId = await _resolveCookieChatId(args.chat_id, ctx);
+    const r = await c.sendMessage(chatId, args.text, { rootId: args.root_id, parentId: args.parent_id, ats: args.ats });
     return sendResult(r, `Text sent as user to ${args.chat_id}`);
   },
   async send_to_user(args, ctx) {
@@ -192,6 +228,9 @@ const handlers = {
           const picked = want[0];
           chatId = t.type === 'user' ? await userClient.createChat(picked.id) : picked.id;
           if (!chatId) throw new Error(`Could not resolve chat for ${t.type} ${picked.title}`);
+        } else if (t.via !== 'bot') {
+          // type=chat with cookie identity — resolve oc_xxx → numeric (v1.3.7 C1.4).
+          chatId = await _resolveCookieChatId(chatId, ctx);
         }
         let r;
         if (t.via === 'bot') {
@@ -224,17 +263,20 @@ const handlers = {
   },
   async send_image_as_user(args, ctx) {
     const c = await ctx.getUserClient();
-    const r = await c.sendImage(args.chat_id, args.image_key, { rootId: args.root_id });
+    const chatId = await _resolveCookieChatId(args.chat_id, ctx);
+    const r = await c.sendImage(chatId, args.image_key, { rootId: args.root_id });
     return sendResult(r, `Image sent to ${args.chat_id}`);
   },
   async send_file_as_user(args, ctx) {
     const c = await ctx.getUserClient();
-    const r = await c.sendFile(args.chat_id, args.file_key, args.file_name, { rootId: args.root_id });
+    const chatId = await _resolveCookieChatId(args.chat_id, ctx);
+    const r = await c.sendFile(chatId, args.file_key, args.file_name, { rootId: args.root_id });
     return sendResult(r, `File "${args.file_name}" sent to ${args.chat_id}`);
   },
   async send_post_as_user(args, ctx) {
     const c = await ctx.getUserClient();
-    const r = await c.sendPost(args.chat_id, args.title || '', args.paragraphs, { rootId: args.root_id });
+    const chatId = await _resolveCookieChatId(args.chat_id, ctx);
+    const r = await c.sendPost(chatId, args.title || '', args.paragraphs, { rootId: args.root_id });
     return sendResult(r, `Post sent to ${args.chat_id}`);
   },
   async send_card_as_user(args, ctx) {
