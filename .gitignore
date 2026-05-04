@@ -4,3 +4,7 @@ node_modules/
 *.log
 .mcp.json
 .playwright-mcp/
+
+# Ad-hoc screenshots — keep locally, don't commit
+/feishu-home.png
+/test-group-after-sends.png
