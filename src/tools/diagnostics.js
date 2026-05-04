@@ -1,6 +1,24 @@
-// src/tools/diagnostics.js — health checks + media download for messages and docx images.
+// src/tools/diagnostics.js — health checks + media downloads.
+//
+// v1.3.7 (C2.4) consolidates download_image / download_file into:
+//   download_message_resource(message_id, key, kind=image|file, save_path?)
+//   download_doc_image(image_token, doc_token?, save_path?)
+// Inline-base64 responses are capped at MAX_INLINE_BYTES (2 MiB) to leave
+// headroom under Anthropic's 5 MB API limit; over the cap, save_path is
+// required and the response only includes a short summary.
 
+const fs = require('fs');
 const { text } = require('./_registry');
+
+const MAX_INLINE_BYTES = 2 * 1024 * 1024; // 2 MiB; Anthropic API cap is 5 MB
+
+function inlineTooBig(bytes) {
+  return bytes > MAX_INLINE_BYTES;
+}
+
+function fmtMB(bytes) {
+  return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+}
 
 const schemas = [
   {
@@ -9,32 +27,43 @@ const schemas = [
     inputSchema: { type: 'object', properties: {} },
   },
   {
-    name: 'download_image',
-    description: '[User Identity / Official API] Download an image so the model can actually see it. Two modes: (1) message image — pass message_id + image_key from read_messages / read_p2p_messages. (2) docx image — pass doc_token + image_token (the block.image.token from get_doc_blocks). doc_token accepts native document_id, wiki node token, or Feishu URL. Tries user identity first, falls back to app. NOTE: for merge_forward children, pass the child\'s `parentMessageId` (NOT the child message id) — Feishu keys media by the parent merge_forward id.',
+    name: 'download_message_resource',
+    description: '[User Identity / Official API] Download an image or file attached to a message so the model can see / store it. v1.3.7 (C2.4) consolidates the v1.3.6 download_image (mode 1) + download_file. UAT-first, falls back to app.\n\nFor images, the response includes an inline `image` content block so the model sees pixels. For files, the response includes the bytes as base64 (truncated for display) plus an optional save_path write.\n\n**Size cap:** payloads > 2 MiB MUST pass `save_path`. The Anthropic API rejects responses > 5 MB; we cap at 2 MiB so multipart wrapping has headroom.\n\n**merge_forward children:** Feishu keys media by the parent merge_forward id, not the child id. Use the child\'s `parentMessageId` field (returned by read_messages with expand_merge_forward) — not the child id.',
     inputSchema: {
       type: 'object',
       properties: {
-        message_id: { type: 'string', description: 'Message ID (om_xxx) — for mode 1 only. For merge_forward children use the parent merge_forward message id.' },
-        image_key: { type: 'string', description: 'Image key (img_xxx) from message content — for mode 1 only' },
-        doc_token: { type: 'string', description: 'Document ID, wiki node token, or Feishu URL — for mode 2 only' },
-        image_token: { type: 'string', description: 'Image token from a docx image block (block.image.token via get_doc_blocks) — for mode 2 only' },
+        message_id: { type: 'string', description: 'Message ID (om_xxx). For merge_forward children, use the child\'s `parentMessageId`.' },
+        key: { type: 'string', description: 'image_key (img_xxx) for kind=image, file_key for kind=file. From read_messages content.' },
+        kind: { type: 'string', enum: ['image', 'file'], description: 'image or file' },
+        save_path: { type: 'string', description: 'Absolute local path. Required when downloaded bytes > 2 MiB (else the response would exceed the Anthropic API 5 MB inline limit).' },
       },
+      required: ['message_id', 'key', 'kind'],
     },
   },
   {
-    name: 'download_file',
-    description: '[User Identity / Official API] Download a file attached to a message (msg_type=file). Returns base64 bytes + mimeType + filename. Tries user identity first, falls back to app. For merge_forward children, pass the child\'s `parentMessageId` (NOT the child message id) — Feishu keys media by the parent merge_forward id.',
+    name: 'download_doc_image',
+    description: '[User Identity / Official API] Download an image embedded in a docx document so the model can see it. Pass the `image_token` from `get_doc_blocks` (block.image.token), and optionally the doc/wiki/URL token to scope the lookup. UAT-first.\n\n**Size cap:** payloads > 2 MiB MUST pass `save_path`.',
     inputSchema: {
       type: 'object',
       properties: {
-        message_id: { type: 'string', description: 'Message ID (om_xxx). For merge_forward children use the parent merge_forward message id.' },
-        file_key: { type: 'string', description: 'File key from message content (content.file_key for msg_type=file)' },
-        save_path: { type: 'string', description: 'Optional absolute local path to save the file to. If omitted, file is only returned as inline base64 in the response.' },
+        image_token: { type: 'string', description: 'Image token (from get_doc_blocks image block)' },
+        doc_token: { type: 'string', description: 'Document ID, wiki node token, or Feishu URL (optional but recommended for permission scoping).' },
+        save_path: { type: 'string', description: 'Absolute local path. Required when image bytes > 2 MiB.' },
       },
-      required: ['message_id', 'file_key'],
+      required: ['image_token'],
     },
   },
 ];
+
+function maybeSave(savePath, base64) {
+  if (!savePath) return null;
+  try {
+    fs.writeFileSync(savePath, Buffer.from(base64, 'base64'));
+    return { ok: true, path: savePath };
+  } catch (e) {
+    return { ok: false, path: savePath, error: e.message };
+  }
+}
 
 const handlers = {
   async get_login_status(_args, ctx) {
@@ -73,48 +102,68 @@ const handlers = {
     return text(parts.join('\n'));
   },
 
-  async download_image(args, ctx) {
-    const official = ctx.getOfficialClient();
-    let r;
-    let source;
-    if (args.image_token) {
-      const docToken = args.doc_token ? await ctx.resolveDocId(args.doc_token) : undefined;
-      r = await official.downloadDocImage(args.image_token, docToken);
-      source = docToken ? `docx ${docToken}` : 'drive media';
-    } else if (args.message_id && args.image_key) {
-      r = await official.downloadMessageResource(args.message_id, args.image_key, 'image');
-      source = `message ${args.message_id}`;
-    } else {
-      return text('download_image requires either (message_id + image_key) for chat images, or (image_token, optionally with doc_token) for docx images.');
+  async download_message_resource(args, ctx) {
+    if (!args.message_id || !args.key) {
+      return text('download_message_resource requires message_id and key. For merge_forward children, use the child\'s parentMessageId (not the child id).');
+    }
+    const kind = args.kind;
+    if (kind !== 'image' && kind !== 'file') {
+      return text('download_message_resource: kind must be "image" or "file".');
+    }
+    const r = await ctx.getOfficialClient().downloadMessageResource(args.message_id, args.key, kind);
+    const sizeNote = `${r.bytes} bytes (${fmtMB(r.bytes)}, ${r.mimeType})`;
+    const tooBig = inlineTooBig(r.bytes);
+    if (tooBig && !args.save_path) {
+      return text(`Resource is ${sizeNote} — exceeds the 2 MiB inline cap. Re-run download_message_resource with save_path=<absolute path> so the bytes are written to disk and only a small summary is returned.`);
+    }
+    const saved = maybeSave(args.save_path, r.base64);
+    const saveNote = saved
+      ? (saved.ok ? `\nSaved to: ${saved.path}` : `\nSave to ${saved.path} failed: ${saved.error}`)
+      : '';
+    const ident = r.viaUser ? 'as user' : 'as app';
+    if (kind === 'image' && !tooBig) {
+      return {
+        content: [
+          { type: 'text', text: `Image from message ${args.message_id} (${ident}, ${sizeNote})${saveNote}` },
+          { type: 'image', data: r.base64, mimeType: r.mimeType },
+        ],
+      };
+    }
+    if (tooBig) {
+      return text(`Resource from message ${args.message_id} downloaded (${ident}, ${sizeNote})${saveNote}\nInline content omitted because the payload exceeds the 2 MiB cap.`);
     }
     return {
       content: [
-        { type: 'text', text: `Image downloaded from ${source} (${r.viaUser ? 'as user' : 'as app'}, ${r.bytes} bytes, ${r.mimeType}):` },
-        { type: 'image', data: r.base64, mimeType: r.mimeType },
+        { type: 'text', text: `File from message ${args.message_id} (${ident}, ${sizeNote})${saveNote}` },
+        { type: 'text', text: `base64 (${r.bytes} bytes, truncated display):\n${r.base64.slice(0, 400)}${r.base64.length > 400 ? '…' : ''}` },
       ],
     };
   },
 
-  async download_file(args, ctx) {
-    if (!args.message_id || !args.file_key) {
-      return text('download_file requires message_id + file_key. For merge_forward children pass the PARENT merge_forward message id, not the child id.');
+  async download_doc_image(args, ctx) {
+    if (!args.image_token) {
+      return text('download_doc_image requires image_token (from get_doc_blocks image block). Optionally pass doc_token (native id / wiki node / Feishu URL).');
     }
-    const r = await ctx.getOfficialClient().downloadMessageResource(args.message_id, args.file_key, 'file');
-    let saveNote = '';
-    if (args.save_path) {
-      try {
-        const fs = require('fs');
-        fs.writeFileSync(args.save_path, Buffer.from(r.base64, 'base64'));
-        saveNote = `\nSaved to: ${args.save_path}`;
-      } catch (e) {
-        saveNote = `\nSave to ${args.save_path} failed: ${e.message}`;
-      }
+    const docToken = args.doc_token ? await ctx.resolveDocId(args.doc_token) : undefined;
+    const r = await ctx.getOfficialClient().downloadDocImage(args.image_token, docToken);
+    const sizeNote = `${r.bytes} bytes (${fmtMB(r.bytes)}, ${r.mimeType})`;
+    const tooBig = inlineTooBig(r.bytes);
+    if (tooBig && !args.save_path) {
+      return text(`Image is ${sizeNote} — exceeds the 2 MiB inline cap. Re-run download_doc_image with save_path=<absolute path>.`);
     }
-    const summary = `File downloaded from message ${args.message_id} (${r.viaUser ? 'as user' : 'as app'}, ${r.bytes} bytes, ${r.mimeType})${saveNote}`;
+    const saved = maybeSave(args.save_path, r.base64);
+    const saveNote = saved
+      ? (saved.ok ? `\nSaved to: ${saved.path}` : `\nSave to ${saved.path} failed: ${saved.error}`)
+      : '';
+    const source = docToken ? `docx ${docToken}` : 'drive media';
+    const ident = r.viaUser ? 'as user' : 'as app';
+    if (tooBig) {
+      return text(`Image from ${source} downloaded (${ident}, ${sizeNote})${saveNote}\nInline content omitted because the payload exceeds the 2 MiB cap.`);
+    }
     return {
       content: [
-        { type: 'text', text: summary },
-        { type: 'text', text: `base64 (${r.bytes} bytes, truncated display):\n${r.base64.slice(0, 400)}${r.base64.length > 400 ? '…' : ''}` },
+        { type: 'text', text: `Image from ${source} (${ident}, ${sizeNote})${saveNote}` },
+        { type: 'image', data: r.base64, mimeType: r.mimeType },
       ],
     };
   },

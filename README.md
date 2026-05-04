@@ -390,8 +390,8 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 | `add_members` | Add users to a group |
 | `remove_members` | Remove users from a group |
 | `upload_image` / `upload_file` | Upload image/file, returns key for sending |
-| `download_image` | Download a chat-message image (message_id + image_key) OR a docx image (image_token + optional doc_token). Returned as MCP image content. For merge_forward children, use the child's `parentMessageId`, not the child id. |
-| `download_file` | Download a file attachment (msg_type=file). Returns base64 + mimeType + byte count; optional `save_path` writes to disk. Same parent-id rule for merge_forward children. (v1.3.5) |
+| `download_message_resource` | v1.3.7 (C2.4): download a message-attached image or file. Args: `message_id`, `key`, `kind=image|file`, `save_path?`. **Required save_path when bytes > 2 MiB** (Anthropic 5 MB inline cap). Replaces v1.3.6 download_image (message mode) + download_file. |
+| `download_doc_image` | v1.3.7 (C2.4): download an image embedded in a docx (image_token + optional doc_token). Same 2 MiB cap. Replaces v1.3.6 download_image (docx mode). |
 
 ### Wiki, OKR, and Calendar (v1.3.4)
 
