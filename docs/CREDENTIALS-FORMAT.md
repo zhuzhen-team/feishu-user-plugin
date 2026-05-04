@@ -1,0 +1,99 @@
+# Credentials File Format
+
+Single source of truth for all feishu-user-plugin credentials, introduced in v1.3.7.
+
+## Path
+
+```
+~/.feishu-user-plugin/credentials.json
+```
+
+Mode `0600` (owner read/write only). The directory `~/.feishu-user-plugin/` is created with mode `0700`.
+
+## Schema
+
+```json
+{
+  "version": 1,
+  "active": "default",
+  "profiles": {
+    "default": {
+      "LARK_COOKIE": "session=...; sl_session=...",
+      "LARK_APP_ID": "cli_xxxxxxxxxxxxxxxx",
+      "LARK_APP_SECRET": "yyyyyyyyyyyyyyyy",
+      "LARK_USER_ACCESS_TOKEN": "u-xxxxxxxx",
+      "LARK_USER_REFRESH_TOKEN": "r-xxxxxxxx",
+      "LARK_UAT_EXPIRES": 1735689600
+    },
+    "alt": {
+      "LARK_COOKIE": "...",
+      "LARK_APP_ID": "...",
+      "LARK_APP_SECRET": "...",
+      "LARK_USER_ACCESS_TOKEN": "...",
+      "LARK_USER_REFRESH_TOKEN": "...",
+      "LARK_UAT_EXPIRES": 1735693200
+    }
+  },
+  "profileHints": {}
+}
+```
+
+### Fields
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `version` | integer | Schema version. Currently `1`. |
+| `active` | string | Name of the profile to use when no override is given. Must be a key in `profiles`. |
+| `profiles` | object | Map of `<profileName> → envBlock`. Each env block holds the same `LARK_*` keys today's MCP server reads from `process.env`. |
+| `profileHints` | object | Reserved for v1.3.9 multi-profile auto-switch. Map of `<resourceKey> → <profileName>`. v1.3.7 only initializes `{}`. |
+
+### Env block keys (per profile)
+
+| Key | Required for | Notes |
+|-----|--------------|-------|
+| `LARK_COOKIE` | User-identity messaging | Full cookie string including HttpOnly cookies (`session`, `sl_session`). |
+| `LARK_APP_ID` | Official API + UAT refresh | App credential. |
+| `LARK_APP_SECRET` | Official API + UAT refresh | App credential. |
+| `LARK_USER_ACCESS_TOKEN` | P2P chat reading + UAT-first writes | OAuth access token. |
+| `LARK_USER_REFRESH_TOKEN` | UAT auto-refresh | OAuth refresh token. |
+| `LARK_UAT_EXPIRES` | UAT lifecycle | Unix epoch (seconds). Optional — decoded from token if absent. |
+
+## Invariants
+
+1. **Atomic writes.** Every write goes through `tmp file + rename` to prevent partial reads under concurrent access (multiple MCP processes, Claude Code reading config simultaneously, UAT refresh lock holders).
+2. **Single active profile.** Exactly one of `profiles.*` is active at any time, named by `active`. `switch_profile` is the only way to flip it.
+3. **0600 permissions.** Enforced on every write (`fs.chmodSync` after rename).
+4. **Schema versioning.** Future schema changes bump `version`. Readers must check and refuse to load unknown major versions.
+
+## Backward compatibility
+
+The MCP server reads credentials in this order:
+
+1. `~/.feishu-user-plugin/credentials.json` if it exists → use the active profile's env block.
+2. Otherwise: fall back to `process.env.LARK_*` for the default profile, and `process.env.LARK_PROFILES_JSON` for named profiles. This is the v1.3.6 behaviour and stays intact for users who have not migrated.
+
+`persistToConfig({ ... })` (used by cookie heartbeat and UAT refresh) writes to:
+- `credentials.json` if it exists (the active profile's keys are updated atomically).
+- The discovered MCP config (`~/.claude.json` etc.) otherwise (v1.3.6 behaviour).
+
+## Migration
+
+```bash
+npx feishu-user-plugin migrate              # dry-run; prints what would be written
+npx feishu-user-plugin migrate --confirm    # writes credentials.json
+```
+
+The migrator:
+1. Calls `findMcpConfig()` to locate the existing harness config.
+2. Reads the env block.
+3. Parses `LARK_PROFILES_JSON` if set (registers each named profile).
+4. Builds the credentials.json structure with `active="default"` and all discovered profiles.
+5. Atomic writes to `~/.feishu-user-plugin/credentials.json` with `0600`.
+
+After migration the harness configs are left untouched. The MCP server now prefers `credentials.json`; if it's later removed, the harness env block remains as fallback. Users who want to fully strip credentials from harness configs can do it manually — there's no auto-rewrite step in v1.3.7 to keep the migration reversible.
+
+## Why this exists
+
+Before v1.3.7 each harness (Claude Code, Codex) duplicated the credentials in its own config (`~/.claude.json` mcpServers env block, `~/.codex/config.toml` mcp_servers.env). The cookie heartbeat and UAT refresh would auto-persist to whichever config was discovered first by `findMcpConfig()`. The other harness's copy went stale until the next OAuth re-run.
+
+Consolidating into a single file makes the rotation-on-refresh model work consistently across harnesses: every MCP process reads from the same file and every refresh writes back to the same file.

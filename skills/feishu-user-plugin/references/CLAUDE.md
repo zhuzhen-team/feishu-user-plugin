@@ -166,12 +166,24 @@ To register more profiles, set `LARK_PROFILES_JSON` in the MCP env:
 ```
 
 ## Auth & Session
-- **LARK_COOKIE**: Required for user identity tools. Session auto-refreshed every 4h via heartbeat and persisted to config.
+- **LARK_COOKIE**: Required for user identity tools. Session auto-refreshed every 4h via heartbeat and persisted to credentials store.
 - **LARK_APP_ID + LARK_APP_SECRET**: Required for official API tools.
-- **LARK_USER_ACCESS_TOKEN + LARK_USER_REFRESH_TOKEN**: Required for P2P reading. Auto-refreshed on expiry (error codes 99991668/99991663/99991677). Token auto-persisted to MCP config on refresh.
+- **LARK_USER_ACCESS_TOKEN + LARK_USER_REFRESH_TOKEN**: Required for P2P reading. Auto-refreshed on expiry (error codes 99991668/99991663/99991677). Token auto-persisted to credentials store on refresh.
 - Cookie expiry: sl_session has 12h max-age, auto-refreshed by heartbeat every 4h.
 - UAT expiry: 2h, auto-refreshed via refresh_token.
 - Refresh token expiry: 7 days. Use `keepalive` cron to prevent expiration.
+
+### Credentials store (v1.3.7+)
+Single source of truth at `~/.feishu-user-plugin/credentials.json` (mode 0600). Schema documented at `docs/CREDENTIALS-FORMAT.md`. The MCP server reads from this file when present; cookie heartbeat and UAT refresh persist back to it atomically. Multiple harnesses (Claude Code, Codex) sharing the same file see token rotations consistently — no more "Codex still has the old UAT" drift after a refresh in Claude Code.
+
+Opt-in migration:
+```bash
+npx feishu-user-plugin migrate              # dry-run (default) — prints what would be written
+npx feishu-user-plugin migrate --confirm    # writes credentials.json
+```
+After migration the harness env blocks remain as backward-compat fallback. Delete `~/.feishu-user-plugin/credentials.json` to revert to legacy behaviour.
+
+Backward compat: v1.3.6 users without credentials.json see zero behaviour change. The credentials file is preferred only when it exists. The MCP server's `Auth:` startup line on stderr now shows the source (`credentials.json profile=default` vs `env vars (legacy)`) so you can tell at a glance which path is active.
 
 ## Required Environment Variables (ALL are required for full functionality)
 
