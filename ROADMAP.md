@@ -333,14 +333,9 @@
 - [ ] 文档:事件订阅配置指南
 - [ ] 可选:更多事件类型(审批、日程、文档评论)
 
-#### v1.3.8.D. 工具数预估(增量)
+#### v1.3.8.D. 多账号自动切换
 
-- v1.3.7 收尾:77
-- 加 `send_card_as_user`(语义升级,不增工具数) + `search_messages` 1 + `get_new_events` 1 = **79**
-
-### v1.3.9 / 1.4 候选 — 多账号自动切换
-
-> v1.3.6 引入了 `list_profiles` / `switch_profile`(纯手动)。下一步:让 agent 调一个文档/群/bitable 时自动选对的 profile,不用人工记"这个文档归属哪个账号"。
+> v1.3.6 引入了 `list_profiles` / `switch_profile`(纯手动)。下一步:让 agent 调一个文档/群/bitable 时自动选对的 profile,不用人工记"这个文档归属哪个账号"。**依赖 v1.3.7 Phase B 的 `~/.feishu-user-plugin/credentials.json` 已落地**(profileHints 字段写在那里)。
 
 **触发场景**:
 - 同一个 agent 同时持有多个 profile(主公司账号 + 客户账号 + 个人 vault)
@@ -348,17 +343,19 @@
 - 现在:agent 必须先 `switch_profile` 再 `read_doc`,出错才知道
 - 想要:自动尝试每个 profile,缓存"这个 doc_token 属于 profile X"
 
-**实现路径**:
-- [ ] 中间件:每个工具调用前注入 `try → catch 401/403/permission_denied → switch + retry` 装饰
-- [ ] 缓存:`Map<resourceKey, profileName>` 持久化到 `~/.feishu-user-plugin/credentials.json::profileHints`(等 v1.3.7 Phase B 落地后)
-- [ ] resourceKey 提取:doc_token / app_token / chat_id / oc_xxx / oa_xxx / file_token 都做 key
-- [ ] 错误码白名单:只对 `91403`、`1254301`(权限)、`access_denied` 等触发切换;`access_token expired` 等不切换
-- [ ] 日志:stderr 提示"已自动切到 profile X 重试"
+**实现清单**:
+- [ ] 中间件:在 server.js 的 `CallToolRequestSchema` handler 外包一层 `try → catch 401/403/permission_denied → switch + retry` 装饰。仅对**读取类**工具生效(白名单:`read_*` / `list_*` / `get_*` / `search_*` / `download_*`),写操作不自动切
+- [ ] 缓存:`Map<resourceKey, profileName>` 持久化到 `~/.feishu-user-plugin/credentials.json::profileHints`(B2 已预留字段)
+- [ ] resourceKey 提取:doc_token / app_token / chat_id / oc_xxx / oa_xxx / file_token / wiki node 等等都做 key。从 args 里 grep 出 token-like 字段
+- [ ] 错误码白名单:只对 `91403`、`1254301`、`1254000` 系列(权限)、`access_denied`、`docx_no_permission` 等触发切换;`access_token expired` / 5xx / 网络错误等不切换(那是别的问题)
+- [ ] 日志:stderr 提示"profile <X> 在 <resource> 上 403,自动切到 <Y> 重试"
 - [ ] 工具响应里加 `viaProfile` 字段,让 agent 看到本次实际用了哪个 profile
-- [ ] 失败兜底:所有 profile 都拒绝时返回综合错误"resource X 在所有 N 个 profile 中均无权限",列出尝试的每个 profile + 它的错误
-- [ ] 回归:确保 default-only 用户(99% 场景)零开销 —— 没注册第二个 profile 就直接走原路径
+- [ ] 失败兜底:所有 profile 都拒绝时返回综合错误"resource X 在所有 N 个 profile 中均无权限",列出尝试的每个 profile + 它各自的错误
+- [ ] 回归:default-only 用户(99% 场景)零开销 —— 没注册第二个 profile 就直接走原路径,不进入 retry loop
+- [ ] 新增 `manage_profile_hints(action=list|clear, resource_key?)` 工具(可选):用来排查"这个 doc 现在缓存指向哪个 profile / 把它清掉重新探测"
+- [ ] 文档:在 README 增"多账号自动切换"小节,讲清楚白名单 / 缓存 / 写操作仍需 explicit switch 的规则
 
-**风险**:错误的 profile 切换可能造成无意中"代某账号操作"。务必只在**读**操作里自动切;写操作必须 explicit `switch_profile` 或新参数 `via_profile=auto` 才允许跨 profile fallback。
+**风险**:错误的 profile 切换可能造成无意中"代某账号操作"。务必只在**读**操作里自动切;写操作必须 explicit `switch_profile`,或者 caller 显式传 `via_profile="auto"` 才允许跨 profile fallback。
 
 ## 已调研但暂不实施
 
