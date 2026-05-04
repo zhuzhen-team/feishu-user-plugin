@@ -124,6 +124,29 @@ module.exports = {
     return { node: res.data.node, viaUser: !!res._viaUser, fallbackWarning: res._fallbackWarning || null };
   },
 
+  // Delete a wiki node. The Feishu SDK does not expose this endpoint, but the
+  // open API documents `DELETE /open-apis/wiki/v2/spaces/{space_id}/nodes/{token}`
+  // (added 2025-Q1 per the API console; not yet typed in @larksuiteoapi/node-sdk).
+  // We fall back to UAT REST and the bot's `client.request` raw helper, since
+  // there's no SDK method to call.
+  //
+  // CAVEAT: this only removes the wiki node. The underlying drive resource
+  // (docx / sheet / bitable / file) is NOT deleted — Feishu's design treats
+  // wiki nodes as pointers. To delete the actual resource, follow up with
+  // manage_drive_file(action=delete, type=<obj_type>, file_token=<obj_token>).
+  async deleteWikiNode(spaceId, nodeToken) {
+    if (!spaceId) throw new Error('deleteWikiNode: spaceId is required');
+    if (!nodeToken) throw new Error('deleteWikiNode: nodeToken is required');
+    const path = `/open-apis/wiki/v2/spaces/${encodeURIComponent(spaceId)}/nodes/${encodeURIComponent(nodeToken)}`;
+    const res = await this._asUserOrApp({
+      uatPath: path,
+      method: 'DELETE',
+      sdkFn: () => this.client.request({ method: 'DELETE', url: path }),
+      label: 'deleteWikiNode',
+    });
+    return { deleted: res.code === 0, viaUser: !!res._viaUser, fallbackWarning: res._fallbackWarning || null };
+  },
+
   // Copy a wiki node — deep copies the underlying resource into the target
   // location. target_parent_token / target_space_id select the destination;
   // omitting target_space_id keeps it within the source space.

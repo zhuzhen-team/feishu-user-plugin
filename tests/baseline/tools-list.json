@@ -519,6 +519,27 @@
     }
   },
   {
+    "name": "delete_wiki_node",
+    "description": "[Official API, v1.3.7] Delete a Wiki node. Calls `DELETE /open-apis/wiki/v2/spaces/{space_id}/nodes/{node_token}`. The Feishu SDK does not type this endpoint, so the call goes through raw REST (UAT-first; bot fallback uses `client.request`). **The underlying drive resource (docx / sheet / bitable / file) is NOT deleted** — Feishu treats wiki nodes as pointers. To delete the actual resource as well, follow up with `manage_drive_file(action=delete, type=<obj_type>, file_token=<obj_token>)` (use `get_wiki_node` first to get obj_type / obj_token).",
+    "inputSchema": {
+      "properties": {
+        "node_token": {
+          "description": "Wiki node token to delete",
+          "type": "string"
+        },
+        "space_id": {
+          "description": "Wiki space ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "node_token",
+        "space_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "download_doc_image",
     "description": "[User Identity / Official API] Download an image embedded in a docx document so the model can see it. Pass the `image_token` from `get_doc_blocks` (block.image.token), and optionally the doc/wiki/URL token to scope the lookup. UAT-first.\n\n**Size cap:** payloads > 2 MiB MUST pass `save_path`.",
     "inputSchema": {
