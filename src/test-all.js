@@ -5,7 +5,7 @@
  */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { LarkUserClient } = require('./clients/user');
-const { LarkOfficialClient } = require('./official');
+const { LarkOfficialClient } = require('./clients/official');
 
 const TEST_GROUP = '飞书plugin测试群';
 const results = [];

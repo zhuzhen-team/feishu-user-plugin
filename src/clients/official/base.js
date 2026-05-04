@@ -1,6 +1,5 @@
 const lark = require('@larksuiteoapi/node-sdk');
 const { fetchWithTimeout } = require('../../utils');
-const { buildEmptyImageBlock, buildReplaceImagePayload, buildEmptyFileBlock, buildReplaceFilePayload } = require('../../doc-blocks');
 const { stderrLogger } = require('../../logger');
 
 class LarkOfficialClient {
@@ -413,17 +412,7 @@ class LarkOfficialClient {
 
 }
 
-// Temporary mixin during phase A.4–A.11 — Task 12 will move these into
-// clients/official/index.js as a single composed export.
-Object.assign(LarkOfficialClient.prototype, require('./contacts'));
-Object.assign(LarkOfficialClient.prototype, require('./calendar'));
-Object.assign(LarkOfficialClient.prototype, require('./groups'));
-Object.assign(LarkOfficialClient.prototype, require('./okr'));
-Object.assign(LarkOfficialClient.prototype, require('./wiki'));
-Object.assign(LarkOfficialClient.prototype, require('./drive'));
-Object.assign(LarkOfficialClient.prototype, require('./uploads'));
-Object.assign(LarkOfficialClient.prototype, require('./docs'));
-Object.assign(LarkOfficialClient.prototype, require('./bitable'));
-Object.assign(LarkOfficialClient.prototype, require('./im'));
-
+// base.js exports only the bare class. clients/official/index.js composes the
+// domain mixins onto its prototype — callers should always import from there,
+// never directly from base.js.
 module.exports = { LarkOfficialClient };

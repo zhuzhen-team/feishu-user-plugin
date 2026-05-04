@@ -7,7 +7,7 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const { LarkUserClient } = require('./clients/user');
-const { LarkOfficialClient } = require('./official');
+const { LarkOfficialClient } = require('./clients/official');
 
 const results = [];
 

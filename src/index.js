@@ -12,7 +12,7 @@ const path = require('path');
 // This dotenv line only matters when running locally with a .env file (e.g. during development).
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const { LarkUserClient } = require('./clients/user');
-const { LarkOfficialClient } = require('./official');
+const { LarkOfficialClient } = require('./clients/official');
 const { resolveToObj, resolveToken, parseFeishuInput } = require('./resolver');
 
 // --- Chat ID Mapper ---

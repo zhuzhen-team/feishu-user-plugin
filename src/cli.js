@@ -72,7 +72,7 @@ Auto-renewal (optional):
 
 async function keepalive() {
   const { LarkUserClient } = require('./clients/user');
-  const { LarkOfficialClient } = require('./official');
+  const { LarkOfficialClient } = require('./clients/official');
   const { findMcpConfig, persistToConfig } = require('./config');
 
   const found = findMcpConfig();
@@ -125,7 +125,7 @@ async function keepalive() {
 
 async function checkStatus() {
   const { LarkUserClient } = require('./clients/user');
-  const { LarkOfficialClient } = require('./official');
+  const { LarkOfficialClient } = require('./clients/official');
   const { findMcpConfig } = require('./config');
 
   const found = findMcpConfig();
