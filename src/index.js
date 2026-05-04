@@ -25,8 +25,10 @@ const EXTERNAL_TOOL_MODULES = [
   require('./tools/calendar'),
   require('./tools/contacts'),
   require('./tools/diagnostics'),
+  require('./tools/docs'),
   require('./tools/drive'),
   require('./tools/groups'),
+  require('./tools/messaging-bot'),
   require('./tools/okr'),
   require('./tools/profile'),
   require('./tools/uploads'),
@@ -424,75 +426,9 @@ const TOOLS = [
       required: ['chat_id'],
     },
   },
-  {
-    name: 'reply_message',
-    description: '[Official API] Reply to a specific message by message_id (as bot). Only works for text messages; other types return error 230054.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        message_id: { type: 'string', description: 'Message ID to reply to (om_xxx)' },
-        text: { type: 'string', description: 'Reply text' },
-      },
-      required: ['message_id', 'text'],
-    },
-  },
-  {
-    name: 'forward_message',
-    description: '[Official API] Forward a message to another chat.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        message_id: { type: 'string', description: 'Message ID to forward' },
-        receive_id: { type: 'string', description: 'Target chat_id or open_id' },
-      },
-      required: ['message_id', 'receive_id'],
-    },
-  },
+  // reply_message / forward_message → src/tools/messaging-bot.js
 
-  // ========== Docs — Official API ==========
-  {
-    name: 'search_docs',
-    description: '[Official API] Search Feishu documents by keyword.',
-    inputSchema: {
-      type: 'object',
-      properties: { query: { type: 'string', description: 'Search keyword' } },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'read_doc',
-    description: '[Official API] Read the raw text content of a Feishu document.',
-    inputSchema: {
-      type: 'object',
-      properties: { document_id: { type: 'string', description: 'Document ID or token' } },
-      required: ['document_id'],
-    },
-  },
-  {
-    name: 'get_doc_blocks',
-    description: '[Official API] Get structured block tree of a document. Returns block types, content, and hierarchy for precise document analysis.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        document_id: { type: 'string', description: 'Document ID (from search_docs or create_doc)' },
-      },
-      required: ['document_id'],
-    },
-  },
-  {
-    name: 'create_doc',
-    description: '[Official API] Create a new Feishu document. Can place directly under a Wiki space by passing wiki_space_id (optionally wiki_parent_node_token for nested placement) — the plugin creates the doc in drive then attaches it as a Wiki node.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        title: { type: 'string', description: 'Document title' },
-        folder_id: { type: 'string', description: 'Parent folder token (optional; ignored when wiki_space_id is set)' },
-        wiki_space_id: { type: 'string', description: 'Wiki space ID to place the doc under (optional)' },
-        wiki_parent_node_token: { type: 'string', description: 'Parent wiki node token within the space (optional; defaults to space root)' },
-      },
-      required: ['title'],
-    },
-  },
+  // ========== Docs — extracted to src/tools/docs.js ==========
 
   // ========== Bitable — extracted to src/tools/bitable.js ==========
 
@@ -500,20 +436,8 @@ const TOOLS = [
 
   // ========== Drive / Upload / Contact — extracted to src/tools/{drive,uploads,contacts}.js ==========
 
-  // ========== IM — Bot Send / Edit / Delete ==========
-  {
-    name: 'send_message_as_bot',
-    description: '[Official API] Send a message as the bot to any chat. Supports text, post, interactive, etc. This is the reliable path for @-mentions: include `<at user_id="ou_xxx">Name</at>` inline in text content and Feishu resolves it to a real @-notification.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        chat_id: { type: 'string', description: 'Target chat_id (oc_xxx) or open_id' },
-        msg_type: { type: 'string', description: 'Message type: text, post, image, interactive, etc.', enum: ['text', 'post', 'image', 'interactive', 'share_chat', 'share_user', 'audio', 'media', 'file', 'sticker'] },
-        content: { description: 'Message content (string or object, auto-serialized). Plain text: {"text":"hello"}. Text with @-mention: {"text":"<at user_id=\\"ou_xxx\\">Alice</at> hi"} — the inline tag becomes a real @-notification.' },
-      },
-      required: ['chat_id', 'msg_type', 'content'],
-    },
-  },
+  // ========== IM — Bot Send / Edit / Delete + Reactions + Pins — extracted to src/tools/messaging-bot.js ==========
+  // (send_card_as_user stays inline — it'll move with messaging-user in v1.3.7)
   {
     name: 'send_card_as_user',
     description: '[v1.3.6: bot-routed default] Send an interactive card to a chat. **As of v1.3.6, identity defaults to BOT** because user-identity card sending requires reverse-engineering the Feishu web protobuf and is deferred to v1.3.7. The tool name keeps the "as_user" suffix so callers don\'t have to migrate when v1.3.7 lands; once user-identity is implemented the default flips. Pass `card` as a JSON object (Feishu card schema). To force bot explicitly set via="bot".',
@@ -527,119 +451,11 @@ const TOOLS = [
       required: ['chat_id', 'card'],
     },
   },
-  {
-    name: 'delete_message',
-    description: '[Official API] Recall/delete a message (bot can only delete its own messages).',
-    inputSchema: {
-      type: 'object',
-      properties: { message_id: { type: 'string', description: 'Message ID (om_xxx)' } },
-      required: ['message_id'],
-    },
-  },
-  {
-    name: 'update_message',
-    description: '[Official API] Edit a sent message (bot can only edit its own messages). Supports text and post.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        message_id: { type: 'string', description: 'Message ID (om_xxx)' },
-        msg_type: { type: 'string', description: 'Message type: text or post' },
-        content: { description: 'New content. For text: {"text":"updated text"}' },
-      },
-      required: ['message_id', 'msg_type', 'content'],
-    },
-  },
-
-  // ========== IM — Reactions ==========
-  {
-    name: 'add_reaction',
-    description: '[Official API] Add an emoji reaction to a message.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        message_id: { type: 'string', description: 'Message ID (om_xxx)' },
-        emoji_type: { type: 'string', description: 'Emoji type string, e.g. "THUMBSUP", "SMILE", "HEART"' },
-      },
-      required: ['message_id', 'emoji_type'],
-    },
-  },
-  {
-    name: 'delete_reaction',
-    description: '[Official API] Remove an emoji reaction from a message.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        message_id: { type: 'string', description: 'Message ID' },
-        reaction_id: { type: 'string', description: 'Reaction ID (from add_reaction response)' },
-      },
-      required: ['message_id', 'reaction_id'],
-    },
-  },
-
-  // ========== IM — Pin Messages ==========
-  {
-    name: 'pin_message',
-    description: '[Official API] Pin or unpin a message in a chat.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        message_id: { type: 'string', description: 'Message ID' },
-        pinned: { type: 'boolean', description: 'true to pin, false to unpin', default: true },
-      },
-      required: ['message_id'],
-    },
-  },
+  // delete_message / update_message / add_reaction / delete_reaction / pin_message → src/tools/messaging-bot.js
 
   // ========== IM — Chat Management — extracted to src/tools/groups.js ==========
 
-  // ========== Docs — Block Editing ==========
-  {
-    name: 'create_doc_block',
-    description: '[Official API] Insert content blocks into a document. Five modes:\n  (A) Generic — pass `children` array (e.g. [{block_type:2, text:{...}}]) for text/heading/list/etc.\n  (B) Image from local file — pass `image_path` (absolute path); the plugin creates an image block, uploads the file to drive, and patches the block with the token. Returns block_id + image_token.\n  (C) Image from uploaded token — pass `image_token` to reuse an already-uploaded image.\n  (D) File attachment from local file — pass `file_path`; the plugin creates a file block (block_type=23), uploads via parent_type=docx_file, and patches with replace_file.\n  (E) File from uploaded token — pass `file_token` to reuse an already-uploaded file.\n`document_id` accepts native document_id, wiki node token, or Feishu URL.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        document_id: { type: 'string', description: 'Document ID, wiki node token, or Feishu URL' },
-        parent_block_id: { type: 'string', description: 'Parent block ID (use document_id for root)' },
-        children: { type: 'array', description: 'Generic block objects — mode A. E.g. [{block_type:2, text:{elements:[{text_run:{content:"Hello"}}]}}]', items: { type: 'object' } },
-        image_path: { type: 'string', description: 'Local image path — mode B (mutually exclusive with other modes)' },
-        image_token: { type: 'string', description: 'Pre-uploaded docx image token — mode C (mutually exclusive with other modes)' },
-        file_path: { type: 'string', description: 'Local file path for an attachment block — mode D (mutually exclusive with other modes)' },
-        file_token: { type: 'string', description: 'Pre-uploaded docx file token — mode E (mutually exclusive with other modes)' },
-        index: { type: 'number', description: 'Insert position (optional, appends to end if omitted)' },
-      },
-      required: ['document_id', 'parent_block_id'],
-    },
-  },
-  {
-    name: 'update_doc_block',
-    description: '[Official API] Update a specific block in a document. Generic mode: pass update_body. Image-replace mode: pass image_token to swap the picture in an existing image block. File-replace mode: pass file_token to swap an existing file block. document_id accepts native ID, wiki node token, or Feishu URL.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        document_id: { type: 'string', description: 'Document ID, wiki node token, or Feishu URL' },
-        block_id: { type: 'string', description: 'Block ID to update' },
-        update_body: { type: 'object', description: 'Generic update payload. E.g. {update_text_elements:{elements:[{text_run:{content:"new text"}}]}}' },
-        image_token: { type: 'string', description: 'Pre-uploaded image token — if provided, update_body is ignored and the block is patched with {replace_image:{token}}' },
-        file_token: { type: 'string', description: 'Pre-uploaded file token — patches the block with {replace_file:{token}}' },
-      },
-      required: ['document_id', 'block_id'],
-    },
-  },
-  {
-    name: 'delete_doc_blocks',
-    description: '[Official API] Delete a range of blocks from a document.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        document_id: { type: 'string', description: 'Document ID' },
-        parent_block_id: { type: 'string', description: 'Parent block ID containing the blocks to delete' },
-        start_index: { type: 'number', description: 'Start index (inclusive)' },
-        end_index: { type: 'number', description: 'End index (exclusive)' },
-      },
-      required: ['document_id', 'parent_block_id', 'start_index', 'end_index'],
-    },
-  },
+  // create_doc_block / update_doc_block / delete_doc_blocks → src/tools/docs.js
 
   // ========== Bitable — Additional schemas → src/tools/bitable.js ==========
 
@@ -909,32 +725,9 @@ async function handleTool(name, args) {
 
       return text(`Cannot resolve "${args.chat_id}" to a chat ID.\nSearched: bot's group list, im.chat.search API, and user contacts (search_contacts).\nTry: provide the oc_xxx or numeric chat ID directly.`);
     }
-    case 'reply_message':
-      return text(`Reply sent: ${(await getOfficialClient().replyMessage(args.message_id, args.text)).messageId}`);
-    case 'forward_message':
-      return text(`Forwarded: ${(await getOfficialClient().forwardMessage(args.message_id, args.receive_id)).messageId}`);
+    // reply_message / forward_message → src/tools/messaging-bot.js (dispatched via default branch)
 
-    // --- Official API: Docs ---
-
-    case 'search_docs':
-      return json(await getOfficialClient().searchDocs(args.query));
-    case 'read_doc':
-      return json(await getOfficialClient().readDoc(await resolveDocId(args.document_id)));
-    case 'get_doc_blocks':
-      return json(await getOfficialClient().getDocBlocks(await resolveDocId(args.document_id)));
-    case 'create_doc': {
-      const r = await getOfficialClient().createDoc(args.title, args.folder_id, {
-        wikiSpaceId: args.wiki_space_id,
-        wikiParentNodeToken: args.wiki_parent_node_token,
-      });
-      const ownership = r.viaUser ? ' (as user)' : ' (as app — UAT unavailable or failed; document owned by the app, not you)';
-      const wikiNote = r.wikiNodeToken ? ` [wiki node: ${r.wikiNodeToken}]`
-        : r.wikiAttachTaskId ? ` [wiki attach queued — task_id: ${r.wikiAttachTaskId}]`
-        : r.wikiAttachError ? ` [WARNING: wiki attach failed — ${r.wikiAttachError}. Doc exists in drive root/folder.]`
-        : '';
-      const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
-      return text(`Document created${ownership}: ${r.documentId}${wikiNote}${warn}`);
-    }
+    // search_docs / read_doc / get_doc_blocks / create_doc → src/tools/docs.js (dispatched via default branch)
 
     // Bitable handlers → src/tools/bitable.js
 
@@ -945,6 +738,7 @@ async function handleTool(name, args) {
     // Drive / Contact / Upload handlers → src/tools/{drive,contacts,uploads}.js
 
     // --- Official API: Bot Send / Edit / Delete ---
+    // send_card_as_user stays inline — moves with messaging-user in v1.3.7.
 
     case 'send_card_as_user': {
       const via = args.via || 'bot';
@@ -954,73 +748,12 @@ async function handleTool(name, args) {
       const r = await getOfficialClient().sendMessageAsBot(args.chat_id, 'interactive', args.card);
       return text(`Card sent (${via}): ${r.messageId}`);
     }
-    case 'send_message_as_bot': {
-      const r = await getOfficialClient().sendMessageAsBot(args.chat_id, args.msg_type, args.content);
-      return text(`Message sent (bot): ${r.messageId}`);
-    }
-    case 'delete_message':
-      return text(`Message deleted: ${(await getOfficialClient().deleteMessage(args.message_id)).deleted}`);
-    case 'update_message':
-      return text(`Message updated: ${(await getOfficialClient().updateMessage(args.message_id, args.msg_type, args.content)).messageId}`);
-
-    // --- Official API: Reactions ---
-
-    case 'add_reaction':
-      return text(`Reaction added: ${(await getOfficialClient().addReaction(args.message_id, args.emoji_type)).reactionId}`);
-    case 'delete_reaction':
-      return text(`Reaction removed: ${(await getOfficialClient().deleteReaction(args.message_id, args.reaction_id)).deleted}`);
-
-    // --- Official API: Pins ---
-
-    case 'pin_message':
-      return json(await getOfficialClient().pinMessage(args.message_id, args.pinned !== false));
-
-    // --- Official API: Chat Management ---
+    // send_message_as_bot / delete_message / update_message / add_reaction / delete_reaction / pin_message
+    //   → src/tools/messaging-bot.js (dispatched via default branch)
 
     // create_group / update_group / list_members / manage_members → src/tools/groups.js
 
-    // --- Official API: Doc Block Editing ---
-
-    case 'create_doc_block': {
-      const official = getOfficialClient();
-      const docId = await resolveDocId(args.document_id);
-      const modes = [args.children, args.image_path, args.image_token, args.file_path, args.file_token].filter(Boolean);
-      if (modes.length > 1) return text('create_doc_block: pass exactly ONE of children / image_path / image_token / file_path / file_token.');
-      if (args.image_path || args.image_token) {
-        const r = await official.createDocBlockWithImage(docId, args.parent_block_id, {
-          imagePath: args.image_path,
-          imageToken: args.image_token,
-          index: args.index,
-        });
-        return json(r);
-      }
-      if (args.file_path || args.file_token) {
-        const r = await official.createDocBlockWithFile(docId, args.parent_block_id, {
-          filePath: args.file_path,
-          fileToken: args.file_token,
-          index: args.index,
-        });
-        return json(r);
-      }
-      if (!args.children) return text('create_doc_block: children, image_path, image_token, file_path, or file_token is required.');
-      return json(await official.createDocBlock(docId, args.parent_block_id, args.children, args.index));
-    }
-    case 'update_doc_block': {
-      const official = getOfficialClient();
-      const docId = await resolveDocId(args.document_id);
-      const modes = [args.update_body, args.image_token, args.file_token].filter(Boolean);
-      if (modes.length > 1) return text('update_doc_block: pass exactly ONE of update_body / image_token / file_token.');
-      if (args.image_token) {
-        return json(await official.updateDocBlockImage(docId, args.block_id, args.image_token));
-      }
-      if (args.file_token) {
-        return json(await official.updateDocBlockFile(docId, args.block_id, args.file_token));
-      }
-      if (!args.update_body) return text('update_doc_block: update_body, image_token, or file_token is required.');
-      return json(await official.updateDocBlock(docId, args.block_id, args.update_body));
-    }
-    case 'delete_doc_blocks':
-      return text(`Blocks deleted: ${(await getOfficialClient().deleteDocBlocks(await resolveDocId(args.document_id), args.parent_block_id, args.start_index, args.end_index)).deleted}`);
+    // create_doc_block / update_doc_block / delete_doc_blocks → src/tools/docs.js (dispatched via default branch)
 
     // Bitable additional handlers → src/tools/bitable.js
 
