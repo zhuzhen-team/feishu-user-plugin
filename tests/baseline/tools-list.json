@@ -21,64 +21,6 @@
     }
   },
   {
-    "name": "batch_create_bitable_records",
-    "description": "[Official API] Create one or more records (rows) in a Bitable table. Pass a single record or up to 500.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        },
-        "records": {
-          "description": "Array of {fields: {field_name: value}} objects",
-          "items": {
-            "type": "object"
-          },
-          "type": "array"
-        },
-        "table_id": {
-          "description": "Table ID",
-          "type": "string"
-        }
-      },
-      "required": [
-        "app_token",
-        "records",
-        "table_id"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "batch_delete_bitable_records",
-    "description": "[Official API] Delete one or more records from a Bitable table. Pass a single ID or up to 500.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        },
-        "record_ids": {
-          "description": "Array of record IDs to delete",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "table_id": {
-          "description": "Table ID",
-          "type": "string"
-        }
-      },
-      "required": [
-        "app_token",
-        "record_ids",
-        "table_id"
-      ],
-      "type": "object"
-    }
-  },
-  {
     "name": "batch_send",
     "description": "[User Identity / Official API] Send the same or different content to multiple targets in one call. Each target dispatches sequentially with a small delay (anti-rate-limit) and reports per-target success/error. Identity is the cookie user (user-identity sends) unless target.via=bot. Use for broadcast / fan-out scenarios.",
     "inputSchema": {
@@ -97,89 +39,6 @@
       },
       "required": [
         "targets"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "batch_update_bitable_records",
-    "description": "[Official API] Update one or more records in a Bitable table. Pass a single record or up to 500.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        },
-        "records": {
-          "description": "Array of {record_id, fields: {field_name: value}} objects",
-          "items": {
-            "type": "object"
-          },
-          "type": "array"
-        },
-        "table_id": {
-          "description": "Table ID",
-          "type": "string"
-        }
-      },
-      "required": [
-        "app_token",
-        "records",
-        "table_id"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "copy_bitable",
-    "description": "[Official API] Copy a Bitable app to create a new one.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token to copy",
-          "type": "string"
-        },
-        "folder_id": {
-          "description": "Destination folder token (optional)",
-          "type": "string"
-        },
-        "name": {
-          "description": "New Bitable name",
-          "type": "string"
-        }
-      },
-      "required": [
-        "app_token",
-        "name"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "copy_file",
-    "description": "[Official API] Copy a file/doc in Drive.",
-    "inputSchema": {
-      "properties": {
-        "file_token": {
-          "description": "File token to copy",
-          "type": "string"
-        },
-        "folder_token": {
-          "description": "Destination folder token (optional)",
-          "type": "string"
-        },
-        "name": {
-          "description": "New file name",
-          "type": "string"
-        },
-        "type": {
-          "description": "File type: file, doc, sheet, bitable, docx, mindnote, slides (optional)",
-          "type": "string"
-        }
-      },
-      "required": [
-        "file_token",
-        "name"
       ],
       "type": "object"
     }
@@ -218,125 +77,6 @@
     }
   },
   {
-    "name": "create_bitable",
-    "description": "[Official API] Create a new Bitable (multi-dimensional table) app. Can place directly under a Wiki space via wiki_space_id (and optional wiki_parent_node_token).",
-    "inputSchema": {
-      "properties": {
-        "folder_id": {
-          "description": "Parent folder token (optional, defaults to root; ignored when wiki_space_id is set)",
-          "type": "string"
-        },
-        "name": {
-          "description": "Bitable app name",
-          "type": "string"
-        },
-        "wiki_parent_node_token": {
-          "description": "Parent wiki node token within the space (optional)",
-          "type": "string"
-        },
-        "wiki_space_id": {
-          "description": "Wiki space ID to place the bitable under (optional)",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    }
-  },
-  {
-    "name": "create_bitable_field",
-    "description": "[Official API] Create a new field (column) in a Bitable table.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        },
-        "field_name": {
-          "description": "Field display name",
-          "type": "string"
-        },
-        "property": {
-          "description": "Field-type-specific properties (optional). E.g. for SingleSelect: {options: [{name:\"A\"},{name:\"B\"}]}",
-          "type": "object"
-        },
-        "table_id": {
-          "description": "Table ID",
-          "type": "string"
-        },
-        "type": {
-          "description": "Field type: 1=Text, 2=Number, 3=SingleSelect, 4=MultiSelect, 5=DateTime, 7=Checkbox, 11=User, 13=Phone, 15=URL, 17=Attachment, 18=Link, 20=Formula, 21=DuplexLink, 22=Location, 23=GroupChat, 1001=CreateTime, 1002=ModifiedTime, 1003=Creator, 1004=Modifier",
-          "type": "number"
-        }
-      },
-      "required": [
-        "app_token",
-        "field_name",
-        "table_id",
-        "type"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "create_bitable_table",
-    "description": "[Official API] Create a new data table in a Bitable app. Optionally define initial fields.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        },
-        "fields": {
-          "description": "Initial field definitions (optional). Each item: {field_name, type} where type is 1=Text, 2=Number, 3=SingleSelect, 4=MultiSelect, 5=DateTime, 7=Checkbox, 11=User, 13=Phone, 15=URL, 17=Attachment, 18=Link, 20=Formula, 21=DuplexLink, 22=Location, 23=GroupChat, 1001=CreateTime, 1002=ModifiedTime, 1003=Creator, 1004=Modifier",
-          "items": {
-            "type": "object"
-          },
-          "type": "array"
-        },
-        "name": {
-          "description": "Table name",
-          "type": "string"
-        }
-      },
-      "required": [
-        "app_token",
-        "name"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "create_bitable_view",
-    "description": "[Official API] Create a new view in a Bitable table.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        },
-        "table_id": {
-          "description": "Table ID",
-          "type": "string"
-        },
-        "view_name": {
-          "description": "View name",
-          "type": "string"
-        },
-        "view_type": {
-          "default": "grid",
-          "description": "View type: grid (default), kanban, gallery, form, gantt, calendar",
-          "type": "string"
-        }
-      },
-      "required": [
-        "app_token",
-        "table_id",
-        "view_name"
-      ],
-      "type": "object"
-    }
-  },
-  {
     "name": "create_doc",
     "description": "[Official API] Create a new Feishu document. Can place directly under a Wiki space by passing wiki_space_id (optionally wiki_parent_node_token for nested placement) — the plugin creates the doc in drive then attaches it as a Wiki node.",
     "inputSchema": {
@@ -360,54 +100,6 @@
       },
       "required": [
         "title"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "create_doc_block",
-    "description": "[Official API] Insert content blocks into a document. Five modes:\n  (A) Generic — pass `children` array (e.g. [{block_type:2, text:{...}}]) for text/heading/list/etc.\n  (B) Image from local file — pass `image_path` (absolute path); the plugin creates an image block, uploads the file to drive, and patches the block with the token. Returns block_id + image_token.\n  (C) Image from uploaded token — pass `image_token` to reuse an already-uploaded image.\n  (D) File attachment from local file — pass `file_path`; the plugin creates a file block (block_type=23), uploads via parent_type=docx_file, and patches with replace_file.\n  (E) File from uploaded token — pass `file_token` to reuse an already-uploaded file.\n`document_id` accepts native document_id, wiki node token, or Feishu URL.",
-    "inputSchema": {
-      "properties": {
-        "children": {
-          "description": "Generic block objects — mode A. E.g. [{block_type:2, text:{elements:[{text_run:{content:\"Hello\"}}]}}]",
-          "items": {
-            "type": "object"
-          },
-          "type": "array"
-        },
-        "document_id": {
-          "description": "Document ID, wiki node token, or Feishu URL",
-          "type": "string"
-        },
-        "file_path": {
-          "description": "Local file path for an attachment block — mode D (mutually exclusive with other modes)",
-          "type": "string"
-        },
-        "file_token": {
-          "description": "Pre-uploaded docx file token — mode E (mutually exclusive with other modes)",
-          "type": "string"
-        },
-        "image_path": {
-          "description": "Local image path — mode B (mutually exclusive with other modes)",
-          "type": "string"
-        },
-        "image_token": {
-          "description": "Pre-uploaded docx image token — mode C (mutually exclusive with other modes)",
-          "type": "string"
-        },
-        "index": {
-          "description": "Insert position (optional, appends to end if omitted)",
-          "type": "number"
-        },
-        "parent_block_id": {
-          "description": "Parent block ID (use document_id for root)",
-          "type": "string"
-        }
-      },
-      "required": [
-        "document_id",
-        "parent_block_id"
       ],
       "type": "object"
     }
@@ -522,130 +214,6 @@
       "required": [
         "obj_type",
         "space_id"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "delete_bitable_field",
-    "description": "[Official API] Delete a field (column) from a Bitable table.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        },
-        "field_id": {
-          "description": "Field ID to delete",
-          "type": "string"
-        },
-        "table_id": {
-          "description": "Table ID",
-          "type": "string"
-        }
-      },
-      "required": [
-        "app_token",
-        "field_id",
-        "table_id"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "delete_bitable_table",
-    "description": "[Official API] Delete a data table from a Bitable app.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        },
-        "table_id": {
-          "description": "Table ID to delete",
-          "type": "string"
-        }
-      },
-      "required": [
-        "app_token",
-        "table_id"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "delete_bitable_view",
-    "description": "[Official API] Delete a view from a Bitable table.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        },
-        "table_id": {
-          "description": "Table ID",
-          "type": "string"
-        },
-        "view_id": {
-          "description": "View ID to delete",
-          "type": "string"
-        }
-      },
-      "required": [
-        "app_token",
-        "table_id",
-        "view_id"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "delete_doc_blocks",
-    "description": "[Official API] Delete a range of blocks from a document.",
-    "inputSchema": {
-      "properties": {
-        "document_id": {
-          "description": "Document ID",
-          "type": "string"
-        },
-        "end_index": {
-          "description": "End index (exclusive)",
-          "type": "number"
-        },
-        "parent_block_id": {
-          "description": "Parent block ID containing the blocks to delete",
-          "type": "string"
-        },
-        "start_index": {
-          "description": "Start index (inclusive)",
-          "type": "number"
-        }
-      },
-      "required": [
-        "document_id",
-        "end_index",
-        "parent_block_id",
-        "start_index"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "delete_file",
-    "description": "[Official API] Delete a file/folder from Drive.",
-    "inputSchema": {
-      "properties": {
-        "file_token": {
-          "description": "File token to delete",
-          "type": "string"
-        },
-        "type": {
-          "description": "Type: file, folder, doc, sheet, bitable, docx, mindnote, slides",
-          "type": "string"
-        }
-      },
-      "required": [
-        "file_token"
       ],
       "type": "object"
     }
@@ -766,48 +334,6 @@
       "required": [
         "message_id",
         "receive_id"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "get_bitable_meta",
-    "description": "[Official API] Get metadata of a Bitable app (name, revision, etc.).",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        }
-      },
-      "required": [
-        "app_token"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "get_bitable_record",
-    "description": "[Official API] Get a single record by ID from a Bitable table.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        },
-        "record_id": {
-          "description": "Record ID",
-          "type": "string"
-        },
-        "table_id": {
-          "description": "Table ID",
-          "type": "string"
-        }
-      },
-      "required": [
-        "app_token",
-        "record_id",
-        "table_id"
       ],
       "type": "object"
     }
@@ -938,64 +464,6 @@
       },
       "required": [
         "node_token"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "list_bitable_fields",
-    "description": "[Official API] List all fields (columns) in a Bitable table.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        },
-        "table_id": {
-          "description": "Table ID",
-          "type": "string"
-        }
-      },
-      "required": [
-        "app_token",
-        "table_id"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "list_bitable_tables",
-    "description": "[Official API] List all tables in a Bitable app.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        }
-      },
-      "required": [
-        "app_token"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "list_bitable_views",
-    "description": "[Official API] List all views in a Bitable table.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        },
-        "table_id": {
-          "description": "Table ID",
-          "type": "string"
-        }
-      },
-      "required": [
-        "app_token",
-        "table_id"
       ],
       "type": "object"
     }
@@ -1227,6 +695,366 @@
     }
   },
   {
+    "name": "manage_bitable_app",
+    "description": "[Official API] Manage a Bitable app. action=create (new app, optional wiki_space_id to attach), copy (duplicate an existing app), get_meta (read app metadata).",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "Operation to perform",
+          "enum": [
+            "create",
+            "copy",
+            "get_meta"
+          ],
+          "type": "string"
+        },
+        "app_token": {
+          "description": "Required for copy/get_meta. Native token, wiki node, or Feishu URL.",
+          "type": "string"
+        },
+        "folder_id": {
+          "description": "Destination folder token (optional for create/copy; ignored when wiki_space_id is set).",
+          "type": "string"
+        },
+        "name": {
+          "description": "New app name. Required for create/copy.",
+          "type": "string"
+        },
+        "wiki_parent_node_token": {
+          "description": "Parent wiki node within the space (optional for create).",
+          "type": "string"
+        },
+        "wiki_space_id": {
+          "description": "Wiki space ID — create the app directly under this space (create only).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "manage_bitable_field",
+    "description": "[Official API] Manage fields (columns) inside a Bitable table. action=list, create, update (Feishu requires `type` even when only renaming), delete.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "Operation to perform",
+          "enum": [
+            "list",
+            "create",
+            "update",
+            "delete"
+          ],
+          "type": "string"
+        },
+        "app_token": {
+          "description": "Bitable app token. Accepts native token, wiki node, or Feishu URL.",
+          "type": "string"
+        },
+        "field_id": {
+          "description": "Field ID — required for update/delete.",
+          "type": "string"
+        },
+        "field_name": {
+          "description": "Field display name — required for create, optional for update.",
+          "type": "string"
+        },
+        "property": {
+          "description": "Field-type-specific properties (optional). E.g. SingleSelect: {options:[{name:\"A\"},{name:\"B\"}]}.",
+          "type": "object"
+        },
+        "table_id": {
+          "description": "Table ID",
+          "type": "string"
+        },
+        "type": {
+          "description": "Field type (1=Text, 2=Number, 3=SingleSelect, 4=MultiSelect, 5=DateTime, 7=Checkbox, 11=User, 13=Phone, 15=URL, 17=Attachment, 18=Link, 20=Formula, 21=DuplexLink, 22=Location, 23=GroupChat, 1001=CreateTime, 1002=ModifiedTime, 1003=Creator, 1004=Modifier). Required for create AND update — Feishu API rejects update without it.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "action",
+        "app_token",
+        "table_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "manage_bitable_record",
+    "description": "[Official API] Manage records (rows) inside a Bitable table. action=search, get, create, update, delete. create/update/delete accept arrays — single record or up to 500.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "Operation to perform",
+          "enum": [
+            "search",
+            "get",
+            "create",
+            "update",
+            "delete"
+          ],
+          "type": "string"
+        },
+        "app_token": {
+          "description": "Bitable app token. Accepts native token, wiki node, or Feishu URL.",
+          "type": "string"
+        },
+        "filter": {
+          "description": "Filter conditions (search only, optional)",
+          "type": "object"
+        },
+        "page_size": {
+          "description": "Results per page (search only, default 20)",
+          "type": "number"
+        },
+        "record_id": {
+          "description": "Record ID — required for action=get.",
+          "type": "string"
+        },
+        "record_ids": {
+          "description": "Record IDs to delete. Single ID or up to 500.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "records": {
+          "description": "Records to write. For create: [{fields:{field_name:value}}]. For update: [{record_id, fields:{...}}]. Single record or up to 500.",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "sort": {
+          "description": "Sort conditions (search only, optional)",
+          "type": "array"
+        },
+        "table_id": {
+          "description": "Table ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "app_token",
+        "table_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "manage_bitable_table",
+    "description": "[Official API] Manage a table inside a Bitable app. action=list, create (with optional initial fields), update (rename), delete.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "Operation to perform",
+          "enum": [
+            "list",
+            "create",
+            "update",
+            "delete"
+          ],
+          "type": "string"
+        },
+        "app_token": {
+          "description": "Bitable app token (required for all actions). Accepts native token, wiki node, or Feishu URL.",
+          "type": "string"
+        },
+        "fields": {
+          "description": "Initial field definitions (create only, optional). Each item: {field_name, type, property?} where type is 1=Text, 2=Number, 3=SingleSelect, 4=MultiSelect, 5=DateTime, 7=Checkbox, 11=User, 13=Phone, 15=URL, 17=Attachment, 18=Link, 20=Formula, 21=DuplexLink, 22=Location, 23=GroupChat, 1001=CreateTime, 1002=ModifiedTime, 1003=Creator, 1004=Modifier.",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Table name — required for create, optional for update (rename).",
+          "type": "string"
+        },
+        "table_id": {
+          "description": "Table ID — required for update/delete.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "app_token"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "manage_bitable_view",
+    "description": "[Official API] Manage views inside a Bitable table. action=list, create, delete. (Feishu open API does not expose view update — recreate with a new name to change.)",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "Operation to perform",
+          "enum": [
+            "list",
+            "create",
+            "delete"
+          ],
+          "type": "string"
+        },
+        "app_token": {
+          "description": "Bitable app token. Accepts native token, wiki node, or Feishu URL.",
+          "type": "string"
+        },
+        "table_id": {
+          "description": "Table ID",
+          "type": "string"
+        },
+        "view_id": {
+          "description": "View ID — required for delete.",
+          "type": "string"
+        },
+        "view_name": {
+          "description": "View name — required for create.",
+          "type": "string"
+        },
+        "view_type": {
+          "default": "grid",
+          "description": "View type for create: grid (default), kanban, gallery, form, gantt, calendar.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "app_token",
+        "table_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "manage_doc_block",
+    "description": "[Official API] Manage content blocks in a document. Single tool replaces v1.3.6 create_doc_block / update_doc_block / delete_doc_blocks.\n  action=create — five modes:\n    (A) Generic — pass `children` array (e.g. [{block_type:2, text:{...}}]).\n    (B) Image from local file — pass `image_path`; plugin uploads and patches.\n    (C) Image from token — pass `image_token` (already uploaded).\n    (D) File attachment from local file — pass `file_path`; plugin handles VIEW-wrap + replace_file.\n    (E) File from token — pass `file_token`.\n  action=update — generic (pass `update_body`), image-replace (pass `image_token`), or file-replace (pass `file_token`).\n  action=delete — pass `parent_block_id` + `start_index` + `end_index` (range delete).\n`document_id` accepts native ID, wiki node token, or Feishu URL.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "Operation to perform",
+          "enum": [
+            "create",
+            "update",
+            "delete"
+          ],
+          "type": "string"
+        },
+        "block_id": {
+          "description": "Block ID — required for action=update.",
+          "type": "string"
+        },
+        "children": {
+          "description": "Generic blocks for create mode A. E.g. [{block_type:2, text:{elements:[{text_run:{content:\"Hello\"}}]}}]",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "document_id": {
+          "description": "Document ID, wiki node token, or Feishu URL (required for all actions)",
+          "type": "string"
+        },
+        "end_index": {
+          "description": "Range end (exclusive) — required for delete.",
+          "type": "number"
+        },
+        "file_path": {
+          "description": "Local file path — create mode D (mutually exclusive with other create modes).",
+          "type": "string"
+        },
+        "file_token": {
+          "description": "Pre-uploaded docx file token — create mode E, or update file-replace.",
+          "type": "string"
+        },
+        "image_path": {
+          "description": "Local image path — create mode B (mutually exclusive with other create modes).",
+          "type": "string"
+        },
+        "image_token": {
+          "description": "Pre-uploaded docx image token — create mode C, or update image-replace.",
+          "type": "string"
+        },
+        "index": {
+          "description": "Insert position for create (optional, appends to end if omitted).",
+          "type": "number"
+        },
+        "parent_block_id": {
+          "description": "Parent block ID — required for create/delete (use document_id for the doc root).",
+          "type": "string"
+        },
+        "start_index": {
+          "description": "Range start (inclusive) — required for delete.",
+          "type": "number"
+        },
+        "update_body": {
+          "description": "Generic update payload for action=update. E.g. {update_text_elements:{elements:[{text_run:{content:\"new text\"}}]}}.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "action",
+        "document_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "manage_drive_file",
+    "description": "[Official API] Manage a Drive file/doc/folder. action=copy (duplicate to a new name + folder), move (relocate, returns task_id), delete (remove, returns task_id). `type` is always required (Feishu rejects with 1061002 / 1062501 otherwise).",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "Operation to perform",
+          "enum": [
+            "copy",
+            "move",
+            "delete"
+          ],
+          "type": "string"
+        },
+        "file_token": {
+          "description": "File/folder token to operate on (required for all actions).",
+          "type": "string"
+        },
+        "folder_token": {
+          "description": "Destination folder token — required for action=move; optional for action=copy (defaults to root).",
+          "type": "string"
+        },
+        "name": {
+          "description": "New name — required for action=copy.",
+          "type": "string"
+        },
+        "type": {
+          "description": "Resource type — Feishu requires this to know which API table to look up.",
+          "enum": [
+            "file",
+            "folder",
+            "doc",
+            "sheet",
+            "bitable",
+            "docx",
+            "mindnote",
+            "slides"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "file_token",
+        "type"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "manage_members",
     "description": "[Official API] Add or remove members from a group chat. The Feishu API rejects with code 9499 when the IDs in `member_ids` do not match `member_id_type` — pass `member_id_type` explicitly when using union_id or user_id (default: open_id).",
     "inputSchema": {
@@ -1265,42 +1093,6 @@
         "action",
         "chat_id",
         "member_ids"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "move_file",
-    "description": "[Official API] Move a file/doc/folder to another folder in Drive. `type` is required (Feishu rejects with 1061002 otherwise) — pass `file`, `folder`, `doc`, `sheet`, `bitable`, `docx`, `mindnote`, or `slides` to match the resource being moved.",
-    "inputSchema": {
-      "properties": {
-        "file_token": {
-          "description": "File/folder token to move",
-          "type": "string"
-        },
-        "folder_token": {
-          "description": "Destination folder token",
-          "type": "string"
-        },
-        "type": {
-          "description": "Resource type — Feishu requires this to know which API table to look up.",
-          "enum": [
-            "file",
-            "folder",
-            "doc",
-            "sheet",
-            "bitable",
-            "docx",
-            "mindnote",
-            "slides"
-          ],
-          "type": "string"
-        }
-      },
-      "required": [
-        "file_token",
-        "folder_token",
-        "type"
       ],
       "type": "object"
     }
@@ -1468,39 +1260,6 @@
       "required": [
         "message_id",
         "text"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "search_bitable_records",
-    "description": "[Official API] Search/query records in a Bitable table.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        },
-        "filter": {
-          "description": "Filter conditions (optional)",
-          "type": "object"
-        },
-        "page_size": {
-          "description": "Results per page (default 20)",
-          "type": "number"
-        },
-        "sort": {
-          "description": "Sort conditions (optional)",
-          "type": "array"
-        },
-        "table_id": {
-          "description": "Table ID",
-          "type": "string"
-        }
-      },
-      "required": [
-        "app_token",
-        "table_id"
       ],
       "type": "object"
     }
@@ -1845,104 +1604,6 @@
       },
       "required": [
         "name"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "update_bitable_field",
-    "description": "[Official API] Update an existing field (column) in a Bitable table.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        },
-        "field_id": {
-          "description": "Field ID to update",
-          "type": "string"
-        },
-        "field_name": {
-          "description": "New field name (optional)",
-          "type": "string"
-        },
-        "property": {
-          "description": "Field-type-specific properties (optional)",
-          "type": "object"
-        },
-        "table_id": {
-          "description": "Table ID",
-          "type": "string"
-        },
-        "type": {
-          "description": "Field type (REQUIRED by Feishu API, see create_bitable_field for values)",
-          "type": "number"
-        }
-      },
-      "required": [
-        "app_token",
-        "field_id",
-        "table_id",
-        "type"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "update_bitable_table",
-    "description": "[Official API] Rename a data table in a Bitable app.",
-    "inputSchema": {
-      "properties": {
-        "app_token": {
-          "description": "Bitable app token",
-          "type": "string"
-        },
-        "name": {
-          "description": "New table name",
-          "type": "string"
-        },
-        "table_id": {
-          "description": "Table ID",
-          "type": "string"
-        }
-      },
-      "required": [
-        "app_token",
-        "name",
-        "table_id"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "update_doc_block",
-    "description": "[Official API] Update a specific block in a document. Generic mode: pass update_body. Image-replace mode: pass image_token to swap the picture in an existing image block. File-replace mode: pass file_token to swap an existing file block. document_id accepts native ID, wiki node token, or Feishu URL.",
-    "inputSchema": {
-      "properties": {
-        "block_id": {
-          "description": "Block ID to update",
-          "type": "string"
-        },
-        "document_id": {
-          "description": "Document ID, wiki node token, or Feishu URL",
-          "type": "string"
-        },
-        "file_token": {
-          "description": "Pre-uploaded file token — patches the block with {replace_file:{token}}",
-          "type": "string"
-        },
-        "image_token": {
-          "description": "Pre-uploaded image token — if provided, update_body is ignored and the block is patched with {replace_image:{token}}",
-          "type": "string"
-        },
-        "update_body": {
-          "description": "Generic update payload. E.g. {update_text_elements:{elements:[{text_run:{content:\"new text\"}}]}}",
-          "type": "object"
-        }
-      },
-      "required": [
-        "block_id",
-        "document_id"
       ],
       "type": "object"
     }

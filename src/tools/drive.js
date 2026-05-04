@@ -1,4 +1,8 @@
 // src/tools/drive.js — Drive file operations + drive-targeted upload.
+//
+// 4 tools (was 6 in v1.3.6): list_files, create_folder, upload_drive_file,
+// and the consolidated manage_drive_file (action=copy|move|delete) which
+// replaces v1.3.6 copy_file / move_file / delete_file.
 
 const { text, json } = require('./_registry');
 
@@ -38,45 +42,27 @@ const schemas = [
     },
   },
   {
-    name: 'copy_file',
-    description: '[Official API] Copy a file/doc in Drive.',
+    name: 'manage_drive_file',
+    description: '[Official API] Manage a Drive file/doc/folder. action=copy (duplicate to a new name + folder), move (relocate, returns task_id), delete (remove, returns task_id). `type` is always required (Feishu rejects with 1061002 / 1062501 otherwise).',
     inputSchema: {
       type: 'object',
       properties: {
-        file_token: { type: 'string', description: 'File token to copy' },
-        name: { type: 'string', description: 'New file name' },
-        folder_token: { type: 'string', description: 'Destination folder token (optional)' },
-        type: { type: 'string', description: 'File type: file, doc, sheet, bitable, docx, mindnote, slides (optional)' },
-      },
-      required: ['file_token', 'name'],
-    },
-  },
-  {
-    name: 'move_file',
-    description: '[Official API] Move a file/doc/folder to another folder in Drive. `type` is required (Feishu rejects with 1061002 otherwise) — pass `file`, `folder`, `doc`, `sheet`, `bitable`, `docx`, `mindnote`, or `slides` to match the resource being moved.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        file_token: { type: 'string', description: 'File/folder token to move' },
-        folder_token: { type: 'string', description: 'Destination folder token' },
+        action: { type: 'string', enum: ['copy', 'move', 'delete'], description: 'Operation to perform' },
+        file_token: { type: 'string', description: 'File/folder token to operate on (required for all actions).' },
         type: { type: 'string', enum: ['file', 'folder', 'doc', 'sheet', 'bitable', 'docx', 'mindnote', 'slides'], description: 'Resource type — Feishu requires this to know which API table to look up.' },
+        name: { type: 'string', description: 'New name — required for action=copy.' },
+        folder_token: { type: 'string', description: 'Destination folder token — required for action=move; optional for action=copy (defaults to root).' },
       },
-      required: ['file_token', 'folder_token', 'type'],
-    },
-  },
-  {
-    name: 'delete_file',
-    description: '[Official API] Delete a file/folder from Drive.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        file_token: { type: 'string', description: 'File token to delete' },
-        type: { type: 'string', description: 'Type: file, folder, doc, sheet, bitable, docx, mindnote, slides' },
-      },
-      required: ['file_token'],
+      required: ['action', 'file_token', 'type'],
     },
   },
 ];
+
+function need(arg, name, action) {
+  if (arg === undefined || arg === null || arg === '') {
+    throw new Error(`manage_drive_file: ${name} required for action=${action}`);
+  }
+}
 
 const handlers = {
   async list_files(args, ctx) {
@@ -103,14 +89,21 @@ const handlers = {
     }
     return json(out);
   },
-  async copy_file(args, ctx) {
-    return json(await ctx.getOfficialClient().copyFile(args.file_token, args.name, args.folder_token, args.type));
-  },
-  async move_file(args, ctx) {
-    return text(`File moved: task=${(await ctx.getOfficialClient().moveFile(args.file_token, args.folder_token, args.type)).taskId}`);
-  },
-  async delete_file(args, ctx) {
-    return text(`File deleted: task=${(await ctx.getOfficialClient().deleteFile(args.file_token, args.type)).taskId}`);
+  async manage_drive_file(args, ctx) {
+    const c = ctx.getOfficialClient();
+    switch (args.action) {
+      case 'copy': {
+        need(args.name, 'name', 'copy');
+        return json(await c.copyFile(args.file_token, args.name, args.folder_token, args.type));
+      }
+      case 'move': {
+        need(args.folder_token, 'folder_token', 'move');
+        return text(`File moved: task=${(await c.moveFile(args.file_token, args.folder_token, args.type)).taskId}`);
+      }
+      case 'delete': {
+        return text(`File deleted: task=${(await c.deleteFile(args.file_token, args.type)).taskId}`);
+      }
+    }
   },
 };
 

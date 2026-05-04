@@ -24,7 +24,7 @@ The 9 Claude Code skills are also exposed as MCP prompts (`prompts/list` + `prom
 
 Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUMENTS` convention used by Claude Code skills). `status` has no arguments.
 
-## Tool Categories (82 tools)
+## Tool Categories (64 tools)
 
 ### User Identity — Messaging (reverse-engineered, cookie-based)
 - `send_to_user` — Search user + send text (one step, most common). Returns candidates if multiple matches.
@@ -46,7 +46,7 @@ Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUM
 ### User OAuth UAT Tools (P2P chat reading + user-identity creation)
 - `read_p2p_messages` — Read P2P (direct message) chat history. chat_id accepts both numeric IDs (from create_p2p_chat) and oc_xxx format. Returns newest messages first by default.
 - `list_user_chats` — List group chats the user is in. Note: API only returns groups, not P2P. For P2P, use: `search_contacts` → `create_p2p_chat` → `read_p2p_messages`.
-- **All docx + bitable + drive create/read/write tools are UAT-first**: when UAT is configured, every operation (create/edit/delete doc blocks, bitable tables/fields/views/records, drive folders) tries the user's token first and falls back to app token on failure. This keeps resources consistently owned by the user and avoids 403 errors when the app can't access user-created resources. Read-only tools (e.g. `read_doc`, `get_doc_blocks`, `list_bitable_tables`) are also UAT-first so user-owned resources remain readable.
+- **All docx + bitable + drive create/read/write tools are UAT-first**: when UAT is configured, every operation (create/edit/delete doc blocks, bitable tables/fields/views/records, drive folders) tries the user's token first and falls back to app token on failure. This keeps resources consistently owned by the user and avoids 403 errors when the app can't access user-created resources. Read-only tools (e.g. `read_doc`, `get_doc_blocks`, `manage_bitable_table(action=list)`) are also UAT-first so user-owned resources remain readable.
 
 ### Official API Tools (app credentials)
 - `list_chats` / `read_messages` — Chat history (read_messages accepts chat name, oc_ ID, or numeric ID; auto-resolves via bot's group list → im.chat.search → search_contacts). **Auto-falls back to UAT for external groups the bot cannot access.** Returns newest messages first by default. Messages include sender names. **v1.3.5**: `merge_forward` messages now auto-expand into their child messages (2 images + 4 texts, with original sender / time / origin chat preserved); text messages get `urls[]` + `feishuDocs[]` extracted so agents can feed them straight into `read_doc` / WebFetch. Disable expansion with `expand_merge_forward=false`.
@@ -58,20 +58,19 @@ Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUM
 - `create_group` / `update_group` — Create and manage group chats
 - `list_members` / `manage_members` — Group membership (manage_members: action=add/remove, member_id_type=open_id|union_id|user_id — default open_id; pass union_id/user_id explicitly when your member_ids use those formats, otherwise Feishu rejects with code 9499)
 - `search_docs` / `read_doc` / `get_doc_blocks` / `create_doc` — Document operations
-- `create_doc_block` / `update_doc_block` / `delete_doc_blocks` — Document content editing (insert/update/delete blocks)
-- `create_bitable` / `get_bitable_meta` / `copy_bitable` — Bitable app management (create, get info, copy)
-- `list_bitable_tables` / `create_bitable_table` / `update_bitable_table` / `delete_bitable_table` — Table management (CRUD + rename)
-- `list_bitable_fields` / `create_bitable_field` / `update_bitable_field` / `delete_bitable_field` — Field (column) management
-- `list_bitable_views` / `create_bitable_view` / `delete_bitable_view` — View management (grid, kanban, gallery, form, gantt, calendar)
-- `search_bitable_records` / `get_bitable_record` — Query records
-- `batch_create_bitable_records` / `batch_update_bitable_records` / `batch_delete_bitable_records` — Record CRUD (single or batch, max 500/call)
+- `manage_doc_block(action=create|update|delete)` — Document content editing (v1.3.7 consolidates v1.3.6 create_doc_block / update_doc_block / delete_doc_blocks). Image + file shortcuts (`image_path`/`image_token`/`file_path`/`file_token`) flow through unchanged.
+- `manage_bitable_app(action=create|copy|get_meta)` — Bitable app management. v1.3.7 consolidates create_bitable / copy_bitable / get_bitable_meta.
+- `manage_bitable_table(action=list|create|update|delete)` — Table CRUD + rename.
+- `manage_bitable_field(action=list|create|update|delete)` — Field (column) management. Feishu requires `type` for both create AND update (rename).
+- `manage_bitable_view(action=list|create|delete)` — Views (grid / kanban / gallery / form / gantt / calendar).
+- `manage_bitable_record(action=search|get|create|update|delete)` — Record CRUD. create/update/delete accept arrays (single or up to 500 per call).
 - `list_wiki_spaces` / `search_wiki` / `list_wiki_nodes` / `get_wiki_node` — Wiki read (v1.3.4 adds `get_wiki_node` which resolves a wiki node token to its underlying `obj_type` + `obj_token`, so you can feed the node straight into `read_doc`, bitable tools, etc. v1.3.7 hardens this: `get_wiki_node` now also accepts underlying `obj_token`s from `search_wiki` (synthesizes a node-shape so callers don't have to know which ID space they hold), and `list_wiki_spaces` is UAT-first with a `scopeHint` field surfaced when the bot returns an empty list — typically because `wiki:wiki:readonly` is missing or the bot was never invited.)
 - `create_wiki_node` / `update_wiki_node` / `move_wiki_node` / `copy_wiki_node` — Wiki write (v1.3.7). UAT-first so resources are owned by the user. `create_wiki_node` builds a fresh `doc/sheet/bitable/mindnote/file/docx/slides` inside a wiki space (or a `node_type=shortcut` pointer to an existing node). `update_wiki_node` renames (only `title` is updatable via wiki API; content edits go through docx/bitable/sheet tools). `move_wiki_node` and `copy_wiki_node` accept `target_parent_token` + optional `target_space_id` to re-parent within the same space or migrate to another. Note: there is no `delete_wiki_node` — Feishu's open API has no documented wiki node delete endpoint; deletion is done by removing the underlying resource via the docx/sheet/bitable delete path or moving the node out of the wiki space.
 - `list_files` / `create_folder` — Drive
-- `copy_file` / `move_file` / `delete_file` — Drive file operations (copy, move, delete). All three are UAT-first (so user-owned files can be operated on without bot edit permission); `move_file` and `delete_file` require `type` (file/folder/docx/sheet/bitable/mindnote/slides) — Feishu rejects with 1061002 / 1062501 otherwise.
+- `manage_drive_file(action=copy|move|delete)` — Drive file operations (v1.3.7 consolidates v1.3.6 copy_file / move_file / delete_file). UAT-first. `type` is always required (`file/folder/docx/sheet/bitable/mindnote/slides`) — Feishu rejects with 1061002 / 1062501 otherwise.
 - `upload_image` / `upload_file` — Upload image/file, returns key for send_image/send_file
 - `upload_drive_file` — Upload a local file into a Drive folder (`drive/v1/files/upload_all`, `parent_type=explorer`). Returns `file_token` + `url`. If `wiki_space_id` is provided, the upload is followed by `attachToWiki(obj_type=file)` so the file lands as a Wiki node atomically. UAT-first with bot fallback.
-- `upload_bitable_attachment` — Upload a local file as a Bitable attachment (`drive/v1/medias/upload_all` with `parent_type=bitable_image` or `bitable_file`). Returns `file_token` to write into an Attachment-type field via `batch_create/update_bitable_records` as `[{file_token: "..."}]`.
+- `upload_bitable_attachment` — Upload a local file as a Bitable attachment (`drive/v1/medias/upload_all` with `parent_type=bitable_image` or `bitable_file`). Returns `file_token` to write into an Attachment-type field via `manage_bitable_record(action=create|update, records=[{fields:{<attachment_field>:[{file_token:"..."}]}}])`.
 - `send_card_as_user` — Send a Feishu interactive card. **v1.3.6 default routes through bot identity** (the `as_user` suffix is reserved for the v1.3.7 reverse-engineered cookie path; default flips when that lands). Pass `card` JSON; `via="user"` returns an explicit deferred error in v1.3.6.
 - `download_image` — Download an image and return it as MCP image content so the model **sees the pixels**. Two modes: (1) **message image** — pass `message_id` + `image_key` from read_messages. (2) **docx image** — pass `image_token` (from `get_doc_blocks` image block) and optionally `doc_token` (native id / wiki node / Feishu URL). Tries UAT first, falls back to app token. **merge_forward children**: use the child's `parentMessageId` (NOT the child id) — Feishu returns `File not in msg` with the child id.
 - `download_file` — Download a file (msg_type=file) attachment. Returns base64 + mimeType + byte count; optional `save_path` writes the file to disk. Same parent-id rule for merge_forward children as download_image.
@@ -88,14 +87,14 @@ All docx and bitable tools now accept three input forms for their `document_id` 
 The plugin resolves wiki nodes to their underlying `obj_token` via `getWikiNode`, then calls the normal docx / bitable endpoint. Results are cached for 10 min to avoid repeated node lookups.
 
 Create content directly into a Wiki space:
-- `create_doc` / `create_bitable` accept optional `wiki_space_id` (+ `wiki_parent_node_token`). The plugin creates the resource in drive, then calls `wiki/v2/spaces/{space_id}/nodes/move_docs_to_wiki` to attach it — returns `wikiNodeToken` on immediate success, or `wikiAttachTaskId` if Feishu queues the move.
+- `create_doc` / `manage_bitable_app(action=create)` accept optional `wiki_space_id` (+ `wiki_parent_node_token`). The plugin creates the resource in drive, then calls `wiki/v2/spaces/{space_id}/nodes/move_docs_to_wiki` to attach it — returns `wikiNodeToken` on immediate success, or `wikiAttachTaskId` if Feishu queues the move.
 
 ### Document images
 Read — `download_image` with `doc_token` + `image_token` returns the image as MCP image content (base64 + mimeType). `doc_token` accepts native id / wiki node / URL.
-Write — `create_doc_block` now has image shortcuts:
+Write — `manage_doc_block(action=create)` has image shortcuts:
 - `image_path` (absolute local file path) → plugin creates an image block, uploads the pixels via `drive/v1/medias/upload_all`, and patches the block with the uploaded token.
 - `image_token` (already uploaded) → plugin creates block and attaches token.
-`update_doc_block` accepts `image_token` to swap the picture in an existing image block.
+`manage_doc_block(action=update, image_token=...)` swaps the picture in an existing image block.
 
 ### OKR
 1. `list_okr_periods` — find the period id for current quarter.
@@ -127,15 +126,15 @@ Write — `create_doc_block` now has image shortcuts:
 - Get chat details → `get_chat_info` (supports both oc_xxx and numeric ID)
 
 ### Bitable (Multi-dimensional Tables)
-- Create a bitable from scratch → `create_bitable` → `create_bitable_table` → `create_bitable_field`
-- Get bitable info → `get_bitable_meta`
-- Copy a bitable → `copy_bitable` with name and optional folder
-- Query data → `list_bitable_tables` → `list_bitable_fields` → `search_bitable_records`
-- Rename table → `update_bitable_table` with new name
-- Read single record → `get_bitable_record`
-- Create/update/delete records → `batch_create_bitable_records` / `batch_update_bitable_records` / `batch_delete_bitable_records` (works for single or up to 500)
-- Manage fields → `create_bitable_field` / `update_bitable_field` (requires type param) / `delete_bitable_field`
-- Manage views → `create_bitable_view` (type: grid/kanban/gallery/form/gantt/calendar) / `delete_bitable_view`
+All bitable ops collapse into 5 `manage_bitable_*` tools (v1.3.7) — pick the action.
+- Create from scratch → `manage_bitable_app(action=create)` → `manage_bitable_table(action=create)` → `manage_bitable_field(action=create)`
+- Get info → `manage_bitable_app(action=get_meta)`
+- Duplicate → `manage_bitable_app(action=copy, name=..., folder_id?)`
+- Query → `manage_bitable_table(action=list)` → `manage_bitable_field(action=list)` → `manage_bitable_record(action=search, filter?, sort?, page_size?)`
+- Read single record → `manage_bitable_record(action=get, record_id=...)`
+- Records CRUD → `manage_bitable_record(action=create|update|delete, records|record_ids=[...])` (single or up to 500/call)
+- Fields → `manage_bitable_field(action=create|update|delete, ...)` — `type` required for both create AND update (rename)
+- Views → `manage_bitable_view(action=list|create|delete, view_type=grid|kanban|gallery|form|gantt|calendar)`
 
 ### Group Management
 - Create a group → `create_group` with name and optional member open_ids
@@ -143,12 +142,13 @@ Write — `create_doc_block` now has image shortcuts:
 - List members → `list_members`
 
 ### Document Editing
-- Create doc with content → `create_doc` → `create_doc_block` (use document_id as parent_block_id for root)
-- Edit existing block → `get_doc_blocks` to find block_id → `update_doc_block`
-- Delete blocks → `delete_doc_blocks` with start/end index range
-- Insert image → `create_doc_block` with `image_path` (local file) or `image_token` (already uploaded). Three-step flow handled internally.
-- Insert file attachment (PDF/zip/xlsx/...) → `create_doc_block` with `file_path` or `file_token`. Feishu auto-wraps the FILE block (block_type=23) inside a VIEW container (block_type=33); the plugin walks into the inner file block automatically before the `replace_file` PATCH so the upload + attach succeed.
-- Replace existing image/file in a block → `update_doc_block` with `image_token` / `file_token`.
+All block ops go through one tool: `manage_doc_block(action=create|update|delete, ...)`.
+- Create doc with content → `create_doc` → `manage_doc_block(action=create, parent_block_id=document_id, children=[...])`
+- Edit existing block → `get_doc_blocks` to find block_id → `manage_doc_block(action=update, block_id=..., update_body={...})`
+- Delete blocks → `manage_doc_block(action=delete, parent_block_id=..., start_index=..., end_index=...)`
+- Insert image → `manage_doc_block(action=create, parent_block_id=..., image_path=...)` (local file) or `image_token=...` (already uploaded). Three-step flow handled internally.
+- Insert file attachment (PDF/zip/xlsx/...) → `manage_doc_block(action=create, file_path=...)` or `file_token=...`. Feishu auto-wraps the FILE block (block_type=23) inside a VIEW container (block_type=33); the plugin walks into the inner file block automatically before the `replace_file` PATCH so the upload + attach succeed.
+- Replace existing image/file → `manage_doc_block(action=update, block_id=..., image_token=... | file_token=...)`.
 
 ### Diagnostics
 - Diagnose issues → `get_login_status` first
@@ -366,7 +366,7 @@ Two known root causes, both fixed in v1.3.3:
 - **Manual cleanup when you notice**: `pkill -f 'feishu-user-plugin/src/index.js'` — the client will respawn one fresh process on the next tool call.
 
 ### If a create_* tool warns "UAT failed, created as BOT"
-- v1.3.5 added an explicit `⚠️` warning to MCP responses whenever `_asUserOrApp` silently fell back to bot identity for a write (create_doc / create_bitable / create_folder / create_doc_block / ...). Before v1.3.5 this was silent and led to the "teammate can read my 'private' doc" issue.
+- v1.3.5 added an explicit `⚠️` warning to MCP responses whenever `_asUserOrApp` silently fell back to bot identity for a write (create_doc / manage_bitable_app(action=create) / create_folder / manage_doc_block(action=create) / ...). Before v1.3.5 this was silent and led to the "teammate can read my 'private' doc" issue.
 - **Cause**: your UAT is failing (expired / scope missing / race) so the plugin reached for bot credentials. The resulting resource is owned by the shared bot, tenant-readable by default, NOT by you.
 - **Fix**: run `npx feishu-user-plugin oauth` and restart Claude Code / Codex. If the resource needs to be yours, delete the bot-owned copy and recreate after UAT is valid.
 
@@ -540,7 +540,7 @@ feishu-user-plugin vX.Y.Z 发布
 
 **写作规范**:
 - **开篇**：一到两句陈述式总结，不宣传、不夸大。参考 v1.3.2："本次更新主要补齐了 X 能力，并修复了 Y 问题；同时将 Z 统一调整为 ..."
-- **每条 bullet**：先写用户可见现象，再写底层机制。引用具体错误码（如 1770032 / 91403）、接口名（如 create_doc_block）、参数名（如 RichText.atIds）——专业读者信赖的是细节
+- **每条 bullet**：先写用户可见现象，再写底层机制。引用具体错误码（如 1770032 / 91403）、接口名（如 manage_doc_block）、参数名（如 RichText.atIds）——专业读者信赖的是细节
 - **字符**：bullet 用 `•`（U+2022），不用 `-` 或 `*`；代码/工具名在正文中直接写，不加反引号
 - **禁用**：emoji、🔴🟡🟢 之类严重度标记、`@` 任何人、营销词（"强大"、"全新"、"重磅"）、夸张修辞
 - **语气**：技术 release note 的中性语气，像写给同行的内部更新。参考 v1.3.2 全文
@@ -565,7 +565,7 @@ The v1.3.4 tools require additional scopes on the app + UAT:
 |---------|-------------------------------------------|
 | OKR read | `okr:okr:readonly`, `okr:period:read` |
 | Calendar read | `calendar:calendar:readonly`, `calendar:calendar.event:read` |
-| Docx/Bitable/Drive media upload (`uploadMedia`, `upload_drive_file`, `upload_bitable_attachment`, `create_doc_block` image/file) | `drive:drive`, `drive:file:upload`, `docs:document.media:upload`, `sheets:spreadsheet` (only for sheet uploads) |
+| Docx/Bitable/Drive media upload (`uploadMedia`, `upload_drive_file`, `upload_bitable_attachment`, `manage_doc_block(action=create, image_path|file_path|...)`) | `drive:drive`, `drive:file:upload`, `docs:document.media:upload`, `sheets:spreadsheet` (only for sheet uploads) |
 | Wiki attach (`move_docs_to_wiki`) | `wiki:wiki` (edit scope, the readonly one is insufficient) |
 
 If a tool returns `access_denied` or error code `99991672` (scope not granted), the scope is missing on either the app or the UAT. Re-run `npx feishu-user-plugin oauth` so the UAT picks up the latest scope list (defined in `src/oauth.js`).
@@ -575,6 +575,6 @@ If a tool returns `access_denied` or error code `99991672` (scope not granted), 
 - External tenant users may not be resolvable via `get_user_info` (contact API scope limitation)
 - Cookie auth requires human interaction (QR scan) — cannot be fully automated
 - Refresh token expires after 7 days without use — set up `keepalive` cron to prevent this
-- `update_bitable_field` requires `type` parameter even when only changing field name (Feishu API requirement)
+- `manage_bitable_field(action=update)` requires `type` parameter even when only changing field name (Feishu API requirement)
 - `list_wiki_spaces` may return empty if bot lacks `wiki:wiki:readonly` permission (v1.3.7+: `scopeHint` field is appended to the response when this happens)
 - `search_wiki` uses same API as `search_docs` — `docs_types` filter may not work as expected
