@@ -44,13 +44,14 @@ const schemas = [
   },
   {
     name: 'manage_members',
-    description: '[Official API] Add or remove members from a group chat.',
+    description: '[Official API] Add or remove members from a group chat. The Feishu API rejects with code 9499 when the IDs in `member_ids` do not match `member_id_type` — pass `member_id_type` explicitly when using union_id or user_id (default: open_id).',
     inputSchema: {
       type: 'object',
       properties: {
         chat_id: { type: 'string', description: 'Group chat ID (oc_xxx)' },
-        member_ids: { type: 'array', items: { type: 'string' }, description: 'Array of user open_ids' },
+        member_ids: { type: 'array', items: { type: 'string' }, description: 'Array of member identifiers — IDs must match member_id_type.' },
         action: { type: 'string', enum: ['add', 'remove'], description: 'Action to perform' },
+        member_id_type: { type: 'string', enum: ['open_id', 'union_id', 'user_id'], description: 'Format of member_ids (default: open_id).', default: 'open_id' },
       },
       required: ['chat_id', 'member_ids', 'action'],
     },
@@ -69,10 +70,11 @@ const handlers = {
   },
   async manage_members(args, ctx) {
     const official = ctx.getOfficialClient();
+    const memberIdType = args.member_id_type || 'open_id';
     if (args.action === 'remove') {
-      return json(await official.removeChatMembers(args.chat_id, args.member_ids));
+      return json(await official.removeChatMembers(args.chat_id, args.member_ids, memberIdType));
     }
-    return json(await official.addChatMembers(args.chat_id, args.member_ids));
+    return json(await official.addChatMembers(args.chat_id, args.member_ids, memberIdType));
   },
 };
 

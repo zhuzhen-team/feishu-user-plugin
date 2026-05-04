@@ -53,14 +53,15 @@ const schemas = [
   },
   {
     name: 'move_file',
-    description: '[Official API] Move a file to another folder in Drive.',
+    description: '[Official API] Move a file/doc/folder to another folder in Drive. `type` is required (Feishu rejects with 1061002 otherwise) — pass `file`, `folder`, `doc`, `sheet`, `bitable`, `docx`, `mindnote`, or `slides` to match the resource being moved.',
     inputSchema: {
       type: 'object',
       properties: {
-        file_token: { type: 'string', description: 'File token to move' },
+        file_token: { type: 'string', description: 'File/folder token to move' },
         folder_token: { type: 'string', description: 'Destination folder token' },
+        type: { type: 'string', enum: ['file', 'folder', 'doc', 'sheet', 'bitable', 'docx', 'mindnote', 'slides'], description: 'Resource type — Feishu requires this to know which API table to look up.' },
       },
-      required: ['file_token', 'folder_token'],
+      required: ['file_token', 'folder_token', 'type'],
     },
   },
   {
@@ -106,7 +107,7 @@ const handlers = {
     return json(await ctx.getOfficialClient().copyFile(args.file_token, args.name, args.folder_token, args.type));
   },
   async move_file(args, ctx) {
-    return text(`File moved: task=${(await ctx.getOfficialClient().moveFile(args.file_token, args.folder_token)).taskId}`);
+    return text(`File moved: task=${(await ctx.getOfficialClient().moveFile(args.file_token, args.folder_token, args.type)).taskId}`);
   },
   async delete_file(args, ctx) {
     return text(`File deleted: task=${(await ctx.getOfficialClient().deleteFile(args.file_token, args.type)).taskId}`);

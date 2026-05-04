@@ -33,12 +33,13 @@ const schemas = [
   },
   {
     name: 'forward_message',
-    description: '[Official API] Forward a message to another chat.',
+    description: '[Official API] Forward a message to another chat or user. `receive_id` may be a group chat_id (oc_xxx), an open_id (ou_xxx), a union_id, a user_id, or an email — set `receive_id_type` to match (default: chat_id).',
     inputSchema: {
       type: 'object',
       properties: {
-        message_id: { type: 'string', description: 'Message ID to forward' },
-        receive_id: { type: 'string', description: 'Target chat_id or open_id' },
+        message_id: { type: 'string', description: 'Message ID to forward (om_xxx)' },
+        receive_id: { type: 'string', description: 'Target chat_id (oc_xxx), open_id (ou_xxx), union_id, user_id, or email — set receive_id_type to match.' },
+        receive_id_type: { type: 'string', enum: ['chat_id', 'open_id', 'union_id', 'user_id', 'email'], description: 'Format of receive_id (default: chat_id). Set to "open_id" when forwarding to a user via their open_id.', default: 'chat_id' },
       },
       required: ['message_id', 'receive_id'],
     },
@@ -54,13 +55,13 @@ const schemas = [
   },
   {
     name: 'update_message',
-    description: '[Official API] Edit a sent message (bot can only edit its own messages). Supports text and post.',
+    description: '[Official API] Edit a sent message (bot can only edit its own messages). Feishu supports edit only for `text` and `interactive` (card) messages — other types (post, image, file, etc.) are rejected by the API.',
     inputSchema: {
       type: 'object',
       properties: {
         message_id: { type: 'string', description: 'Message ID (om_xxx)' },
-        msg_type: { type: 'string', description: 'Message type: text or post' },
-        content: { description: 'New content. For text: {"text":"updated text"}' },
+        msg_type: { type: 'string', enum: ['text', 'interactive'], description: 'Message type: text or interactive. Other types are not editable per Feishu API.' },
+        content: { description: 'New content. For text: {"text":"updated text"}. For interactive: full card JSON.' },
       },
       required: ['message_id', 'msg_type', 'content'],
     },
@@ -112,12 +113,28 @@ const handlers = {
     return text(`Reply sent: ${(await ctx.getOfficialClient().replyMessage(args.message_id, args.text)).messageId}`);
   },
   async forward_message(args, ctx) {
-    return text(`Forwarded: ${(await ctx.getOfficialClient().forwardMessage(args.message_id, args.receive_id)).messageId}`);
+    // Auto-detect receive_id_type when not provided so callers can pass an open_id
+    // (ou_xxx) without having to set the type field — matches what
+    // send_to_user/send_to_group already do for chat resolution.
+    let receiveIdType = args.receive_id_type;
+    if (!receiveIdType) {
+      const id = args.receive_id || '';
+      if (id.startsWith('ou_')) receiveIdType = 'open_id';
+      else if (id.startsWith('on_')) receiveIdType = 'union_id';
+      else if (id.includes('@')) receiveIdType = 'email';
+      else receiveIdType = 'chat_id';
+    }
+    return text(`Forwarded: ${(await ctx.getOfficialClient().forwardMessage(args.message_id, args.receive_id, receiveIdType)).messageId}`);
   },
   async delete_message(args, ctx) {
     return text(`Message deleted: ${(await ctx.getOfficialClient().deleteMessage(args.message_id)).deleted}`);
   },
   async update_message(args, ctx) {
+    // Feishu API limit: only text + interactive are editable. Reject early so
+    // the user sees a clear message instead of a 230053 from the API.
+    if (!['text', 'interactive'].includes(args.msg_type)) {
+      return text(`update_message only supports msg_type=text or interactive (Feishu API limit). Got: ${args.msg_type}`);
+    }
     return text(`Message updated: ${(await ctx.getOfficialClient().updateMessage(args.message_id, args.msg_type, args.content)).messageId}`);
   },
   async pin_message(args, ctx) {
