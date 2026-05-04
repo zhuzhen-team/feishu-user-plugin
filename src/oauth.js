@@ -34,7 +34,8 @@ const REDIRECT_URI = `http://127.0.0.1:${PORT}/callback`;
 // v1.3.7 additions:
 //   calendar:calendar.event:write          create/update/delete/respond calendar events
 //   task:task                              full Task v2 read+write
-const SCOPES = 'offline_access auth:user.id:read im:message im:message:readonly im:chat im:chat:readonly contact:user.base:readonly contact:user.id:readonly docx:document drive:drive drive:file:upload bitable:app wiki:wiki:readonly wiki:wiki okr:okr:readonly okr:okr.period:readonly okr:okr.content:readonly calendar:calendar:readonly calendar:calendar.event:read calendar:calendar.event:write docs:document.media:download docs:document.media:upload sheets:spreadsheet task:task';
+//   okr:okr.content:write                  create/delete OKR progress records
+const SCOPES = 'offline_access auth:user.id:read im:message im:message:readonly im:chat im:chat:readonly contact:user.base:readonly contact:user.id:readonly docx:document drive:drive drive:file:upload bitable:app wiki:wiki:readonly wiki:wiki okr:okr:readonly okr:okr.period:readonly okr:okr.content:readonly okr:okr.content:write calendar:calendar:readonly calendar:calendar.event:read calendar:calendar.event:write docs:document.media:download docs:document.media:upload sheets:spreadsheet task:task';
 
 if (!APP_ID || !APP_SECRET) {
   console.error('Missing LARK_APP_ID or LARK_APP_SECRET.');
