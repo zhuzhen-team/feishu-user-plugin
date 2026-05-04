@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.6] - 2026-05-03
+
+### Added
+- **Upload completeness**: `uploadDocMedia` → `uploadMedia` accepting 8 `parent_type`s (docx / sheet / bitable × image / file + legacy doc_*). New `create_doc_block` modes for files (`file_path` / `file_token`, block_type 23, auto view-wrap). `update_doc_block` accepts `file_token` to swap existing file blocks. New `upload_drive_file` (`drive/v1/files/upload_all`; optional `wiki_space_id` auto-attaches via `move_docs_to_wiki`). New `upload_bitable_attachment` (`parent_type=bitable_image|bitable_file`).
+- **`batch_send` tool**: fan-out the same or different content to multiple targets in one call. Each target dispatches sequentially with anti-rate-limit throttling and reports per-target `ok` / `error`. Identity is the cookie user unless `target.via=bot`.
+- **Multi-profile support**: `list_profiles` / `switch_profile` tools + `LARK_PROFILES_JSON` env. Hot-swap credentials without restarting the MCP server; cached client instances rebuild against the new profile.
+- **`send_card_as_user` (bot-routed default)**: send Feishu interactive cards. v1.3.6 routes through the bot identity; the `as_user` suffix is reserved for v1.3.7's reverse-engineered cookie path. `via="user"` returns an explicit not-yet-implemented error.
+
+### Changed
+- OAuth scopes added: `drive:file:upload` (narrower scope for `drive/v1/files/upload_all`), `sheets:spreadsheet` (sheet image / file uploads). Existing users must re-run `npx feishu-user-plugin oauth` to pick them up.
+
+## [1.3.5] - 2026-04-24
+
+### Fixed
+- **Cross-process UAT refresh lock**: file lock at `~/.claude/feishu-uat-refresh.lock` (`O_CREAT|O_EXCL`, 30s stale detection) serializes UAT refresh across concurrent MCP processes. Inside the critical section, the lock holder re-reads `~/.claude.json` to see whether a peer already rotated the token; if so it adopts the fresh one. Closes the "Codex spawned 6 MCP servers, all raced to refresh" failure mode that was burning refresh tokens on 2026-04-23.
+- **`get_login_status` UAT health check**: now actually exercises the UAT (calls `listChatsAsUser({pageSize:1})`) instead of just checking presence. Surfaces "configured but 401" cases that previously stayed silent until the next real tool call.
+
+### Added
+- **Bot-fallback ⚠️ warning**: every write tool that silently fell back from UAT to bot identity (`create_doc` / `create_bitable` / `create_folder` / `create_doc_block` / etc.) now appends a `fallbackWarning` to the response so users see the ownership change immediately. Before, callers only learned days later when a teammate could read their "private" resource.
+- **Auto-expand `merge_forward`**: `read_messages` / `read_p2p_messages` walk a `merge_forward` placeholder into its child messages by default (`expand_merge_forward=false` to opt out). Children carry `parentMessageId` (use that, NOT the child id, when downloading their media). Text children get `urls[]` + `feishuDocs[]` extracted so agents can feed them straight into `read_doc` / WebFetch.
+- **`download_file` tool**: download a file attachment (`msg_type=file`). Returns base64 + mimeType + byte count; optional `save_path` writes to disk. Same parent-id rule for `merge_forward` children as `download_image`.
+
 ## [1.3.4] - 2026-04-22
 
 ### Added
