@@ -93,14 +93,235 @@
 - [x] 多 profile:`list_profiles` / `switch_profile` 工具,通过 `LARK_PROFILES_JSON` 注册多套凭证,热切换不重启
 - [x] `send_card_as_user`(bot-default):via=bot 走 `send_message_as_bot('interactive', card)`,via=user 在 v1.3.6 显式返回 deferred 错误。一旦 v1.3.7 实现 user-identity 卡片必须**移除 bot-default**
 
-### v1.3.7 — 计划中
+### v1.3.7 — 计划中（v1.3.6 实测发现 + 架构重构 + 跨 harness + 自动化）
 
-#### 逆向工程任务(从 v1.3.6 推迟)
+> **基础约定**:本版工作量很大,一次性合并风险高。建议拆三个子分支,分别 PR 合入:
+> A. `refactor/structure` — 代码目录重构(风险最高,先单独跑)
+> B. `feat/cross-harness` — Skills→prompts + 单一可信源凭证 + hooks
+> C. `fix/v1.3.6-testing-bugs` — bug 修复 + 工具增删合并 + 写日历 + Tasks
+> 子 agent 派发顺序:A → 等合并 → B / C 并行
 
-- [ ] `send_card_as_user` 真·用户身份(从 v1.3.6 推迟)— 录飞书 web 客户端发卡片时的 protobuf payload,实现 type=14 用户身份发送。**实现完成后必须删除 v1.3.6 的 bot-default 兜底**(handler 里 via=bot fallback)
+#### A. 代码目录重构(用户已批,本版必须做完)
+
+当前 `src/` 15 文件平铺 + 两个 god file:`index.js` 1979 行、`official.js` 1944 行。每加一个 feature 都让这两个文件再涨几十行,新人读代码先要花一小时定位 handler。
+
+- [ ] 拆出 `src/server.js` (~150 行):MCP bootstrap、ListTools/CallTool/ListPrompts handler 注册、stdio 启动、global console redirect
+- [ ] `src/tools/` — 每个能力域一个文件,文件 = `{ schemas: [], handlers: { name: fn } }`,在 server.js 用 `for (const mod of toolModules) register(mod)` 集中注册
+  - `tools/messaging-user.js` — Cookie 路径的 send_to_user / send_to_group / send_as_user / batch_send / send_image / send_file / send_post / send_sticker / send_audio / send_card
+  - `tools/messaging-bot.js` — send_message_as_bot / reply_message / forward_message / delete_message / update_message / pin_message / add_reaction / delete_reaction
+  - `tools/im-read.js` — list_chats / read_messages / read_p2p_messages / list_user_chats / get_chat_info
+  - `tools/contacts.js` — search_contacts / find_user / get_user_info / create_p2p_chat
+  - `tools/groups.js` — create_group / update_group / list_members / manage_members
+  - `tools/docs.js` — search_docs / read_doc / get_doc_blocks / create_doc / *_doc_block
+  - `tools/bitable.js` — 全部 20 个 bitable
+  - `tools/drive.js` — list_files / create_folder / copy_file / move_file / delete_file / upload_drive_file
+  - `tools/wiki.js` — list_wiki_spaces / search_wiki / list_wiki_nodes / get_wiki_node
+  - `tools/uploads.js` — upload_image / upload_file / upload_bitable_attachment
+  - `tools/calendar.js` — list/get + 新增 create/update/delete/get_freebusy/respond_invite
+  - `tools/okr.js` — list_user_okrs / get_okrs / list_okr_periods
+  - `tools/tasks.js` — 新增整组(详见 C 节)
+  - `tools/profile.js` — list_profiles / switch_profile
+  - `tools/diagnostics.js` — get_login_status / download_image / download_file
+- [ ] 拆 `src/clients/`
+  - `clients/user.js` — 当前 `client.js`(Cookie + Protobuf 网关)
+  - `clients/official/index.js` — `_asUserOrApp` / `_safeSDKCall` / `_uatREST` 公共底座 + UAT 刷新跨进程锁
+  - `clients/official/im.js` / `docs.js` / `bitable.js` / `drive.js` / `wiki.js` / `calendar.js` / `okr.js` / `tasks.js` — 拆 `official.js` 1944 行
+- [ ] 拆 `src/auth/`
+  - `auth/cookie.js` — 心跳、续期、persistToConfig 调用
+  - `auth/uat.js` — refresh、跨进程文件锁、`_adoptPersistedUATIfNewer`、JWT exp 解析
+  - `auth/credentials.js` — 单一可信源读写(详见 B 节)
+- [ ] 拆 `src/config/`
+  - `config/discovery.js` — 旧 `findMcpConfig`(只用于一次性迁移)
+  - `config/persistence.js` — atomic write helpers
+  - `config/setup.js` — `setup` CLI 实现搬过来
+- [ ] 保留:`resolver.js` / `doc-blocks.js` / `error-codes.js` / `utils.js` / `logger.js`(新)
+- [ ] 跟改:`package.json` `main` 字段、`scripts/mcp_stdio_bridge.js` 硬编码路径、CLAUDE.md / AGENTS.md 中所有 `src/index.js` 引用、CHANGELOG.md
+- [ ] 单元保护:重构前先跑一遍 `node -e` 自测每个 handler 至少能拿到响应(不要求成功,只要不挂),作为 before/after 对照
+- [ ] **风险 tradeoff 文档**:写一段 `docs/REFACTOR-NOTES.md`(允许这一份新建)记录拆完之后的边界规则——以后哪个 feature 落到哪个文件、什么时候允许新建文件,避免回到 god file
+
+#### B. Skill → MCP prompts + 单一可信源凭证 + hooks(用户已批)
+
+##### B1. 把 9 个 skills 暴露成 MCP prompts
+
+**当前问题**:Claude Code 直接读 `skills/*.md` frontmatter,跟 MCP 协议无关 → Codex / OpenClaw / Cursor / Windsurf 全看不到。
+
+- [ ] 在 `src/server.js` 注册 `ListPromptsRequestSchema` + `GetPromptRequestSchema` handler
+- [ ] 把 `skills/feishu-user-plugin/` 下 9 个 skill 转换成 MCP prompts: `/send` `/reply` `/digest` `/search` `/doc` `/table` `/wiki` `/drive` `/status`
+- [ ] prompt 模板加入参数 schema(arguments),让客户端能弹表单
+- [ ] 保留 `skills/` 目录(Claude Code 仍按现有方式读),通过同一份内容生成,避免双写
+- [ ] CLI 增 `npx feishu-user-plugin list-prompts` 验证
+
+##### B2. 单一可信源凭证文件
+
+**当前问题**:`findMcpConfig` 只写第一个命中的 config → Codex/Claude Desktop/Cursor 多 harness 共存时 cookie / UAT 刷新只更新一处,其他 harness 拿到旧 token 直接 401。
+
+- [ ] 设计文件 `~/.feishu-user-plugin/credentials.json`(0600 权限)
+  ```json
+  {
+    "version": 1,
+    "profiles": {
+      "default": {
+        "LARK_COOKIE": "...",
+        "LARK_APP_ID": "...",
+        "LARK_APP_SECRET": "...",
+        "LARK_USER_ACCESS_TOKEN": "...",
+        "LARK_USER_REFRESH_TOKEN": "...",
+        "LARK_UAT_EXP": 1234567890
+      },
+      "alt": { ... }
+    },
+    "active": "default"
+  }
+  ```
+- [ ] `src/auth/credentials.js`:`load()` / `save()`(原子写)/ `getActiveProfile()` / `setActiveProfile(name)` / `migrateFromMcpConfigs()`(一次性,把旧 ~/.claude.json 等 4 处 env 块合并迁过来,迁完打印 diff 让用户确认)
+- [ ] 所有 harness 配置的 env block 改成只放 `FEISHU_PLUGIN_PROFILE=default` 一个变量,真凭证从单一文件读
+- [ ] `setup` CLI 改写:写凭证文件,然后向所有发现的 harness 配置写"指针 env"
+- [ ] `keepalive` / 心跳 / UAT refresh 全改为只写凭证文件(单点),所有 harness 进程下次读自动拿到新值
+- [ ] `list_profiles` / `switch_profile` 改为读写凭证文件的 active 字段
+- [ ] 兼容:旧 env 配置仍能用,但启动时 stderr 警告"建议运行 `npx feishu-user-plugin migrate` 迁到单一可信源"
+- [ ] **OpenClaw 的偏好文件先放一放**(用户明确不管)
+
+##### B3. Hooks(commit / push 自动同步)
+
+- [ ] `.git/hooks/pre-commit`(用 husky / simple-git-hooks 装,跨机生效):
+  - CLAUDE.md 改了 → 自动跑 `tail -n +2 CLAUDE.md > /tmp/body.md && { echo "# feishu-user-plugin — Codex Instructions"; cat /tmp/body.md; } > AGENTS.md` + `git add AGENTS.md`
+  - CLAUDE.md 改了 → `cp CLAUDE.md skills/feishu-user-plugin/references/CLAUDE.md` + git add
+  - `package.json` 版本变了 → 校验 `.claude-plugin/plugin.json` `skills/feishu-user-plugin/SKILL.md` 三方一致,不一致拒绝 commit
+  - 工具增减(grep TOOLS 数组长度) → 校验 README.md 工具数 badge / heading
+  - server.json 工具数 + 版本号 → 自动从 package.json + TOOLS 数组生成
+- [ ] `.git/hooks/post-push`(只在 push 到 main 后触发):
+  - 同步 team-skills 仓库:`cp -r skills/ /Users/abble/team-skills/plugins/feishu-user-plugin/skills/` + `cp .claude-plugin/plugin.json /Users/abble/team-skills/plugins/feishu-user-plugin/.claude-plugin/`
+  - 在 team-skills 仓库 `git checkout -b sync/feishu-vX.Y.Z` + `git add` + commit + push + `gh pr create` + `gh pr merge --auto`
+  - 同步 README 三方对照(本仓 vs team-skills 仓 vs SKILL.md)的工具数与更新日志
+  - 失败不阻塞 push,但 stderr 红字提醒"team-skills 同步失败,请手动检查"
+- [ ] `scripts/check-docs-sync.js`:本地 `prepublishOnly` 里跑,diff CLAUDE.md vs AGENTS.md vs skills/references/CLAUDE.md,不一致退出非零
+- [ ] CI: `.github/workflows/validate.yml` 增校验
+  - tool count: `node -e "import('./src/server.js').then(m=>console.log(m.TOOLS.length))"` vs README badge / SKILL.md
+  - server.json 字段一致性
+  - CHANGELOG.md 包含本 tag 对应小节
+
+#### C. v1.3.6 实测发现的 bug 修复 + 工具增删合并 + 写日历 + Tasks
+
+##### C1. 必修 bug(实测确认,共 14 个)
+
+- [ ] **`send_image_as_user`** — Cookie protobuf 路径 IMAGE 编码失败(状态 0)。需要重新对照飞书 web 客户端发图时的 protobuf payload 抓包,修 `client.js::_sendMsg` 的 image branch
+- [ ] **`send_audio_as_user`** — 同上,AUDIO 编码失败
+- [ ] **`send_sticker_as_user`** — 任意 sticker_id 都失败。要么修(从飞书拿 sticker_id 列表),要么直接删(见 C2)
+- [ ] **`send_as_user` / `send_post_as_user` 不接受 `oc_xxx`** — 数字 ID 才工作。在工具入口加自动 oc_→numeric 解析(走 `get_chat_info` 拿 numeric chatId)
+- [ ] **`forward_message`** — schema 没有 `receive_id_type`,默认走 chat_id,导致 open_id / user_id 等不可用。补 schema 字段并透传
+- [ ] **`forward_message` 用 `send_to_user` 返回的数字 ID 报 invalid receive_id** — 同上,需要根据 ID 形态自动判别 receive_id_type
+- [ ] **`update_message` 仅 interactive 有效** — 飞书 API 限制,但 schema 描述写"text/post"是误导。改 schema description 加约束;handler 里如果 msg_type 不是 interactive 直接返回明确错误,不要让飞书原始报文穿透
+- [ ] **`pin_message(pinned=false)`** — 当前实现把 message_id 放到 data 里,SDK 要求放 path。修 `official.js::pinMessage`,unpin 走 `client.im.message.unpin({ path: { message_id } })`
+- [ ] **`create_bitable_field`** — UAT 路径返回 `1254001 WrongRequestBody`,app 路径 `91403 Forbidden`。复现:全新建的 UAT-owned bitable 都触发。需要看是否最近改 `_uatREST` body 序列化时 break 掉了 field 创建。git bisect 定位
+- [ ] **`move_file`** — `1061002 params error`。Feishu drive move API 要求 body 里带 `type` 字段(file/folder/docx/sheet/bitable/...),当前没传。在 schema 加 `type` 必填 + 透传
+- [ ] **`delete_file`** — `1062501 operate node no permission`,因为走的是 `_safeSDKCall`(bot-only),对 UAT 创建的资源完全无权限。改成 `_asUserOrApp`,UAT-first
+- [ ] **`copy_file`** — 同 delete_file,`_safeSDKCall` → `_asUserOrApp`
+- [ ] **`manage_members(action=remove)`** — 报 `9499 object is not supported`。可能 SDK 版本变化或 receive_id_type 缺失。复测找根因
+- [ ] **`find_user`** — 实现只回 email/mobile 字段,不回 open_id。要么修(回完整 user object 含 open_id / name),要么删(见 C2,跟 search_contacts 重叠)
+- [ ] **`get_user_info` 把自己当外部租户** — 自己看自己反而拿不到名,senderName: null。`tenant_key` 比较逻辑或 fallback 顺序出错。重写
+- [ ] **`get_wiki_node` 用 `search_wiki` 返回的 docs_token 报 not found** — 文档没说清:`search_wiki` 返回的是 underlying obj_token,不是 wiki node token;`get_wiki_node` 只接受 wiki node token(必须从 `list_wiki_nodes` 拿)。要么(a)改 schema 描述,要么(b)同时支持两种 token 自动判别
+- [ ] **`list_wiki_spaces` 静默返空数组** — bot 缺 `wiki:wiki:readonly` 时不报错。改成主动检测 scope,缺则返回明确错误"应用缺 wiki:wiki:readonly,请重跑 npx feishu-user-plugin oauth"
+
+##### C2. 工具删除(共 4 个)
+
+- [ ] **删 `send_sticker_as_user`** — 任意 id 都失败 + agent 极少用 + 修复成本高于价值
+- [ ] **删 `send_audio_as_user`** — Cookie 路径坏 + agent 极少发语音 + bot 路径已有 `send_message_as_bot(msg_type='audio')` 兜底
+- [ ] **删 `find_user`** — 与 `search_contacts` 完全重叠,且更弱(只接受 email/mobile,不回 open_id)。把 search_contacts 加上 email/mobile 过滤参数即可
+- [ ] **删 `download_image`** — 与 `download_file` 完全重叠。合并为单一 `download_message_resource(message_id, key, kind=image|file, save_path?)`,kind 从 message content 自动判别也行;**MUST 强制要求 save_path 当文件 > 2 MB 时,避免再次撞 Anthropic API 5 MB 上限**
+
+##### C3. 工具合并(净减约 6 个,但语义更干净)
+
+- [ ] **bitable 21 → 5** — 5 个 manage 工具:`manage_bitable_app(action=create|copy|get_meta)` / `manage_bitable_table(action=create|update|delete|list)` / `manage_bitable_field(action=create|update|delete|list)` / `manage_bitable_view(action=create|delete|list)` / `manage_bitable_record(action=create|update|delete|search|get,batch?)`。schema 列表瘦,LLM 选起来更快
+- [ ] **doc block 3 → 1** — `manage_doc_block(action=create|update|delete)`,保留 image_path / file_path / image_token / file_token 等所有快捷参数
+- [ ] **drive 3 → 1** — `manage_drive_file(action=copy|move|delete,type)`,顺便强制 `type` 必填
+- [ ] **README 写"unpin_message"是错的** — 实际 `pin_message(pinned=bool)` 就够了。同步改 README 工具数
+
+##### C4. 工具新增(共 12 个,补上 v1.3.6 的空白)
+
+**写日历(5 个,scope 已经在 v1.3.4 申请过的 calendar:calendar.event:read 基础上补 .write)**:
+- [ ] `create_calendar_event(calendar_id, summary, start_time, end_time, description?, location?, attendees?, meeting_link_type?)`
+- [ ] `update_calendar_event(calendar_id, event_id, ...)` — patch 语义
+- [ ] `delete_calendar_event(calendar_id, event_id)`
+- [ ] `respond_calendar_event(calendar_id, event_id, status=accept|tentative|decline)` — 接受/拒绝邀请
+- [ ] `get_freebusy(user_ids[], start_time, end_time)` — 查空闲
+
+**Tasks 整组(7 个,完全空白,需要新申请 task scope)**:
+- [ ] `list_tasks(filter?, sort?)`
+- [ ] `get_task(task_id)`
+- [ ] `create_task(summary, description?, due_time?, members?, repeat_rule?)`
+- [ ] `update_task(task_id, ...)`
+- [ ] `complete_task(task_id)` / `uncomplete_task(task_id)`
+- [ ] `delete_task(task_id)`
+- [ ] `add_task_member(task_id, user_ids[])` / `remove_task_member`
+
+##### C5. Wiki / OKR 读写补全(用户问到了)
+
+- [ ] **Wiki 写**:当前只有 read,没有 `create_wiki_node` / `update_wiki_node` / `delete_wiki_node` / `move_wiki_node` / `copy_wiki_node`。补这 5 个
+- [ ] **OKR 写**:OKR open API 写能力非常受限(飞书侧不开放完整 CRUD,只有 progress 更新和评论)。能补的:
+  - `create_okr_progress_record(progress_id, content)` — 进展记录
+  - `list_okr_progress_records(progress_id)`
+  - `delete_okr_progress_record(progress_record_id)`
+  - 不能补的:create/update/delete OKR 本体(API 不存在),需要在 README 明确写"只能读 + 写进展"
+
+##### C6. v1.3.6 测试残留清理(用户明确说不需要其确认)
+
+测试期间创建、因 `delete_file` / `manage_members` bug 没法清理的资源:
+- [ ] 测试群:`oc_daaa6a50f2a97dc668aaf79ae4dc6e4e`("81-tool-test temp group renamed")
+- [ ] 测试 bitable 应用:`UqV7bAot3aDBW9sgYoUcZFjQncd`("81-tool-test-bitable-v2")
+- [ ] 测试 bitable 副本:`C8BDb5YP6a8MdusMFWnc91Ownhq`("81-tool-test-bitable-v2-copy")
+- [ ] 测试 folder:`DC1QfDvs6lDxgcdAqStcuKQznRh`("81-tool-test-folder-v2")
+- [ ] 测试上传文件:`TLHubz5pzok3d0xhtAnc14eUnde`(test.txt 拷贝在 drive)
+- [ ] 测试 docx 至少 3 篇(含 "81-tool-test docs" 等)
+- [ ] 测试群 chat 内残留消息:可批量 delete(只能删 bot 自己发的,user-发的需要手动)
+- 清理时机:C1 中 `delete_file` 改成 `_asUserOrApp` 之后,这些资源能直接被工具删掉。如果用户想立刻删,飞书 web 端登录后批量删
+
+##### C7. 必须重测的工具(v1.3.6 实测因外因没测彻底,v1.3.7 修完 bug 必须回归)
+
+- [ ] **`download_image`** — 本会话被 Anthropic API 大图 400 反复打断,最终用 download_file 的 round-trip 间接验证,download_image 本身没跑通端到端。修法:增 `save_path`(必传 when size > 2MB),回归测试用一张小 PNG
+- [ ] **`switch_profile`** — 当前只配了 default profile,没有第二个能切。设置 LARK_PROFILES_JSON 加 alt profile 后重测
+- [ ] **`get_calendar_event`** — 个人日历无任何事件,无 event_id 可拿。C4 写日历完成后,先 create 再 get
+- [ ] **`list_wiki_nodes`** — `list_wiki_spaces` 静默返空,无 space_id 可喂。C1 修完 wiki scope 警告后回归
+- [ ] **`delete_bitable_table`** — "The last table cannot be deleted" 是飞书 API 限制(非 bug),回归时先创建第二张表再删原表
+- [ ] **`upload_drive_file` 带 `wiki_space_id` 模式** — wiki scope 不全时直接 attach 失败的兜底路径未测
+
+##### C8. 测试方法论(避免下次再踩)
+
+- [ ] 写 `docs/TESTING-METHODOLOGY.md`(允许新建一份)记录:
+  - Playwright `browser_take_screenshot` 默认 fullPage 会撞 Anthropic API 5MB / 8000px 上限 → 用 `browser_snapshot`(文本 DOM)优先,实在要图就 viewport-only + resize 到 1280×800
+  - download_image / download_file 同样要 save_path 优先,base64 inline 仅当 < 2MB
+  - 测试沙箱固定:飞书plugin测试群(`oc_6ae081b457d07e9651d615493b7f1096`),临时 bitable / docx / folder 名带 `test-YYYY-MM-DD` 前缀,便于 grep 清理
+- [ ] 写 `scripts/test-all-tools.js` — 半自动化全回归脚本,创建临时资源 → 每个工具调一次 → 收集成功/失败 → 自动清理。手动跑 `npm run test:tools` 在每次发版前
+
+#### D. 文档与版本同步规则(用户已批,留在 CLAUDE.md 不拆,但要补全)
+
+- [ ] CLAUDE.md 现有"Keeping all docs in sync"章节(420–450 行)补上:
+  - server.json 必须自动生成,人工不改
+  - team-skills 同步走 hook,不再人工 cp
+  - CLAUDE.md / AGENTS.md 走 pre-commit hook 自动同步
+  - README 工具数走 CI 校验(对照 TOOLS.length)
+- [ ] CHANGELOG.md 补 v1.3.5 / v1.3.6 漏记的小节(从 git log 反推)
+- [ ] 修 README 过时:Calendar 写"5 tools"(实际 v1.3.6 是 3 只读,v1.3.7 补到 8) / Tasks 写"5 tools"(实际 v1.3.6 是 0,v1.3.7 补到 7) / unpin_message 不存在(应是 pin_message(pinned=false))
+- [ ] 修 server.json 过时:写"v1.2.0 + 33 tools",应反映本版实际数
+
+#### E. 工具数预估(本版本)
+
+- v1.3.6:81
+- 删 4(sticker / audio / find_user / download_image)= 77
+- 合并 bitable 21→5、doc block 3→1、drive 3→1 净减 20 = 57
+- 加写日历 5 + tasks 7 + wiki 写 5 + okr 写 3 = 20 → 77
+- 最终预估 **~77 个工具**,语义更干净,LLM 选工具更快
+- 注:`send_card_as_user` 真·用户身份、`search_messages`、`get_new_events` 推迟到 v1.3.8(见下),不计入本版工具数
+
+### v1.3.8 — WebSocket 实时事件 + 逆向工程 + 本地 md 同步(从 v1.3.7 拆出)
+
+> 这三块独立性较强,且都需要新依赖或新协议(WSClient / 飞书 web protobuf 抓包 / md parser),与 v1.3.7 的"重构 + bug 修 + 工具增删"主线不在一个面上。单独成版便于灰度。
+
+#### v1.3.8.A. 逆向工程任务(从 v1.3.6 推迟,继续保留)
+
+- [ ] `send_card_as_user` 真·用户身份 — 录飞书 web 客户端发卡片时的 protobuf payload,实现 type=14 用户身份发送。**实现完成后必须删除 v1.3.6 的 bot-default 兜底**(handler 里 via=bot fallback)
 - [ ] `search_messages` — 按关键词搜聊天历史。先试 UAT `/open-apis/im/v1/messages/search` 是否存在,不存在则逆向 cookie 路径
 
-#### 本地 md 同步(从 v1.3.4/1.3.6 拆出再推迟)
+#### v1.3.8.B. 本地 md 同步(从 v1.3.4/1.3.6 拆出再推迟,继续保留)
 
 - [ ] 本地 md → 飞书知识库同步
   - md parser 依赖选型(remark / markdown-it / unified)
@@ -111,7 +332,7 @@
   - CLI 子命令 `sync-md <path>` vs MCP 工具 `sync_markdown_to_wiki` 取舍
   - 增量 diff:已存在 wiki 节点的更新策略(全量覆盖 / 按 block_id 精细 diff)
 
-#### WebSocket 实时事件
+#### v1.3.8.C. WebSocket 实时事件
 
 让 MCP server 接收飞书实时事件,从"单向操作"变成"双向对话"。
 
@@ -134,6 +355,11 @@
 - [ ] 断线重连 + 错误处理
 - [ ] 文档:事件订阅配置指南
 - [ ] 可选:更多事件类型(审批、日程、文档评论)
+
+#### v1.3.8.D. 工具数预估(增量)
+
+- v1.3.7 收尾:77
+- 加 `send_card_as_user`(语义升级,不增工具数) + `search_messages` 1 + `get_new_events` 1 = **79**
 
 ## 已调研但暂不实施
 
