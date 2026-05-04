@@ -57,7 +57,9 @@ const handlers = {
         n = await c.getUserName(args.user_id);
       } catch {}
     }
-    return text(n ? `User ${args.user_id}: ${n}` : `Could not resolve user ${args.user_id}. This user may be from an external tenant. Try search_contacts with the user's display name instead.`);
+    return text(n
+      ? `User ${args.user_id}: ${n}`
+      : `Could not resolve user ${args.user_id}. Tried (1) UAT contact API, (2) bot contact API, (3) cookie protobuf cache. Possible causes:\n  • External tenant user — contact API can't see them. Use search_contacts with display name + the inferred numeric ID for messaging.\n  • App is missing contact:user.base:readonly scope (only blocks bot path; UAT path should still work).\n  • UAT not configured — run \`npx feishu-user-plugin oauth\`.`);
   },
 };
 
