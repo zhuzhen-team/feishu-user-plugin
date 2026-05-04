@@ -25,6 +25,7 @@ const { LarkUserClient } = require('./clients/user');
 const { LarkOfficialClient } = require('./clients/official');
 const { resolveToken } = require('./resolver');
 const { listPrompts, getPrompt } = require('./prompts');
+const credentials = require('./auth/credentials');
 
 // --- Tool modules ---
 // Adding a new domain: create src/tools/<x>.js exporting { schemas, handlers }
@@ -51,41 +52,25 @@ const TOOLS = TOOL_MODULES.flatMap((m) => m.schemas);
 const HANDLERS = Object.fromEntries(TOOL_MODULES.flatMap((m) => Object.entries(m.handlers)));
 
 // --- Profile system + client singletons ---
-// Default profile reads LARK_COOKIE / LARK_APP_ID / etc. from process.env.
-// Extra profiles come from LARK_PROFILES_JSON, e.g.:
-//   { "alt": { "LARK_COOKIE": "...", "LARK_APP_ID": "...", ... } }
+// Profile resolution order (see src/auth/credentials.js):
+//   1. ~/.feishu-user-plugin/credentials.json — single source of truth (v1.3.7+)
+//   2. process.env.LARK_* — legacy default profile (v1.3.6 behaviour)
+//   3. process.env.LARK_PROFILES_JSON — legacy named profiles
+//
 // switch_profile (handler in tools/profile.js) calls ctx.setActiveProfile(n)
 // which resets the cached client singletons; the next tool call rebuilds them.
+// When credentials.json exists, switching also persists the active field so
+// cross-process MCP servers see the same active profile after restart.
 
 let userClient = null;
 let officialClient = null;
-let currentProfile = 'default';
-
-function loadProfileMap() {
-  const raw = process.env.LARK_PROFILES_JSON;
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') return parsed;
-  } catch (e) {
-    console.error(`[feishu-user-plugin] LARK_PROFILES_JSON parse failed: ${e.message}`);
-  }
-  return {};
-}
+// The "current" profile this in-memory MCP server is pinned to. Initialised
+// from the persisted active profile (credentials.json) at boot, but in-process
+// switches may diverge from the persisted active until the next server restart.
+let currentProfile = credentials.getActiveProfileName();
 
 function profileEnv(name) {
-  if (name === 'default') {
-    return {
-      LARK_COOKIE: process.env.LARK_COOKIE,
-      LARK_APP_ID: process.env.LARK_APP_ID,
-      LARK_APP_SECRET: process.env.LARK_APP_SECRET,
-      LARK_USER_ACCESS_TOKEN: process.env.LARK_USER_ACCESS_TOKEN,
-      LARK_USER_REFRESH_TOKEN: process.env.LARK_USER_REFRESH_TOKEN,
-    };
-  }
-  const profiles = loadProfileMap();
-  if (!profiles[name]) throw new Error(`Profile "${name}" not found. Available: ${['default', ...Object.keys(profiles)].join(', ')}`);
-  return profiles[name];
+  return credentials.getActiveProfileEnv(name);
 }
 
 async function getUserClient() {
@@ -115,21 +100,25 @@ function getOfficialClient() {
     'For team members: these should be pre-filled in your .mcp.json. Check that the config was copied correctly from the team-skills README.\n' +
     'For external users: create a Custom App at https://open.feishu.cn/app, get the App ID and App Secret, add them to your .mcp.json env.'
   );
-  // Honor profile-specific UAT env if present (LarkOfficialClient.loadUAT uses
-  // process.env directly; we patch the env temporarily for non-default profiles).
-  const prevUAT = process.env.LARK_USER_ACCESS_TOKEN;
-  const prevRT = process.env.LARK_USER_REFRESH_TOKEN;
-  if (currentProfile !== 'default') {
-    if (env.LARK_USER_ACCESS_TOKEN) process.env.LARK_USER_ACCESS_TOKEN = env.LARK_USER_ACCESS_TOKEN;
-    if (env.LARK_USER_REFRESH_TOKEN) process.env.LARK_USER_REFRESH_TOKEN = env.LARK_USER_REFRESH_TOKEN;
-  }
   officialClient = new LarkOfficialClient(appId, appSecret);
-  officialClient.loadUAT();
-  if (currentProfile !== 'default') {
-    process.env.LARK_USER_ACCESS_TOKEN = prevUAT;
-    process.env.LARK_USER_REFRESH_TOKEN = prevRT;
-  }
+  // Load UAT directly from the active profile env. With credentials.json the
+  // env may differ from process.env (whose LARK_USER_* may be missing if the
+  // user moved creds out of harness configs); using profileEnv() here keeps
+  // the source of truth consistent with what get*Client() reads above.
+  loadUATFromEnv(officialClient, env);
   return officialClient;
+}
+
+// Mirror of LarkOfficialClient.loadUAT() but sourced from a specific env block
+// instead of process.env, so credentials.json profiles work uniformly.
+function loadUATFromEnv(client, env) {
+  const token = env.LARK_USER_ACCESS_TOKEN;
+  const refresh = env.LARK_USER_REFRESH_TOKEN;
+  const expires = parseInt(env.LARK_UAT_EXPIRES || '0');
+  if (!token) return;
+  client._uat = token;
+  client._uatRefresh = refresh || null;
+  client._uatExpires = expires || client._decodeTokenExpiry(token);
 }
 
 // Resolver helper: turn document_id / app_token / wiki node / Feishu URL into
@@ -147,12 +136,17 @@ function buildCtx() {
   return {
     getUserClient,
     getOfficialClient,
-    listProfiles: () => ['default', ...Object.keys(loadProfileMap())],
+    listProfiles: () => credentials.listProfileNames(),
     getActiveProfile: () => currentProfile,
     setActiveProfile: (n) => {
+      // Validate the profile exists (throws if unknown) before nuking client cache.
+      credentials.getActiveProfileEnv(n);
       currentProfile = n;
       userClient = null;
       officialClient = null;
+      // Persist the active-field flip when credentials.json exists so peer MCP
+      // servers see the new active profile on next read. Tolerated when no file.
+      try { credentials.setActiveProfile(n); } catch (_) {}
     },
     resolveDocId,
   };
@@ -203,12 +197,17 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  // Startup diagnostics
-  const hasCookie = !!process.env.LARK_COOKIE;
-  const hasApp = !!(process.env.LARK_APP_ID && process.env.LARK_APP_SECRET);
-  const hasUAT = !!process.env.LARK_USER_ACCESS_TOKEN;
+  // Startup diagnostics — use the resolved active-profile env so users on
+  // credentials.json (where process.env may not have LARK_*) get accurate flags.
+  let activeEnv = {};
+  try { activeEnv = profileEnv(currentProfile); } catch (_) { /* unknown profile is reported below */ }
+  const hasCanonical = !!credentials.readCanonical();
+  const hasCookie = !!activeEnv.LARK_COOKIE;
+  const hasApp = !!(activeEnv.LARK_APP_ID && activeEnv.LARK_APP_SECRET);
+  const hasUAT = !!activeEnv.LARK_USER_ACCESS_TOKEN;
+  const source = hasCanonical ? `credentials.json profile=${currentProfile}` : 'env vars (legacy)';
   console.error(`[feishu-user-plugin] MCP Server v${require('../package.json').version} — ${TOOLS.length} tools, ${listPrompts().length} prompts`);
-  console.error(`[feishu-user-plugin] Auth: Cookie=${hasCookie ? 'YES' : 'NO'} App=${hasApp ? 'YES' : 'NO'} UAT=${hasUAT ? 'YES' : 'NO'}`);
+  console.error(`[feishu-user-plugin] Auth: Cookie=${hasCookie ? 'YES' : 'NO'} App=${hasApp ? 'YES' : 'NO'} UAT=${hasUAT ? 'YES' : 'NO'} (source: ${source})`);
   if (!hasCookie) console.error('[feishu-user-plugin] WARNING: LARK_COOKIE not set — user identity tools (send_to_user, etc.) will fail');
   if (!hasApp) console.error('[feishu-user-plugin] WARNING: LARK_APP_ID/SECRET not set — official API tools (read_messages, docs, etc.) will fail');
   if (!hasUAT) console.error('[feishu-user-plugin] WARNING: LARK_USER_ACCESS_TOKEN not set — P2P chat reading (read_p2p_messages) will fail');

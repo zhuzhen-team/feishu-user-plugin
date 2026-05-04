@@ -99,7 +99,10 @@ class LarkOfficialClient {
 
   _adoptPersistedUATIfNewer() {
     try {
-      const { readCredentials } = require('../../config');
+      // auth/credentials reads credentials.json first; falls back to legacy
+      // mcpServers. The peer-rotated UAT will land wherever persistUAT wrote,
+      // and we'll see it consistently.
+      const { readCredentials } = require('../../auth/credentials');
       const creds = readCredentials();
       const token = creds.LARK_USER_ACCESS_TOKEN;
       const refresh = creds.LARK_USER_REFRESH_TOKEN;
@@ -208,8 +211,11 @@ class LarkOfficialClient {
   }
 
   _persistUAT() {
-    // Lazy require to avoid circular dependency at module load time
-    const { persistToConfig } = require('../../config');
+    // Lazy require to avoid circular dependency at module load time.
+    // auth/credentials writes to credentials.json when it exists, otherwise
+    // falls back to legacy mcpServers persistence — same call site, two
+    // outcomes, same end result for callers.
+    const { persistToConfig } = require('../../auth/credentials');
     persistToConfig({
       LARK_USER_ACCESS_TOKEN: this._uat,
       LARK_USER_REFRESH_TOKEN: this._uatRefresh,

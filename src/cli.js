@@ -33,6 +33,9 @@ switch (cmd) {
     }
     break;
   }
+  case 'migrate':
+    migrate();
+    break;
   case 'help':
   case '--help':
   case '-h':
@@ -54,6 +57,9 @@ Commands:
   oauth       Run OAuth flow to obtain user_access_token
   status      Check authentication status
   keepalive   Refresh cookie + UAT to prevent expiration (for cron jobs)
+  migrate     One-time consolidation: copy creds from harness configs into
+              ~/.feishu-user-plugin/credentials.json (single source of truth).
+              Dry-run by default. Add --confirm to actually write.
   help        Show this help
 
 Setup options:
@@ -78,17 +84,23 @@ Auto-renewal (optional):
 `);
 }
 
+function migrate() {
+  const { migrate: runMigrate } = require('./auth/credentials');
+  const confirm = process.argv.includes('--confirm');
+  const result = runMigrate({ dryRun: !confirm });
+  process.exit(result.ok ? 0 : 1);
+}
+
 async function keepalive() {
   const { LarkUserClient } = require('./clients/user');
   const { LarkOfficialClient } = require('./clients/official');
-  const { findMcpConfig, persistToConfig } = require('./config');
+  const { readCredentials, persistToConfig } = require('./auth/credentials');
 
-  const found = findMcpConfig();
-  if (!found) {
-    console.error('[keepalive] No config found. Run: npx feishu-user-plugin setup');
+  const creds = readCredentials();
+  if (!creds.LARK_COOKIE && !creds.LARK_APP_ID) {
+    console.error('[keepalive] No credentials found. Run: npx feishu-user-plugin setup');
     process.exit(1);
   }
-  const creds = found.serverEnv;
   let ok = true;
 
   // 1. Refresh Cookie
@@ -135,15 +147,24 @@ async function checkStatus() {
   const { LarkUserClient } = require('./clients/user');
   const { LarkOfficialClient } = require('./clients/official');
   const { findMcpConfig } = require('./config');
+  const { readCanonical, getActiveProfileName, listProfileNames, readCredentials } = require('./auth/credentials');
 
+  const canonical = readCanonical();
   const found = findMcpConfig();
-  const creds = found ? found.serverEnv : {};
+  const creds = readCredentials();
 
   console.log('=== feishu-user-plugin Auth Status ===\n');
-  if (found) {
-    console.log(`Config: ${found.configPath}${found.projectPath ? ` (project: ${found.projectPath})` : ''}`);
+  if (canonical) {
+    const path = require('path');
+    const os = require('os');
+    console.log(`Source: ${path.join(os.homedir(), '.feishu-user-plugin', 'credentials.json')} (canonical)`);
+    console.log(`Active profile: ${getActiveProfileName()}`);
+    console.log(`Available profiles: ${listProfileNames().join(', ')}`);
+  } else if (found) {
+    console.log(`Source: ${found.configPath}${found.projectPath ? ` (project: ${found.projectPath})` : ''} (legacy)`);
+    console.log('Tip: run `npx feishu-user-plugin migrate --confirm` to consolidate creds into ~/.feishu-user-plugin/credentials.json.');
   } else {
-    console.log('Config: NOT FOUND (run: npx feishu-user-plugin setup)');
+    console.log('Source: NOT FOUND (run: npx feishu-user-plugin setup)');
   }
   console.log('');
 

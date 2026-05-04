@@ -26,8 +26,11 @@ src/
 ├── config.js                    # MCP-config discovery + atomic persistence
 │                                #   (deferred split into config/ → Phase B)
 ├── auth/
-│   └── credentials.js           # Phase A stub — re-exports config.
-│                                #   Phase B replaces with single-source-of-truth file.
+│   └── credentials.js           # Single-source-of-truth credentials API.
+│                                #   Reads ~/.feishu-user-plugin/credentials.json
+│                                #   (atomic, 0600). Falls back to legacy
+│                                #   process.env / mcpServers discovery for
+│                                #   v1.3.6 users until they run `migrate`.
 ├── clients/
 │   ├── user.js                  # Cookie + protobuf user-identity client
 │   └── official/
@@ -87,13 +90,29 @@ src/
 
 ### Adding a new credential / auth concept
 
-- For now (until Phase B): Cookie heartbeat lives in `clients/user.js`; UAT refresh + file lock lives in `clients/official/base.js`. Don't extract them yet.
-- Phase B moves all of this into `src/auth/{cookie,uat}.js` as part of the single-source-of-truth credentials work. Hold any auth refactors until then.
+- Credentials API: `src/auth/credentials.js`. Use `readCredentials()` /
+  `persistToConfig()` for the back-compat surface, or `readCanonical()` /
+  `getActiveProfileEnv()` / `setActiveProfile()` for canonical access. The
+  schema is documented at `docs/CREDENTIALS-FORMAT.md`.
+- Cookie heartbeat still lives inline in `clients/user.js` and calls
+  `persistToConfig` from auth/credentials. UAT refresh + cross-process file
+  lock still lives in `clients/official/base.js` and calls
+  `readCredentials` + `persistToConfig` from auth/credentials. Both will
+  be extracted into `src/auth/{cookie,uat}.js` once they've been stable
+  through one or two release cycles in the new persistence shape.
 
 ### Adding a new config / setup behaviour
 
-- Today: `src/config.js` (one file) and `src/setup.js` (the CLI wizard) own everything.
-- Phase B splits this into `config/discovery.js` + `config/persistence.js` + `config/setup.js` as part of the credentials migration. Hold splits until then.
+- `src/config.js` owns legacy MCP-config discovery (`findMcpConfig`,
+  `writeNewConfig`, `_atomicWrite` for ~/.claude.json / ~/.codex/config.toml /
+  .mcp.json) — this is where harness-specific JSON/TOML knowledge lives.
+- `src/auth/credentials.js` is the canonical credentials surface; it
+  delegates to `config.js` only for legacy fallback (when no
+  `~/.feishu-user-plugin/credentials.json` exists).
+- `src/setup.js` is the CLI wizard. Adding a new setup behaviour: extend
+  setup.js + writeNewConfig (config.js) for the harness-write path; teach
+  auth/credentials.js if the new behaviour also needs to round-trip through
+  credentials.json.
 
 ### Adding a cross-cutting helper
 
@@ -131,12 +150,17 @@ If a feature genuinely doesn't fit any domain (e.g. WebSocket event subscription
 
 Every refactor commit must run `npm run smoke` and exit 0. If a commit intentionally adds/removes/renames tools or changes a schema, run `npm run smoke:baseline` to update `tests/baseline/*.json` in the same commit, with a clear "schema delta" subject line.
 
-## Phase A Deferrals (work that belongs in Phase B)
+## Phase B Deferrals (residual cleanup, low priority)
 
-The following items from the original v1.3.7 phase A plan were deferred because Phase B's single-source-credentials migration rewrites the same files:
+The following extracts are still deferred — they are pure code-motion and
+don't change behaviour, so they were postponed to keep the credentials
+migration PR small:
 
-- `src/auth/uat.js` — extracting UAT refresh + cross-process file lock from `clients/official/base.js`
-- `src/auth/cookie.js` — extracting heartbeat + persistence from `clients/user.js`
-- `src/config/{discovery,persistence,setup}.js` — splitting `config.js` by responsibility
-
-`src/auth/credentials.js` exists as a stub re-exporting `src/config` so callers can target the canonical path now and the Phase B implementation slots in without further moves.
+- `src/auth/uat.js` — extracting UAT refresh + cross-process file lock from
+  `clients/official/base.js`. The methods already write through
+  `auth/credentials.js`, so the extract is just file motion.
+- `src/auth/cookie.js` — extracting the heartbeat scheduler from
+  `clients/user.js`. Same status — delegating call already in place.
+- `src/config/{discovery,persistence,setup}.js` — splitting `config.js`
+  by responsibility. Lower priority since `config.js` is now mostly a
+  legacy fallback target rather than a primary surface.

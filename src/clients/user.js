@@ -93,8 +93,10 @@ class LarkUserClient {
     this._heartbeatTimer = setInterval(async () => {
       try {
         await this._getCsrfToken();
-        // Lazy require to avoid circular dependency at module load time
-        const { persistToConfig } = require('../config');
+        // Lazy require to avoid circular dependency at module load time.
+        // auth/credentials writes to credentials.json (single source of truth)
+        // when it exists; falls back to legacy mcpServers persistence otherwise.
+        const { persistToConfig } = require('../auth/credentials');
         persistToConfig({ LARK_COOKIE: this.cookieStr });
         console.error('[feishu-user-plugin] Cookie heartbeat: session refreshed and persisted');
       } catch (e) {
