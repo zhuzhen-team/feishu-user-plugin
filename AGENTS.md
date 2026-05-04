@@ -26,60 +26,89 @@ Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUM
 
 ## Tool Categories (80 tools)
 
-### User Identity — Messaging (reverse-engineered, cookie-based)
-- `send_to_user` — Search user + send text (one step, most common). Returns candidates if multiple matches.
-- `send_to_group` — Search group + send text (one step). Returns candidates if multiple matches.
-- `batch_send` — Fan-out send to multiple targets in one call (text/image/file/post). Each target {type, id, content, via?} dispatches sequentially with throttling, returns per-target ok/error.
-- `send_as_user` — Send text to any chat by ID, supports reply threading (root_id/parent_id)
-- `send_image_as_user` — Send image (requires image_key from `upload_image`)
-- `send_file_as_user` — Send file (requires file_key from `upload_file`)
-- `send_post_as_user` — Send rich text with title + formatted paragraphs. Elements: `{tag:"text"}`, `{tag:"a",href,text}`, `{tag:"at",userId,name}`. **@-mentions trigger real notifications** (fixed by registering AT element IDs in RichText.atIds field 6 — reverse-engineered from Feishu Web bundle's AtProperty + RichText schemas).
-- `send_as_user` / `send_to_user` / `send_to_group` — plain text sends now accept optional `ats: [{userId, name}]`; the text must contain the `@<name>` marker for each entry. The marker is spliced into a real AT element so the mentioned user is notified. Identity is the cookie user (not bot).
-- **Cookie sends accept oc_xxx chat IDs (v1.3.7 C1.4)**: `send_as_user`, `send_image_as_user`, `send_file_as_user`, `send_post_as_user`, `send_card_as_user`, and `batch_send` previously required numeric chat IDs from `create_p2p_chat` / cookie search. They now auto-resolve `oc_xxx` via `getChatInfo(name) → cookie search(name) → numeric id` and cache the mapping. Numeric IDs still work and skip the resolver. If resolution fails (chat not in your search index, no group with matching name), the tool throws a clear error with remediation guidance.
+Per-tool descriptions live in each tool's MCP `inputSchema.description`. This section lists names + cross-domain caveats only.
 
-### User Identity — Contacts & Info
-- `search_contacts` — Search users/groups by name
-- `create_p2p_chat` — Create/get P2P chat
-- `get_chat_info` — Group details (name, members, owner). Supports both oc_xxx and numeric chat_id (Official API + protobuf fallback)
-- `get_user_info` — User display name lookup (official API first, cookie cache fallback)
-- `get_login_status` — Check cookie, app, and UAT status
+### User Identity — Messaging (cookie protobuf, 8 tools)
+`send_to_user` / `send_to_group` / `send_as_user` / `send_image_as_user` / `send_file_as_user` / `send_post_as_user` / `send_card_as_user` / `batch_send`
 
-### User OAuth UAT Tools (P2P chat reading + user-identity creation)
-- `read_p2p_messages` — Read P2P (direct message) chat history. chat_id accepts both numeric IDs (from create_p2p_chat) and oc_xxx format. Returns newest messages first by default.
-- `list_user_chats` — List group chats the user is in. Note: API only returns groups, not P2P. For P2P, use: `search_contacts` → `create_p2p_chat` → `read_p2p_messages`.
-- **All docx + bitable + drive create/read/write tools are UAT-first**: when UAT is configured, every operation (create/edit/delete doc blocks, bitable tables/fields/views/records, drive folders) tries the user's token first and falls back to app token on failure. This keeps resources consistently owned by the user and avoids 403 errors when the app can't access user-created resources. Read-only tools (e.g. `read_doc`, `get_doc_blocks`, `manage_bitable_table(action=list)`) are also UAT-first so user-owned resources remain readable.
+- All cookie sends auto-resolve `oc_xxx` chat IDs to numeric since v1.3.7 (C1.4: `getChatInfo → search → numeric`, cached).
+- Plain-text sends accept `ats:[{userId,name}]` — the marker `@<name>` must appear in `text`; spliced into a real AT element that triggers notifications.
+- `send_post_as_user` paragraphs accept `{tag:"text"}` / `{tag:"a",href,text}` / `{tag:"at",userId,name}` elements; `at` element triggers a real notification.
+- `send_image_as_user` is **broken via cookie protobuf** (HTTP 400 — wire format incomplete). Workaround: `send_message_as_bot(msg_type="image")`. Wire-format reverse-engineering deferred to v1.3.8. See Known Limitations.
 
-### Official API Tools (app credentials)
-- `list_chats` / `read_messages` — Chat history (read_messages accepts chat name, oc_ ID, or numeric ID; auto-resolves via bot's group list → im.chat.search → search_contacts). **Auto-falls back to UAT for external groups the bot cannot access.** Returns newest messages first by default. Messages include sender names. **v1.3.5**: `merge_forward` messages now auto-expand into their child messages (2 images + 4 texts, with original sender / time / origin chat preserved); text messages get `urls[]` + `feishuDocs[]` extracted so agents can feed them straight into `read_doc` / WebFetch. Disable expansion with `expand_merge_forward=false`.
-- `send_message_as_bot` — Bot sends message to any chat (text, post, interactive, etc.)
-- `reply_message` / `forward_message` — Message operations (as bot). `forward_message` accepts `receive_id_type` (chat_id/open_id/union_id/user_id/email; auto-detects when omitted by inspecting the receive_id prefix).
-- `delete_message` / `update_message` — Recall or edit bot's own messages. `update_message` only supports `msg_type=text` or `interactive` (Feishu API limit; other types are rejected with a clear error before hitting the API).
-- `add_reaction` / `delete_reaction` — Emoji reactions on messages
-- `pin_message` — Pin or unpin a message (pinned=true/false)
-- `create_group` / `update_group` — Create and manage group chats
-- `list_members` / `manage_members` — Group membership (manage_members: action=add/remove, member_id_type=open_id|union_id|user_id — default open_id; pass union_id/user_id explicitly when your member_ids use those formats, otherwise Feishu rejects with code 9499)
-- `search_docs` / `read_doc` / `get_doc_blocks` / `create_doc` — Document operations
-- `manage_doc_block(action=create|update|delete)` — Document content editing (v1.3.7 consolidates v1.3.6 create_doc_block / update_doc_block / delete_doc_blocks). Image + file shortcuts (`image_path`/`image_token`/`file_path`/`file_token`) flow through unchanged.
-- `manage_bitable_app(action=create|copy|get_meta)` — Bitable app management. v1.3.7 consolidates create_bitable / copy_bitable / get_bitable_meta.
-- `manage_bitable_table(action=list|create|update|delete)` — Table CRUD + rename.
-- `manage_bitable_field(action=list|create|update|delete)` — Field (column) management. Feishu requires `type` for both create AND update (rename).
-- `manage_bitable_view(action=list|create|delete)` — Views (grid / kanban / gallery / form / gantt / calendar).
-- `manage_bitable_record(action=search|get|create|update|delete)` — Record CRUD. create/update/delete accept arrays (single or up to 500 per call).
-- `list_wiki_spaces` / `search_wiki` / `list_wiki_nodes` / `get_wiki_node` — Wiki read (v1.3.4 adds `get_wiki_node` which resolves a wiki node token to its underlying `obj_type` + `obj_token`, so you can feed the node straight into `read_doc`, bitable tools, etc. v1.3.7 hardens this: `get_wiki_node` now also accepts underlying `obj_token`s from `search_wiki` (synthesizes a node-shape so callers don't have to know which ID space they hold), and `list_wiki_spaces` is UAT-first with a `scopeHint` field surfaced when the bot returns an empty list — typically because `wiki:wiki:readonly` is missing or the bot was never invited.)
-- `create_wiki_node` / `update_wiki_node` / `move_wiki_node` / `copy_wiki_node` / `delete_wiki_node` — Wiki write (v1.3.7). UAT-first so resources are owned by the user. `create_wiki_node` builds a fresh `doc/sheet/bitable/mindnote/file/docx/slides` inside a wiki space (or a `node_type=shortcut` pointer to an existing node). `update_wiki_node` renames (only `title` is updatable via wiki API; content edits go through docx/bitable/sheet tools). `move_wiki_node` and `copy_wiki_node` accept `target_parent_token` + optional `target_space_id` to re-parent within the same space or migrate to another. `delete_wiki_node` calls `DELETE /open-apis/wiki/v2/spaces/{space_id}/nodes/{token}` via raw REST (the SDK doesn't type it); **only the wiki node pointer is removed — the underlying drive resource is NOT deleted**, follow up with `manage_drive_file(action=delete, type=...)` if you also want the resource gone.
-- `list_files` / `create_folder` — Drive
-- `manage_drive_file(action=copy|move|delete)` — Drive file operations (v1.3.7 consolidates v1.3.6 copy_file / move_file / delete_file). UAT-first. `type` is always required (`file/folder/docx/sheet/bitable/mindnote/slides`) — Feishu rejects with 1061002 / 1062501 otherwise.
-- `upload_image` / `upload_file` — Upload image/file, returns key for send_image/send_file
-- `upload_drive_file` — Upload a local file into a Drive folder (`drive/v1/files/upload_all`, `parent_type=explorer`). Returns `file_token` + `url`. If `wiki_space_id` is provided, the upload is followed by `attachToWiki(obj_type=file)` so the file lands as a Wiki node atomically. UAT-first with bot fallback.
-- `upload_bitable_attachment` — Upload a local file as a Bitable attachment (`drive/v1/medias/upload_all` with `parent_type=bitable_image` or `bitable_file`). Returns `file_token` to write into an Attachment-type field via `manage_bitable_record(action=create|update, records=[{fields:{<attachment_field>:[{file_token:"..."}]}}])`.
-- `send_card_as_user` — Send a Feishu interactive card. **v1.3.6 default routes through bot identity** (the `as_user` suffix is reserved for the v1.3.7 reverse-engineered cookie path; default flips when that lands). Pass `card` JSON; `via="user"` returns an explicit deferred error in v1.3.6.
-- `download_message_resource` — Download a message-attached image OR file. v1.3.7 (C2.4) consolidates v1.3.6 download_image (message-mode) + download_file. Args: `message_id`, `key` (image_key or file_key), `kind=image|file`, optional `save_path`. **Payloads > 2 MiB MUST pass save_path** — the Anthropic API rejects responses > 5 MB; we cap at 2 MiB so the inline image / base64 has multipart headroom. Tries UAT first, falls back to app. **merge_forward children**: use the child's `parentMessageId` (NOT the child id) — Feishu returns `File not in msg` with the child id.
-- `download_doc_image` — Download an image embedded in a docx document so the model sees pixels. Args: `image_token` (from `get_doc_blocks` image block), optional `doc_token` (native id / wiki node / Feishu URL — recommended for permission scoping), optional `save_path`. Same 2 MiB inline cap as `download_message_resource`. UAT-first.
-- `list_user_okrs` / `get_okrs` / `list_okr_periods` — OKR read. UAT-first (works for the authenticated user's OKRs) with app fallback when OKR scope is granted.
-- `create_okr_progress_record` / `list_okr_progress_records` / `delete_okr_progress_record` — OKR progress writes (v1.3.7). UAT-first. Requires `okr:okr.content:write` scope. `create_okr_progress_record` accepts a simplified `content_text` (auto-wrapped into the Feishu block schema) plus optional `source_title` / `source_url` / `progress_percent`. `list_okr_progress_records` extracts progress_record IDs from `get_okrs` since Feishu has no native list endpoint.
-- `list_calendars` / `list_calendar_events` / `get_calendar_event` — Calendar read. UAT-first (primary + shared + subscribed); app identity only sees calendars the bot was explicitly invited to.
-- `create_calendar_event` / `update_calendar_event` / `delete_calendar_event` / `respond_calendar_event` / `get_freebusy` — Calendar write (v1.3.7). UAT-first. Requires `calendar:calendar.event:write` scope (re-run `npx feishu-user-plugin oauth` after enabling on the app console). `get_freebusy` is a query, not a write, but groups here for the calendar domain.
-- `list_tasks` / `get_task` / `create_task` / `update_task` / `complete_task` / `delete_task` / `manage_task_members` — Task v2 (new domain in v1.3.7). UAT-first. Requires `task:task` scope. v2 uses `task_guid` as the identifier (not numeric task_id like v1). `update_task` requires an explicit `update_fields` array (Feishu only patches the listed fields). `complete_task(completed=true|false)` is a convenience wrapper around `update_task` setting `completed_at`.
+### User Identity — Contacts & Info (5 tools)
+`search_contacts` / `create_p2p_chat` / `get_chat_info` / `get_user_info` / `get_login_status`
+
+- `get_chat_info` accepts both `oc_xxx` and numeric chat_id (Official API + protobuf fallback).
+
+### User OAuth UAT — P2P Chat (2 tools)
+`read_p2p_messages` / `list_user_chats`
+
+- `list_user_chats` returns **groups only** (Feishu API limit). For P2P chat list, use `search_contacts` → `create_p2p_chat`.
+- All docx / bitable / drive / wiki / OKR / calendar / tasks create+edit are UAT-first by default — UAT first, bot fallback, with ⚠ warning in response when forced to bot. Resources consistently owned by the caller.
+
+### Official API — IM (15 tools)
+`list_chats` / `read_messages` / `send_message_as_bot` / `reply_message` / `forward_message` / `delete_message` / `update_message` / `add_reaction` / `delete_reaction` / `pin_message` / `create_group` / `update_group` / `list_members` / `manage_members` / `download_message_resource`
+
+- `read_messages` resolves chat name → bot list → `im.chat.search` → cookie `search_contacts`. Auto-falls back to UAT for external groups. `merge_forward` auto-expands; text messages get `urls[]` + `feishuDocs[]` extracted (disable with `expand_merge_forward=false`).
+- `update_message` only supports `msg_type=text|interactive` (Feishu limit; rejected before API call).
+- `forward_message` auto-detects `receive_id_type` from prefix (`ou_`/`on_`/`email`/...).
+- `manage_members` requires `member_id_type` to match the IDs you pass (`open_id` default; pass `union_id`/`user_id` explicitly to avoid 9499).
+- `download_message_resource(kind=image|file)` MUST pass `save_path` when payload > 2 MiB (Anthropic 5 MB inline cap). For `merge_forward` children use `parentMessageId`, not child id.
+
+### Official API — Docs (5 tools)
+`search_docs` / `read_doc` / `get_doc_blocks` / `create_doc` / `manage_doc_block` / `download_doc_image`
+
+- `manage_doc_block(action=create)` has image (`image_path`/`image_token`) and file (`file_path`/`file_token`) shortcuts; FILE blocks (block_type=23) are auto-wrapped in VIEW container (block_type=33), plugin walks into the inner file block before `replace_file` PATCH.
+- `download_doc_image` same 2 MiB cap as `download_message_resource`.
+- All `document_id` / `app_token` accept native token / wiki node token / full Feishu URL (resolved via `getWikiNode`, 10 min cache).
+
+### Official API — Bitable (5 tools, v1.3.7 consolidation)
+`manage_bitable_app(action=create|copy|get_meta)` / `manage_bitable_table` / `manage_bitable_field` / `manage_bitable_view` / `manage_bitable_record` / `upload_bitable_attachment`
+
+- `manage_bitable_field(action=update)` requires `type` even when only renaming (Feishu API limit).
+- `manage_bitable_record` create/update/delete accept arrays (single or up to 500).
+- `manage_bitable_app(action=create)` accepts optional `wiki_space_id` (+ `wiki_parent_node_token`) for direct Wiki placement.
+- `upload_bitable_attachment` returns `file_token` → write into Attachment field via `manage_bitable_record(action=create|update, records=[{fields:{<field>:[{file_token:"..."}]}}])`.
+
+### Official API — Wiki (9 tools)
+`list_wiki_spaces` / `search_wiki` / `list_wiki_nodes` / `get_wiki_node` / `create_wiki_node` / `update_wiki_node` / `move_wiki_node` / `copy_wiki_node` / `delete_wiki_node`
+
+- `list_wiki_spaces` / `list_wiki_nodes` are UAT-first; bot path returns `scopeHint` when empty (typically `wiki:wiki:readonly` missing).
+- `get_wiki_node` accepts both wiki node tokens AND underlying `obj_token`s from `search_wiki` (synthesizes node-shape).
+- `update_wiki_node` only patches `title` (Feishu wiki API doesn't take content edits — those go through docx/bitable/sheet tools).
+- `delete_wiki_node` only removes the Wiki node pointer; underlying drive resource needs separate `manage_drive_file(action=delete)`.
+
+### Official API — Drive (5 tools)
+`list_files` / `create_folder` / `manage_drive_file(action=copy|move|delete)` / `upload_image` / `upload_file` / `upload_drive_file`
+
+- `manage_drive_file` requires `type` (`file/folder/docx/sheet/bitable/mindnote/slides`) — Feishu rejects with 1061002 / 1062501 otherwise.
+- `upload_drive_file` with `wiki_space_id` calls `attachToWiki(obj_type=file)` to place the upload as a Wiki node atomically.
+
+### Official API — OKR (6 tools)
+`list_user_okrs` / `get_okrs` / `list_okr_periods` / `create_okr_progress_record` / `list_okr_progress_records` / `delete_okr_progress_record`
+
+- Writes need `okr:okr.content:write` scope.
+- `list_okr_progress_records` extracts triples from `get_okrs` (Feishu has no native list endpoint).
+- OKR objective/key-result CRUD doesn't exist in Feishu's open API.
+
+### Official API — Calendar (8 tools)
+`list_calendars` / `list_calendar_events` / `get_calendar_event` / `create_calendar_event` / `update_calendar_event` / `delete_calendar_event` / `respond_calendar_event` / `get_freebusy`
+
+- Writes need `calendar:calendar.event:write` scope.
+- UAT-first for read (primary + shared + subscribed); bot only sees calendars it was explicitly invited to.
+
+### Official API — Tasks v2 (7 tools, v1.3.7 new domain)
+`list_tasks` / `get_task` / `create_task` / `update_task` / `complete_task` / `delete_task` / `manage_task_members`
+
+- Identifier is `task_guid`, not v1 numeric `task_id`.
+- `update_task` requires explicit `update_fields=["summary","due","completed_at",...]` array — Feishu only patches listed fields.
+- Needs `task:task` scope.
+
+### Plugin — Diagnostics & Profiles (3 tools)
+`get_login_status` / `list_profiles` / `switch_profile`
+
+- `switch_profile` invalidates cached client instances; next call rebuilds against the new profile. Multi-profile registered via `LARK_PROFILES_JSON` env or `credentials.json` profiles map.
 
 ## Usage Patterns
 
@@ -131,58 +160,11 @@ Whole new domain. Identifier is `task_guid` (not numeric task_id like v1). Requi
 6. `delete_task(task_guid)`.
 7. `manage_task_members(action=add|remove, task_guid, members=[{id,role:"assignee"|"follower",type?:"user",name?}])`.
 
-### External-group message read (hardened in v1.3.4)
-`read_messages` and `read_p2p_messages` now expose a `via` field in the response (`"bot"`, `"user"`, or `"contacts"`) so callers can tell which identity actually read the data. When bot fails with a known code (external tenant / no permission / not in chat) the plugin hops straight to UAT; transient errors (rate limit / 5xx / ECONNRESET / fetch timeout) retry once with a 2 s delay before falling back. When UAT isn't configured, the error message now tells the user to run `npx feishu-user-plugin oauth` instead of leaking the raw Feishu payload.
+### External-group message read
+`read_messages` / `read_p2p_messages` expose a `via` field (`"bot"`/`"user"`/`"contacts"`). On known bot failures (external tenant / no permission / not in chat) the plugin hops straight to UAT; transient errors (rate limit / 5xx / ECONNRESET / timeout) retry once with 2 s delay before falling back. Without UAT, the error points to `npx feishu-user-plugin oauth`.
 
-### Messaging
-- Send text as yourself → `send_to_user` or `send_to_group`
-- Send image → `upload_image` → `send_image_as_user`
-- Send file → `upload_file` → `send_file_as_user`
-- Send rich content → `send_post_as_user` (formatted text + links + real @-mentions via `{tag:"at",userId,name}`)
-- Send text with @-mentions (plain text) → `send_as_user` / `send_to_user` / `send_to_group` with `ats:[{userId,name}]` + text containing `@<name>` markers
-- Bot-identity @-mention alternative → `send_message_as_bot` with `<at user_id="ou_xxx">Name</at>` inline in content text
-- Reply as user in thread → `send_as_user` with root_id
-- Reply as bot → `reply_message` (official API)
-
-### Reading
-- Read any group chat history → `read_messages` with chat name or ID (auto-handles external groups via UAT fallback)
-- Read P2P chat history → `search_contacts` → `create_p2p_chat` → `read_p2p_messages`
-- Get chat details → `get_chat_info` (supports both oc_xxx and numeric ID)
-
-### Bitable (Multi-dimensional Tables)
-All bitable ops collapse into 5 `manage_bitable_*` tools (v1.3.7) — pick the action.
-- Create from scratch → `manage_bitable_app(action=create)` → `manage_bitable_table(action=create)` → `manage_bitable_field(action=create)`
-- Get info → `manage_bitable_app(action=get_meta)`
-- Duplicate → `manage_bitable_app(action=copy, name=..., folder_id?)`
-- Query → `manage_bitable_table(action=list)` → `manage_bitable_field(action=list)` → `manage_bitable_record(action=search, filter?, sort?, page_size?)`
-- Read single record → `manage_bitable_record(action=get, record_id=...)`
-- Records CRUD → `manage_bitable_record(action=create|update|delete, records|record_ids=[...])` (single or up to 500/call)
-- Fields → `manage_bitable_field(action=create|update|delete, ...)` — `type` required for both create AND update (rename)
-- Views → `manage_bitable_view(action=list|create|delete, view_type=grid|kanban|gallery|form|gantt|calendar)`
-
-### Group Management
-- Create a group → `create_group` with name and optional member open_ids
-- Add/remove members → `manage_members` with chat_id + member_ids + action (add/remove)
-- List members → `list_members`
-
-### Document Editing
-All block ops go through one tool: `manage_doc_block(action=create|update|delete, ...)`.
-- Create doc with content → `create_doc` → `manage_doc_block(action=create, parent_block_id=document_id, children=[...])`
-- Edit existing block → `get_doc_blocks` to find block_id → `manage_doc_block(action=update, block_id=..., update_body={...})`
-- Delete blocks → `manage_doc_block(action=delete, parent_block_id=..., start_index=..., end_index=...)`
-- Insert image → `manage_doc_block(action=create, parent_block_id=..., image_path=...)` (local file) or `image_token=...` (already uploaded). Three-step flow handled internally.
-- Insert file attachment (PDF/zip/xlsx/...) → `manage_doc_block(action=create, file_path=...)` or `file_token=...`. Feishu auto-wraps the FILE block (block_type=23) inside a VIEW container (block_type=33); the plugin walks into the inner file block automatically before the `replace_file` PATCH so the upload + attach succeed.
-- Replace existing image/file → `manage_doc_block(action=update, block_id=..., image_token=... | file_token=...)`.
-
-### Diagnostics
-- Diagnose issues → `get_login_status` first
-
-### Profiles (v1.3.6)
-Multi-account / multi-tenant support without restarting the MCP server:
-- `list_profiles` — see all profiles + the active one. Default profile uses top-level env vars; extras come from `LARK_PROFILES_JSON`.
-- `switch_profile(name)` — hot-swap credentials. Cached client instances are invalidated so the next call rebuilds against the new profile.
-
-To register more profiles, set `LARK_PROFILES_JSON` in the MCP env:
+### Multi-profile registration
+For more profiles beyond the default, set `LARK_PROFILES_JSON` in the MCP env (or use `credentials.json` profiles map):
 ```json
 {"alt": {"LARK_COOKIE":"...","LARK_APP_ID":"...","LARK_APP_SECRET":"...","LARK_USER_ACCESS_TOKEN":"...","LARK_USER_REFRESH_TOKEN":"..."}}
 ```
@@ -254,158 +236,53 @@ crontab -e
 
 ## Automated Cookie Setup via Playwright
 
-### Prerequisites
-Playwright MCP must be available. If not installed:
-> Run: `npx @anthropic-ai/claude-code mcp add playwright -- npx @anthropic-ai/mcp-server-playwright` then restart Claude Code.
+Prerequisite: Playwright MCP installed (`npx @anthropic-ai/claude-code mcp add playwright -- npx @anthropic-ai/mcp-server-playwright` then restart).
 
-### Automated Flow — FOLLOW EXACTLY, DO NOT IMPROVISE
+Procedure (three gotchas embedded — skip any and you'll fail):
 
-**Step 1: Clear existing browser session (MANDATORY)**
-
-Playwright MCP uses Edge's persistent profile. It may have a cached login from a DIFFERENT Feishu account. You MUST clear cookies first:
-
-```
-browser_run_code:
-  await context.clearCookies();
-```
-
-Then navigate:
-```
-browser_navigate: https://www.feishu.cn/messenger/
-```
-
-**Step 2: Wait for user to scan QR code**
-
-Take a screenshot to show the QR code:
-```
-browser_take_screenshot
-```
-
-Tell the user: "Please scan the QR code with Feishu mobile app to log in. Make sure you use the correct account."
-
-Poll with `browser_snapshot` every 5 seconds until the URL changes away from `/accounts/` (indicating login complete).
-
-**Step 3: Extract cookie — TWO-STEP approach (MANDATORY)**
-
-NEVER use `browser_run_code` output directly as the cookie string. Its output includes `### Result\n` markdown prefix, page snapshots, and console logs that contaminate the cookie.
-
-Step 3a — Store cookie in page context via `browser_run_code`:
-```js
-const cookies = await page.context().cookies('https://www.feishu.cn');
-const str = cookies.map(c => c.name + '=' + c.value).join('; ');
-await page.evaluate(s => { window.__COOKIE__ = s; }, str);
-return 'Stored ' + cookies.length + ' cookies, length=' + str.length;
-```
-
-Step 3b — Read the clean cookie string via `browser_evaluate`:
-```js
-window.__COOKIE__
-```
-
-This two-step approach ensures the cookie string is clean, with no markdown prefix or page content mixed in.
-
-**Step 4: Validate BEFORE writing (MANDATORY)**
-
-Check the cookie string:
-1. Must be pure ASCII — no Chinese characters, no markdown (`###`), no HTML
-2. Must contain `session=` and `sl_session=`
-3. Length should be 500-5000 characters. If >10000, it is contaminated — DO NOT write it.
-4. Must NOT start with `###` or contain `\n` followed by non-cookie content
-
-If validation fails: STOP. Debug the extraction. Do NOT write a bad cookie to config.
-
-**Step 5: Write cookie to config**
-
-Use `persistToConfig` or directly update the `LARK_COOKIE` field in `~/.claude.json` → `mcpServers` → `feishu-user-plugin` → `env`.
-
-**Step 6: Run OAuth for UAT (if not already configured)**
-
-```bash
-npx feishu-user-plugin oauth
-```
-
-This opens a browser for OAuth consent. After completion, tokens are auto-saved to `~/.claude.json`.
-
-**Step 7: Close browser and prompt restart**
-
-```
-browser_close
-```
-
-Tell user to restart Claude Code. Only ONE restart should be needed.
+1. **Clear cookies first.** Playwright MCP uses Edge's persistent profile and may have a cached login from a different account. Run `browser_run_code: await context.clearCookies();` then `browser_navigate: https://www.feishu.cn/messenger/`.
+2. **Wait for QR scan.** `browser_take_screenshot` to show the code; tell user to scan with Feishu mobile (and verify which account). Poll `browser_snapshot` until URL leaves `/accounts/`.
+3. **Two-step cookie extraction.** `browser_run_code` output contains markdown prefix + console logs that contaminate the cookie string. Stash via `page.evaluate(s => { window.__COOKIE__ = s; }, str)` then read clean via `browser_evaluate: window.__COOKIE__`.
+4. **Validate before writing.** Cookie must be pure ASCII (no Chinese, no `###`), contain `session=` AND `sl_session=`, length 500–5000 chars. If > 10000 it's contaminated — STOP, do not write.
+5. **Write to config.** Use `persistToConfig` or update `~/.claude.json` → `mcpServers.feishu-user-plugin.env.LARK_COOKIE`.
+6. **OAuth for UAT.** `npx feishu-user-plugin oauth` (browser consent flow, auto-saves tokens).
+7. **`browser_close` + tell user to restart.** One restart is enough.
 
 ## Troubleshooting Guide
 
-### If MCP disconnects mid-session
-Two known root causes, both fixed in v1.3.3:
+### Official API returns 401 / "token invalid" every time
+`LARK_APP_ID` is wrong or stale (most common: agent guessed/copied an unrelated APP_ID at install time). `get_login_status` reports `App credentials: INVALID — app_id=<x> rejected by Feishu`; MCP stderr logs `LARK_APP_ID=<x> was REJECTED`. **Fix**: re-run the canonical install prompt from `team-skills/plugins/feishu-user-plugin/README.md` (correct APP_ID + SECRET), restart.
 
-1. **stdout pollution** (partial fix in v1.3.1, fully closed in v1.3.3):
-   - `@larksuiteoapi/node-sdk`'s `defaultLogger.error` uses `console.log` (stdout). MCP uses stdout for JSON-RPC, so any stray write corrupts the transport and disconnects the client.
-   - v1.3.1 replaced the SDK's logger. v1.3.3 also globally redirects `console.log` / `console.info` → `console.error` at the top of `src/index.js` as defense-in-depth against ANY future dependency leaking to stdout.
+### MCP tools not available
+1. Config must be in **top-level** `~/.claude.json` `mcpServers`, NOT under `projects[*]`. For Codex: `~/.codex/config.toml` has `[mcp_servers.feishu-user-plugin]`.
+2. Restart after config changes; first call may briefly say "No such tool" while tools register — retry once.
 
-2. **unbounded fetch hangs** (fixed in v1.3.3):
-   - All raw `fetch` calls to `feishu.cn` / `internal-api-lark-api.feishu.cn` used to have no timeout. A stalled connection (ECONNRESET, slow DNS, upstream hang) would block a tool handler indefinitely; the MCP client times out the request, which some clients handle by tearing down the stdio transport — observed as "mid-session disconnect".
-   - Fix: `utils.js::fetchWithTimeout` with `AbortController`, 30s default. All `client.js` + `official.js` fetches go through it.
-   - If still happening: check for any `console.log` calls in server code (only `console.error` is safe), and grep for raw `await fetch(` — every one must go through `fetchWithTimeout`.
+### Cookie authentication fails
+- Browser-console `document.cookie` cannot access HttpOnly cookies (`session`, `sl_session`). Use DevTools Network tab → first request → Request Headers → Cookie. Or use Playwright two-step extraction (see above).
+- Playwright logs into the wrong account: ALWAYS `context.clearCookies()` before navigating.
 
-### If Official API tools return 401 / "token invalid" every time
-- **Likely cause**: `LARK_APP_ID` is wrong or stale. Observed in production: Claude Code auto-installed the plugin and guessed/copied a wrong APP_ID that doesn't match the team's real app (e.g. from an unrelated app, from someone else's machine, or hallucinated).
-- **Diagnosis**: `get_login_status` now reports `App credentials: INVALID — app_id=<x> rejected by Feishu (<code>: <msg>)`. MCP startup logs `[feishu-user-plugin] ERROR: LARK_APP_ID=<x> was REJECTED by Feishu` on stderr when this happens.
-- **Fix**: Re-run the canonical install prompt from `team-skills/plugins/feishu-user-plugin/README.md` which contains the correct APP_ID/SECRET, and restart Claude Code.
+### `read_messages` returns an error
+Error includes Feishu's actual code + description. Auto-falls back to UAT for external groups. Chat name resolution: bot's group list → `im.chat.search` → cookie `search_contacts`. If all three fail, pass `oc_xxx` or numeric ID directly.
 
-### If MCP tools are not available
-1. Check `~/.claude.json` — config must be in **top-level** `mcpServers`, not inside `projects[*]`
-2. For Codex: check `~/.codex/config.toml` has `[mcp_servers.feishu-user-plugin]` section
-3. Restart Claude Code / Codex after config changes
-4. After restart, tools may take a few seconds to register — if first call fails with "No such tool", wait and retry once
+### UAT refresh fails with `invalid_grant`
+Refresh token expired or revoked — auto-refresh cannot recover. **Fix**: `npx feishu-user-plugin oauth`, then restart Claude Code / Codex so running MCP processes load the new token.
 
-### If cookie authentication fails
-- `document.cookie` in browser console CANNOT access HttpOnly cookies (`session`, `sl_session`)
-- **Correct method**: Network tab → first request → Request Headers → Cookie → Copy value
-- **Best method**: Playwright two-step extraction (see above)
+v1.3.5+ hardening means the "6 MCP processes racing on UAT refresh and burning the token" case is fixed automatically:
+- Cross-process file lock at `~/.claude/feishu-uat-refresh.lock` (`O_CREAT|O_EXCL`, 30 s stale)
+- Lock holder re-reads persisted config inside the critical section, adopts a peer's fresh token if one was rotated
+- `get_login_status` does a real UAT health check (`listChatsAsUser({pageSize:1})`) — no more "configured but actually 401" surprises
 
-### If Playwright logs into the wrong Feishu account
-- Playwright uses Edge's persistent profile with cached sessions
-- **ALWAYS clear cookies first** with `context.clearCookies()` before navigating to feishu.cn
+### Multiple / duplicate MCP server processes
+Codex + Claude Code both can respawn the server per tool session without cleanup; 6 concurrent processes isn't unusual. v1.3.5 neutralises the damage (file lock above) but stale processes still hold memory. **Manual cleanup when you notice**: `pkill -f 'feishu-user-plugin/src/index.js'`. Also: a team-skills plugin must NOT ship `.mcp.json` — if both `~/.claude.json` and team-skills register the same MCP, you get duplicates; delete `.mcp.json` from the team-skills plugin dir.
 
-### If read_messages returns an error
-- Error messages include the actual Feishu error code and description
-- `read_messages` auto-falls back to UAT when bot API fails (e.g. external groups)
-- Chat name resolution: bot's group list → `im.chat.search` → `search_contacts` (cookie)
-- If all three strategies fail, provide the oc_xxx or numeric chat ID directly
+### `create_*` tool warns "UAT failed, created as BOT"
+UAT is failing (expired / scope missing / race), so the plugin fell back to bot. Resource is now owned by the shared bot, tenant-readable. **Fix**: `npx feishu-user-plugin oauth`, restart, delete the bot-owned copy and recreate.
 
-### If UAT refresh fails with "invalid_grant"
-- The refresh token has expired or been revoked — auto-refresh cannot recover this
-- **Fix**: Re-run OAuth: `npx feishu-user-plugin oauth`
-- Then restart Claude Code / Codex so running MCP server processes load the new token
-- **v1.3.5+ hardening** (no manual action required, fixes the common case):
-  - Cross-process file lock at `~/.claude/feishu-uat-refresh.lock` (`O_CREAT|O_EXCL`, 30 s stale detection) — at most one MCP process refreshes at a time.
-  - Inside the critical section the lock holder re-reads `~/.claude.json` to see if a peer already rotated the token; if so, it adopts the fresh token instead of consuming an already-invalidated refresh token.
-  - This closes the "Codex spawned 6 MCP servers, all shared the same refresh_token, all raced to refresh" failure mode observed on 2026-04-23.
-  - `get_login_status` now does a real UAT health check (calls `listChatsAsUser({pageSize:1})`) — no more "token configured but actually 401" surprises.
+### OAuth CLI fails with "Missing LARK_APP_ID"
+`oauth.js` reads from `~/.claude.json` MCP config (not `.env`). Run `npx feishu-user-plugin setup` first.
 
-### If multiple MCP server processes keep spawning
-- Observed on Codex + Claude Code when the client respawns the server for each tool session without cleaning up the previous one. 6 concurrent `src/index.js` processes is not unusual under heavy use.
-- v1.3.5 neutralises the damage (UAT refresh serialised via file lock) but the stale processes still consume memory.
-- **Manual cleanup when you notice**: `pkill -f 'feishu-user-plugin/src/index.js'` — the client will respawn one fresh process on the next tool call.
-
-### If a create_* tool warns "UAT failed, created as BOT"
-- v1.3.5 added an explicit `⚠️` warning to MCP responses whenever `_asUserOrApp` silently fell back to bot identity for a write (create_doc / manage_bitable_app(action=create) / create_folder / manage_doc_block(action=create) / ...). Before v1.3.5 this was silent and led to the "teammate can read my 'private' doc" issue.
-- **Cause**: your UAT is failing (expired / scope missing / race) so the plugin reached for bot credentials. The resulting resource is owned by the shared bot, tenant-readable by default, NOT by you.
-- **Fix**: run `npx feishu-user-plugin oauth` and restart Claude Code / Codex. If the resource needs to be yours, delete the bot-owned copy and recreate after UAT is valid.
-
-### If OAuth fails with "Missing LARK_APP_ID"
-- `oauth.js` reads credentials from `~/.claude.json` MCP config (not .env)
-- Run `npx feishu-user-plugin setup` first, then re-run OAuth
-
-### If two MCP servers are running (duplicate tools)
-- This happens when both `~/.claude.json` mcpServers AND a team-skills plugin have feishu-user-plugin
-- team-skills plugin should NOT have `.mcp.json` — it only provides skills and CLAUDE.md
-- Delete `.mcp.json` from the team-skills plugin directory if it exists
-
-### If list_user_chats doesn't return P2P chats
-- This is expected — the API only returns group chats
-- **Correct P2P flow**: `search_contacts` → `create_p2p_chat` → `read_p2p_messages`
+### `list_user_chats` doesn't return P2P chats
+Expected — Feishu API only returns groups. P2P flow: `search_contacts` → `create_p2p_chat` → `read_p2p_messages`.
 
 ## Architecture
 
@@ -484,10 +361,7 @@ When making ANY code change (new tools, bug fixes, features), update these in th
 For team-skills repo: see [Syncing to team-skills](#syncing-to-team-skills) above. Bottom line: `skills/` + `plugin.json` auto-sync via post-merge hook; team-skills README + SKILL.md still need manual edits per release.
 
 ### Keeping ROADMAP.md up to date
-- When completing a feature or fixing a bug, check the corresponding item in ROADMAP.md as `[x]` done
-- When discovering new bugs, limitations, or feature ideas during development, add them to the appropriate section in ROADMAP.md
-- When a version is released (tag pushed), move completed items under the "已完成" section with the version number
-- When researching a direction and deciding not to implement, add it to "已调研但暂不实施" with the reasoning
+ROADMAP.md is **forward-only** (open `[ ]` tasks for v1.3.8 / v1.4 candidates only). CHANGELOG.md owns the history of completed work. When you finish a task, **delete the line** — don't move it or check it off. When you discover new bugs / feature ideas, add to the matching section (A–I or v1.4). When you research a direction and rule it out, add to "已调研但暂不实施" with the reasoning.
 
 ### When adding new tools (post-v1.3.7 layout)
 1. Add the underlying API method to the right domain file:
@@ -578,11 +452,6 @@ feishu-user-plugin vX.Y.Z 发布
 **结尾**：不加 CHANGELOG 链接（v1.3.2 风格未含链接，群内读者不需要）。
 
 **发送前**：始终先用 `send_to_user` 或类似工具发给用户自己审核，或直接以文本形式贴在对话里等用户批准。用户说"发"才调 `send_post_as_user` 到目标群。
-
-### Testing a tool
-- For Official API tools: can test directly via MCP tool call or standalone script using `readCredentials()` from `src/config.js`
-- For Cookie tools: need active session, test via MCP tool call
-- Always verify `_safeSDKCall` handles the response format (multipart uploads return data at top level, not nested under `.data`)
 
 ## OAuth Scopes (when re-running `npx feishu-user-plugin oauth`)
 
