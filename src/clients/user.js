@@ -34,7 +34,10 @@ class LarkUserClient {
   }
 
   async init() {
-    this.proto = await protobuf.load(path.join(__dirname, '..', 'proto', 'lark.proto'));
+    // Path: clients/user.js → ../../proto/lark.proto. Phase A refactor moved
+    // the file from src/client.js to src/clients/user.js but didn't deepen the
+    // relative path, so cookie init would ENOENT. Fixed here as part of B2.
+    this.proto = await protobuf.load(path.join(__dirname, '..', '..', 'proto', 'lark.proto'));
     await this._getCsrfToken();
     await this._getUserInfo();
     if (!this.userId) {
