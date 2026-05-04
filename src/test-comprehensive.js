@@ -6,7 +6,7 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
-const { LarkUserClient } = require('./client');
+const { LarkUserClient } = require('./clients/user');
 const { LarkOfficialClient } = require('./official');
 
 const results = [];
@@ -247,7 +247,7 @@ async function testUAT() {
 
   // 3. End-to-end P2P flow: search → create_p2p → read_p2p_messages
   try {
-    const { LarkUserClient } = require('./client');
+    const { LarkUserClient } = require('./clients/user');
     const userClient = new LarkUserClient(process.env.LARK_COOKIE);
     await userClient.init();
     const results = await userClient.search('杨一可');

@@ -11,7 +11,7 @@ const path = require('path');
 // Local dev fallback: MCP clients inject env vars from config's env block at spawn time.
 // This dotenv line only matters when running locally with a .env file (e.g. during development).
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
-const { LarkUserClient } = require('./client');
+const { LarkUserClient } = require('./clients/user');
 const { LarkOfficialClient } = require('./official');
 const { resolveToObj, resolveToken, parseFeishuInput } = require('./resolver');
 
