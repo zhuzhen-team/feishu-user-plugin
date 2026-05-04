@@ -2,17 +2,7 @@ const lark = require('@larksuiteoapi/node-sdk');
 const { fetchWithTimeout } = require('./utils');
 const { classifyError } = require('./error-codes');
 const { buildEmptyImageBlock, buildReplaceImagePayload, buildEmptyFileBlock, buildReplaceFilePayload } = require('./doc-blocks');
-
-// Redirect all Lark SDK logs to stderr.
-// The SDK's defaultLogger.error uses console.log (stdout), which corrupts
-// MCP's JSON-RPC stdio transport and causes session disconnects.
-const stderrLogger = {
-  error: (...msg) => console.error('[lark-sdk][error]:', ...msg),
-  warn:  (...msg) => console.error('[lark-sdk][warn]:', ...msg),
-  info:  () => {},
-  debug: () => {},
-  trace: () => {},
-};
+const { stderrLogger } = require('./logger');
 
 class LarkOfficialClient {
   constructor(appId, appSecret) {

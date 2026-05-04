@@ -1,13 +1,5 @@
 #!/usr/bin/env node
-// MCP stdio protocol uses stdout for JSON-RPC. ANY accidental stdout write from
-// this process or its dependencies will corrupt the transport and disconnect the
-// client. v1.3.1 patched the Lark SDK's defaultLogger via a custom logger, but
-// that only covers one dependency. This global redirect is defense-in-depth:
-// any present or future module that calls console.log (or console.info) goes to
-// stderr instead, so MCP stdio stays clean no matter what.
-// Do this BEFORE any other require() so even early log calls are captured.
-console.log = (...args) => console.error(...args);
-console.info = (...args) => console.error(...args);
+require('./logger'); // installs global stdout guard — MUST be first
 
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
