@@ -200,7 +200,20 @@ class LarkUserClient {
     if (rootId) req.rootId = rootId;
     if (parentId) req.parentId = parentId;
     const { packet, ok } = await this._gateway(5, 'PutMessageRequest', req, '5.7.0');
-    return { success: ok && (packet.status === 0 || packet.status == null), status: packet.status };
+    if (!ok) {
+      // The cookie protobuf gateway returns HTTP 400 when our wire format is
+      // missing required fields. Verified for IMAGE (v1.3.7 testing): the
+      // simple {imageKey} content payload is rejected — Feishu Web encodes
+      // images with extra metadata (image dimensions, mime type, etc.) that
+      // we don't have in proto/lark.proto. Reverse-engineering requires Chrome
+      // DevTools capture and is deferred to v1.3.8. Surface a clear error
+      // routing the user to send_message_as_bot, which works.
+      if (type === MsgType.IMAGE) {
+        throw new Error('send_image_as_user: Feishu cookie protobuf gateway rejected the IMAGE wire format (HTTP 400). User-identity image sends are not yet supported — wire format reverse-engineering is deferred to v1.3.8. Workaround: use send_message_as_bot(chat_id, msg_type="image", payload={image_key:"..."}).');
+      }
+      throw new Error(`_sendMsg: cookie protobuf gateway returned non-2xx for type=${type}. The wire format likely doesn't match what Feishu expects.`);
+    }
+    return { success: true, status: packet.status };
   }
 
   // --- Send Text Message ---
