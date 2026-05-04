@@ -253,6 +253,68 @@
     }
   },
   {
+    "name": "create_okr_progress_record",
+    "description": "[Official API + UAT, v1.3.7] Add a progress note to an OKR objective or key result. Feishu requires `source_title`, `source_url`, and a block-structured `content`; this tool exposes a simple `content_text` and auto-wraps it into the single-paragraph block format. Pass richer `content` directly if you need lists / mentions / docs links / images.",
+    "inputSchema": {
+      "properties": {
+        "content": {
+          "description": "Optional: full Feishu block structure ({blocks:[...]}). If provided, overrides content_text.",
+          "type": "object"
+        },
+        "content_text": {
+          "description": "Plain-text progress note. Auto-wrapped into the Feishu block format. Use `content` instead for rich text.",
+          "type": "string"
+        },
+        "progress_percent": {
+          "description": "Optional progress percent (0-100) to bump alongside the note.",
+          "type": "number"
+        },
+        "progress_status": {
+          "description": "Optional status code (Feishu enum: 1=on track, 2=at risk, 3=blocked, etc).",
+          "type": "number"
+        },
+        "source_title": {
+          "description": "Source label (default \"Progress update\"). Shown next to the note in the OKR UI.",
+          "type": "string"
+        },
+        "source_url": {
+          "description": "Source URL (default https://feishu.cn/). Feishu requires a URL even for plain notes.",
+          "type": "string"
+        },
+        "source_url_mobile": {
+          "description": "Optional mobile-specific source URL.",
+          "type": "string"
+        },
+        "source_url_pc": {
+          "description": "Optional PC-specific source URL.",
+          "type": "string"
+        },
+        "target_id": {
+          "description": "ID of the OKR objective or key result. Get from get_okrs response (`objective_list[].id` or `objective_list[].kr_list[].id`).",
+          "type": "string"
+        },
+        "target_type": {
+          "description": "1 = objective, 2 = key result. Pick based on which level target_id refers to.",
+          "type": "number"
+        },
+        "user_id_type": {
+          "description": "Type of user IDs in mentioned_user_list etc. (default open_id)",
+          "enum": [
+            "user_id",
+            "union_id",
+            "open_id"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_id",
+        "target_type"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "create_p2p_chat",
     "description": "[User Identity] Create or get a P2P (direct message) chat. Returns numeric chat_id.",
     "inputSchema": {
@@ -399,6 +461,22 @@
       },
       "required": [
         "message_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "delete_okr_progress_record",
+    "description": "[Official API + UAT, v1.3.7] Delete an OKR progress record by its progress_id (from list_okr_progress_records).",
+    "inputSchema": {
+      "properties": {
+        "progress_id": {
+          "description": "Progress record ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "progress_id"
       ],
       "type": "object"
     }
@@ -846,6 +924,31 @@
           "type": "string"
         }
       },
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_okr_progress_records",
+    "description": "[Official API + UAT, v1.3.7] List progress records for an OKR. Feishu has no native list endpoint — this tool calls get_okrs internally and walks the objective_list / kr_list to extract progress_record IDs (with their target_id and target_type). To read a record's full content, you currently need progressRecord.get (not yet wrapped).",
+    "inputSchema": {
+      "properties": {
+        "okr_id": {
+          "description": "OKR ID (from list_user_okrs).",
+          "type": "string"
+        },
+        "user_id_type": {
+          "description": "Pass-through to get_okrs (default open_id)",
+          "enum": [
+            "user_id",
+            "union_id",
+            "open_id"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "okr_id"
+      ],
       "type": "object"
     }
   },

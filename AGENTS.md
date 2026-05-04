@@ -24,7 +24,7 @@ The 9 Claude Code skills are also exposed as MCP prompts (`prompts/list` + `prom
 
 Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUMENTS` convention used by Claude Code skills). `status` has no arguments.
 
-## Tool Categories (76 tools)
+## Tool Categories (79 tools)
 
 ### User Identity — Messaging (reverse-engineered, cookie-based)
 - `send_to_user` — Search user + send text (one step, most common). Returns candidates if multiple matches.
@@ -75,6 +75,7 @@ Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUM
 - `download_message_resource` — Download a message-attached image OR file. v1.3.7 (C2.4) consolidates v1.3.6 download_image (message-mode) + download_file. Args: `message_id`, `key` (image_key or file_key), `kind=image|file`, optional `save_path`. **Payloads > 2 MiB MUST pass save_path** — the Anthropic API rejects responses > 5 MB; we cap at 2 MiB so the inline image / base64 has multipart headroom. Tries UAT first, falls back to app. **merge_forward children**: use the child's `parentMessageId` (NOT the child id) — Feishu returns `File not in msg` with the child id.
 - `download_doc_image` — Download an image embedded in a docx document so the model sees pixels. Args: `image_token` (from `get_doc_blocks` image block), optional `doc_token` (native id / wiki node / Feishu URL — recommended for permission scoping), optional `save_path`. Same 2 MiB inline cap as `download_message_resource`. UAT-first.
 - `list_user_okrs` / `get_okrs` / `list_okr_periods` — OKR read. UAT-first (works for the authenticated user's OKRs) with app fallback when OKR scope is granted.
+- `create_okr_progress_record` / `list_okr_progress_records` / `delete_okr_progress_record` — OKR progress writes (v1.3.7). UAT-first. Requires `okr:okr.content:write` scope. `create_okr_progress_record` accepts a simplified `content_text` (auto-wrapped into the Feishu block schema) plus optional `source_title` / `source_url` / `progress_percent`. `list_okr_progress_records` extracts progress_record IDs from `get_okrs` since Feishu has no native list endpoint.
 - `list_calendars` / `list_calendar_events` / `get_calendar_event` — Calendar read. UAT-first (primary + shared + subscribed); app identity only sees calendars the bot was explicitly invited to.
 - `create_calendar_event` / `update_calendar_event` / `delete_calendar_event` / `respond_calendar_event` / `get_freebusy` — Calendar write (v1.3.7). UAT-first. Requires `calendar:calendar.event:write` scope (re-run `npx feishu-user-plugin oauth` after enabling on the app console). `get_freebusy` is a query, not a write, but groups here for the calendar domain.
 - `list_tasks` / `get_task` / `create_task` / `update_task` / `complete_task` / `delete_task` / `manage_task_members` — Task v2 (new domain in v1.3.7). UAT-first. Requires `task:task` scope. v2 uses `task_guid` as the identifier (not numeric task_id like v1). `update_task` requires an explicit `update_fields` array (Feishu only patches the listed fields). `complete_task(completed=true|false)` is a convenience wrapper around `update_task` setting `completed_at`.
@@ -103,6 +104,11 @@ Write — `manage_doc_block(action=create)` has image shortcuts:
 2. `list_user_okrs(user_id=<open_id>, period_ids=[...])` — list the target user's OKRs.
 3. `get_okrs(okr_ids)` — batch fetch full objective + key result structure with progress + alignments.
 `user_id` is required — use your own open_id (from `get_login_status` / `search_contacts`) to read your own OKRs, or a colleague's open_id for theirs (subject to permissions).
+
+Write (v1.3.7, requires `okr:okr.content:write` scope):
+4. `create_okr_progress_record(target_id, target_type=1|2, content_text, source_title?, source_url?, progress_percent?)` — `target_type` is 1 for objectives, 2 for key results. `content_text` is auto-wrapped into Feishu's required block format; pass `content` directly for richer payloads (lists, mentions, docs links, gallery).
+5. `list_okr_progress_records(okr_id)` — extracts `{progress_id, target_id, target_type}` triples from `get_okrs` (Feishu has no native list endpoint).
+6. `delete_okr_progress_record(progress_id)`.
 
 ### Calendar
 1. `list_calendars` — get your calendars; the one with `type=primary` is your personal calendar.
@@ -581,6 +587,7 @@ The v1.3.4 tools require additional scopes on the app + UAT:
 | Feature | Scopes to enable on app + include in OAuth |
 |---------|-------------------------------------------|
 | OKR read | `okr:okr:readonly`, `okr:period:read` |
+| OKR progress write (v1.3.7: create/delete_okr_progress_record) | `okr:okr.content:write` |
 | Calendar read | `calendar:calendar:readonly`, `calendar:calendar.event:read` |
 | Calendar write (v1.3.7: create/update/delete/respond_calendar_event) | `calendar:calendar.event:write` |
 | Tasks v2 (v1.3.7: list/get/create/update/complete/delete_task, manage_task_members) | `task:task` |
