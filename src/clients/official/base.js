@@ -1047,19 +1047,6 @@ class LarkOfficialClient {
     return { taskId: res.data.task_id };
   }
 
-  // --- Contact ---
-
-  async findUserByIdentity({ emails, mobiles } = {}) {
-    const data = {};
-    if (emails) data.emails = Array.isArray(emails) ? emails : [emails];
-    if (mobiles) data.mobiles = Array.isArray(mobiles) ? mobiles : [mobiles];
-    const res = await this._safeSDKCall(
-      () => this.client.contact.user.batchGetId({ data, params: { user_id_type: 'open_id' } }),
-      'findUser'
-    );
-    return { userList: res.data.user_list || [] };
-  }
-
   // --- Chat ID Resolution ---
 
   async listAllChats() {
@@ -1107,23 +1094,6 @@ class LarkOfficialClient {
       'chatSearch'
     );
     return res.data.items || [];
-  }
-
-  // --- User Name Resolution ---
-
-  async getUserById(userId, userIdType = 'open_id') {
-    if (this._userNameCache.has(userId)) return this._userNameCache.get(userId);
-    try {
-      const res = await this.client.contact.user.get({
-        path: { user_id: userId },
-        params: { user_id_type: userIdType },
-      });
-      if (res.code === 0 && res.data?.user?.name) {
-        this._userNameCache.set(userId, res.data.user.name);
-        return res.data.user.name;
-      }
-    } catch {}
-    return null;
   }
 
   async _populateSenderNames(items, userClient) {
@@ -1753,6 +1723,7 @@ class LarkOfficialClient {
 
 // Temporary mixin during phase A.4–A.11 — Task 12 will move these into
 // clients/official/index.js as a single composed export.
+Object.assign(LarkOfficialClient.prototype, require('./contacts'));
 Object.assign(LarkOfficialClient.prototype, require('./calendar'));
 Object.assign(LarkOfficialClient.prototype, require('./okr'));
 Object.assign(LarkOfficialClient.prototype, require('./wiki'));
