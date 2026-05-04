@@ -15,6 +15,15 @@ const { LarkUserClient } = require('./clients/user');
 const { LarkOfficialClient } = require('./clients/official');
 const { resolveToObj, resolveToken, parseFeishuInput } = require('./resolver');
 
+// External tool modules (extracted in v1.3.7 phase A). Each exports
+// { schemas: [...], handlers: { [name]: async (args, ctx) => MCPResponse } }.
+// They get merged into TOOLS at module load and dispatched via the switch
+// default branch. Task 28 will replace this hand-wired dispatch with
+// src/server.js's registry-based one.
+const EXTERNAL_TOOL_MODULES = [
+  require('./tools/profile'),
+];
+
 // --- Chat ID Mapper ---
 
 class ChatIdMapper {
@@ -193,23 +202,7 @@ function getOfficialClient() {
 // --- Tool Definitions ---
 
 const TOOLS = [
-  // ========== Profile management (v1.3.6) ==========
-  {
-    name: 'list_profiles',
-    description: '[Plugin] List all available identity profiles (sets of LARK_COOKIE/APP_ID/APP_SECRET/UAT). The "default" profile uses the top-level env vars; additional profiles come from LARK_PROFILES_JSON. Marks the currently active profile.',
-    inputSchema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'switch_profile',
-    description: '[Plugin] Switch the active identity profile. Subsequent tool calls use the new profile\'s credentials. Cached client instances are reset so the next call rebuilds against the new creds.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Profile name. "default" for top-level env vars; any key from LARK_PROFILES_JSON otherwise.' },
-      },
-      required: ['name'],
-    },
-  },
+  // ========== Profile management — extracted to src/tools/profile.js ==========
 
   // ========== User Identity — Send Messages ==========
   {
@@ -1257,6 +1250,11 @@ const TOOLS = [
 
 ];
 
+// Splice external tool schemas in alongside the legacy inline ones.
+// As Tasks 14–27 extract more handlers into src/tools/*.js, the inline TOOLS
+// array shrinks and EXTERNAL_TOOL_MODULES grows.
+for (const mod of EXTERNAL_TOOL_MODULES) TOOLS.push(...mod.schemas);
+
 // --- Server ---
 
 const server = new Server(
@@ -1295,24 +1293,7 @@ async function resolveDocId(input) {
 async function handleTool(name, args) {
 
   switch (name) {
-    // --- Profile management (v1.3.6) ---
-
-    case 'list_profiles': {
-      const profiles = loadProfileMap();
-      const all = ['default', ...Object.keys(profiles)];
-      return json({ active: currentProfile, profiles: all });
-    }
-    case 'switch_profile': {
-      const target = args.name;
-      const profiles = loadProfileMap();
-      const all = ['default', ...Object.keys(profiles)];
-      if (!all.includes(target)) return text(`Profile "${target}" not found. Available: ${all.join(', ')}. To add more, set LARK_PROFILES_JSON in your MCP env.`);
-      currentProfile = target;
-      // Invalidate cached client instances so the next call uses the new creds
-      userClient = null;
-      officialClient = null;
-      return text(`Switched to profile: ${target}`);
-    }
+    // Profile management → src/tools/profile.js (dispatched via default branch)
 
     // --- User Identity: Text Messaging ---
 
@@ -1916,8 +1897,29 @@ async function handleTool(name, args) {
     case 'get_calendar_event':
       return json(await getOfficialClient().getCalendarEvent(args.calendar_id, args.event_id));
 
-    default:
+    default: {
+      // Hand off to extracted tool modules. ctx exposes the closure state
+      // (clients, profile state, mappers) that handlers used to grab from the
+      // surrounding lexical scope. Task 28 will replace this default-branch
+      // dispatch with src/server.js's registry-based routing.
+      const ctx = {
+        getUserClient,
+        getOfficialClient,
+        listProfiles: () => ['default', ...Object.keys(loadProfileMap())],
+        getActiveProfile: () => currentProfile,
+        setActiveProfile: (n) => {
+          currentProfile = n;
+          userClient = null;
+          officialClient = null;
+        },
+        chatIdMapper,
+        resolveDocId,
+      };
+      for (const mod of EXTERNAL_TOOL_MODULES) {
+        if (mod.handlers[name]) return mod.handlers[name](args, ctx);
+      }
       return text(`Unknown tool: ${name}`);
+    }
   }
 }
 
