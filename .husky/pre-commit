@@ -1,6 +1,3 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh" 2>/dev/null || true
-
 bash scripts/sync-claude-md.sh
 
 # Version check only when relevant files staged
