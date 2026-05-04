@@ -24,7 +24,7 @@ The 9 Claude Code skills are also exposed as MCP prompts (`prompts/list` + `prom
 
 Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUMENTS` convention used by Claude Code skills). `status` has no arguments.
 
-## Tool Categories (64 tools)
+## Tool Categories (76 tools)
 
 ### User Identity — Messaging (reverse-engineered, cookie-based)
 - `send_to_user` — Search user + send text (one step, most common). Returns candidates if multiple matches.
@@ -76,6 +76,8 @@ Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUM
 - `download_file` — Download a file (msg_type=file) attachment. Returns base64 + mimeType + byte count; optional `save_path` writes the file to disk. Same parent-id rule for merge_forward children as download_image.
 - `list_user_okrs` / `get_okrs` / `list_okr_periods` — OKR read. UAT-first (works for the authenticated user's OKRs) with app fallback when OKR scope is granted.
 - `list_calendars` / `list_calendar_events` / `get_calendar_event` — Calendar read. UAT-first (primary + shared + subscribed); app identity only sees calendars the bot was explicitly invited to.
+- `create_calendar_event` / `update_calendar_event` / `delete_calendar_event` / `respond_calendar_event` / `get_freebusy` — Calendar write (v1.3.7). UAT-first. Requires `calendar:calendar.event:write` scope (re-run `npx feishu-user-plugin oauth` after enabling on the app console). `get_freebusy` is a query, not a write, but groups here for the calendar domain.
+- `list_tasks` / `get_task` / `create_task` / `update_task` / `complete_task` / `delete_task` / `manage_task_members` — Task v2 (new domain in v1.3.7). UAT-first. Requires `task:task` scope. v2 uses `task_guid` as the identifier (not numeric task_id like v1). `update_task` requires an explicit `update_fields` array (Feishu only patches the listed fields). `complete_task(completed=true|false)` is a convenience wrapper around `update_task` setting `completed_at`.
 
 ## Usage Patterns
 
@@ -106,6 +108,21 @@ Write — `manage_doc_block(action=create)` has image shortcuts:
 1. `list_calendars` — get your calendars; the one with `type=primary` is your personal calendar.
 2. `list_calendar_events(calendar_id, start_time=<unix_sec>, end_time=<unix_sec>)` — list events in a time window.
 3. `get_calendar_event(calendar_id, event_id)` — full details (attendees, location, attachments, meeting link).
+4. `create_calendar_event(calendar_id, summary, start_time, end_time, ...)` — `start_time` / `end_time` are objects: `{timestamp:"<unix-seconds>", timezone?:"Asia/Shanghai"}` or `{date:"YYYY-MM-DD"}` for all-day. v1.3.7+ requires `calendar:calendar.event:write` scope.
+5. `update_calendar_event(calendar_id, event_id, ...patch)` — pass only the fields to change.
+6. `delete_calendar_event(calendar_id, event_id, need_notification?)` — pass `meeting_chat_id` to also dissolve the linked meeting chat if any.
+7. `respond_calendar_event(calendar_id, event_id, rsvp_status=accept|decline|tentative)` — RSVP as the current UAT identity.
+8. `get_freebusy(time_min, time_max, user_ids=[...])` — freebusy windows in RFC3339; useful for finding meeting slots.
+
+### Tasks (v2, v1.3.7)
+Whole new domain. Identifier is `task_guid` (not numeric task_id like v1). Requires `task:task` scope.
+1. `list_tasks(completed?, type?)` — current user's tasks, paginated.
+2. `get_task(task_guid)` — full details.
+3. `create_task(summary, due?, members?, ...)` — at minimum `summary`; `due` is `{timestamp:"<unix-millis>", is_all_day?}`.
+4. `update_task(task_guid, update_fields=["summary","due","completed_at"], task={...})` — Feishu only patches the listed fields.
+5. `complete_task(task_guid, completed=true|false)` — convenience for the completed_at toggle.
+6. `delete_task(task_guid)`.
+7. `manage_task_members(action=add|remove, task_guid, members=[{id,role:"assignee"|"follower",type?:"user",name?}])`.
 
 ### External-group message read (hardened in v1.3.4)
 `read_messages` and `read_p2p_messages` now expose a `via` field in the response (`"bot"`, `"user"`, or `"contacts"`) so callers can tell which identity actually read the data. When bot fails with a known code (external tenant / no permission / not in chat) the plugin hops straight to UAT; transient errors (rate limit / 5xx / ECONNRESET / fetch timeout) retry once with a 2 s delay before falling back. When UAT isn't configured, the error message now tells the user to run `npx feishu-user-plugin oauth` instead of leaking the raw Feishu payload.
@@ -565,6 +582,8 @@ The v1.3.4 tools require additional scopes on the app + UAT:
 |---------|-------------------------------------------|
 | OKR read | `okr:okr:readonly`, `okr:period:read` |
 | Calendar read | `calendar:calendar:readonly`, `calendar:calendar.event:read` |
+| Calendar write (v1.3.7: create/update/delete/respond_calendar_event) | `calendar:calendar.event:write` |
+| Tasks v2 (v1.3.7: list/get/create/update/complete/delete_task, manage_task_members) | `task:task` |
 | Docx/Bitable/Drive media upload (`uploadMedia`, `upload_drive_file`, `upload_bitable_attachment`, `manage_doc_block(action=create, image_path|file_path|...)`) | `drive:drive`, `drive:file:upload`, `docs:document.media:upload`, `sheets:spreadsheet` (only for sheet uploads) |
 | Wiki attach (`move_docs_to_wiki`) | `wiki:wiki` (edit scope, the readonly one is insufficient) |
 

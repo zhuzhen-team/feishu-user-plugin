@@ -44,6 +44,26 @@
     }
   },
   {
+    "name": "complete_task",
+    "description": "[Official API + UAT, v1.3.7] Mark a task complete (or uncomplete it). Convenience wrapper around update_task with completed_at.",
+    "inputSchema": {
+      "properties": {
+        "completed": {
+          "description": "true → mark complete (uses Date.now()); false → uncomplete (sets completed_at to \"0\"). Default true.",
+          "type": "boolean"
+        },
+        "task_guid": {
+          "description": "Task GUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_guid"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "copy_wiki_node",
     "description": "[Official API] Deep-copy a Wiki node into a different location (and optionally a different space). Underlying resource is duplicated.",
     "inputSchema": {
@@ -72,6 +92,87 @@
       "required": [
         "node_token",
         "space_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "create_calendar_event",
+    "description": "[Official API + UAT, v1.3.7] Create a new calendar event. Requires `calendar:calendar.event:write` scope (re-run `npx feishu-user-plugin oauth` after enabling). The current identity (UAT-first) must have writer or owner permission on the calendar.\n\nTime fields: A time object: {timestamp:\"<unix-seconds>\", timezone?:\"Asia/Shanghai\"} OR {date:\"YYYY-MM-DD\"} for all-day events.",
+    "inputSchema": {
+      "properties": {
+        "attendee_ability": {
+          "description": "What attendees may do (optional)",
+          "enum": [
+            "none",
+            "can_see_others",
+            "can_invite_others",
+            "can_modify_event"
+          ],
+          "type": "string"
+        },
+        "calendar_id": {
+          "description": "Calendar ID (use list_calendars; primary calendar has type=\"primary\").",
+          "type": "string"
+        },
+        "description": {
+          "description": "Description / notes (optional)",
+          "type": "string"
+        },
+        "end_time": {
+          "description": "A time object: {timestamp:\"<unix-seconds>\", timezone?:\"Asia/Shanghai\"} OR {date:\"YYYY-MM-DD\"} for all-day events.",
+          "type": "object"
+        },
+        "free_busy_status": {
+          "description": "Whether this event blocks the calendar (optional)",
+          "enum": [
+            "busy",
+            "free"
+          ],
+          "type": "string"
+        },
+        "location": {
+          "description": "Optional. {name, address?, latitude?, longitude?}.",
+          "type": "object"
+        },
+        "need_notification": {
+          "description": "Whether to notify attendees on create (default true)",
+          "type": "boolean"
+        },
+        "recurrence": {
+          "description": "iCal RRULE recurrence string (optional)",
+          "type": "string"
+        },
+        "reminders": {
+          "description": "Reminders before event start (optional). E.g. [{minutes:15}].",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "start_time": {
+          "description": "A time object: {timestamp:\"<unix-seconds>\", timezone?:\"Asia/Shanghai\"} OR {date:\"YYYY-MM-DD\"} for all-day events.",
+          "type": "object"
+        },
+        "summary": {
+          "description": "Event title",
+          "type": "string"
+        },
+        "visibility": {
+          "description": "Event visibility (optional)",
+          "enum": [
+            "default",
+            "public",
+            "private"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "calendar_id",
+        "end_time",
+        "start_time",
+        "summary"
       ],
       "type": "object"
     }
@@ -168,6 +269,45 @@
     }
   },
   {
+    "name": "create_task",
+    "description": "[Official API + UAT, v1.3.7] Create a new task. summary is required; due / members / etc. are optional.",
+    "inputSchema": {
+      "properties": {
+        "description": {
+          "description": "Task description (optional)",
+          "type": "string"
+        },
+        "due": {
+          "description": "Due time (optional). {timestamp:\"<unix-millis>\", is_all_day?:true|false}",
+          "type": "object"
+        },
+        "extra": {
+          "description": "Free-form extra metadata (optional)",
+          "type": "string"
+        },
+        "members": {
+          "description": "Initial members (optional). Each: {id:\"<open_id>\", role:\"assignee\"|\"follower\", type?:\"user\", name?:\"...\"}",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "repeat_rule": {
+          "description": "Recurrence (optional, RFC5545 RRULE)",
+          "type": "string"
+        },
+        "summary": {
+          "description": "Task title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "summary"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "create_wiki_node",
     "description": "[Official API] Create a new Wiki node inside a space. obj_type picks the underlying resource (doc/sheet/bitable/mindnote/file/docx/slides). UAT-first so the resource is owned by the user.",
     "inputSchema": {
@@ -219,6 +359,35 @@
     }
   },
   {
+    "name": "delete_calendar_event",
+    "description": "[Official API + UAT, v1.3.7] Delete a calendar event. Requires `calendar:calendar.event:write` scope.",
+    "inputSchema": {
+      "properties": {
+        "calendar_id": {
+          "description": "Calendar ID",
+          "type": "string"
+        },
+        "event_id": {
+          "description": "Event ID",
+          "type": "string"
+        },
+        "meeting_chat_id": {
+          "description": "Optional. If the event has a linked meeting chat, pass its chat_id to also dissolve it.",
+          "type": "string"
+        },
+        "need_notification": {
+          "description": "Whether to notify attendees of the deletion (default true)",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "calendar_id",
+        "event_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "delete_message",
     "description": "[Official API] Recall/delete a message (bot can only delete its own messages).",
     "inputSchema": {
@@ -251,6 +420,22 @@
       "required": [
         "message_id",
         "reaction_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "delete_task",
+    "description": "[Official API + UAT, v1.3.7] Permanently delete a task.",
+    "inputSchema": {
+      "properties": {
+        "task_guid": {
+          "description": "Task GUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_guid"
       ],
       "type": "object"
     }
@@ -392,6 +577,50 @@
     }
   },
   {
+    "name": "get_freebusy",
+    "description": "[Official API + UAT, v1.3.7] Query freebusy windows for one or more users in a time range. Use to find a meeting slot. Requires `calendar:calendar:readonly` (already in default scope set).",
+    "inputSchema": {
+      "properties": {
+        "include_external_calendar": {
+          "description": "Include the user's synced external calendars (optional)",
+          "type": "boolean"
+        },
+        "only_busy": {
+          "description": "Only return busy windows (optional)",
+          "type": "boolean"
+        },
+        "room_ids": {
+          "description": "Optional meeting-room IDs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "time_max": {
+          "description": "RFC3339 end",
+          "type": "string"
+        },
+        "time_min": {
+          "description": "RFC3339 start, e.g. 2026-05-04T09:00:00+08:00",
+          "type": "string"
+        },
+        "user_ids": {
+          "description": "Open IDs to query (use get_login_status / search_contacts to look up).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "time_max",
+        "time_min",
+        "user_ids"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "get_login_status",
     "description": "Check cookie session validity and app credentials status. Also refreshes session.",
     "inputSchema": {
@@ -428,6 +657,22 @@
       },
       "required": [
         "okr_ids"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_task",
+    "description": "[Official API + UAT, v1.3.7] Get full details of a single task by GUID.",
+    "inputSchema": {
+      "properties": {
+        "task_guid": {
+          "description": "Task GUID (from list_tasks / create_task / Feishu URL)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_guid"
       ],
       "type": "object"
     }
@@ -601,6 +846,31 @@
     "description": "[Plugin] List all available identity profiles (sets of LARK_COOKIE/APP_ID/APP_SECRET/UAT). The \"default\" profile uses the top-level env vars; additional profiles come from LARK_PROFILES_JSON. Marks the currently active profile.",
     "inputSchema": {
       "properties": {},
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_tasks",
+    "description": "[Official API + UAT, v1.3.7] List the current user's tasks. Filter by completion or type.",
+    "inputSchema": {
+      "properties": {
+        "completed": {
+          "description": "true → only completed; false → only pending; omit → all",
+          "type": "boolean"
+        },
+        "page_size": {
+          "description": "Items per page (default Feishu default)",
+          "type": "number"
+        },
+        "page_token": {
+          "description": "Pagination token",
+          "type": "string"
+        },
+        "type": {
+          "description": "Filter by task type (optional). E.g. \"all\" / \"personal\".",
+          "type": "string"
+        }
+      },
       "type": "object"
     }
   },
@@ -1098,6 +1368,39 @@
     }
   },
   {
+    "name": "manage_task_members",
+    "description": "[Official API + UAT, v1.3.7] Add or remove members on a task. Members are objects {id:\"<open_id>\", role:\"assignee\"|\"follower\", type?:\"user\", name?:\"\"}.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "add or remove",
+          "enum": [
+            "add",
+            "remove"
+          ],
+          "type": "string"
+        },
+        "members": {
+          "description": "Members to add/remove. Each: {id, role, type?, name?}.",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "task_guid": {
+          "description": "Task GUID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "members",
+        "task_guid"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "move_wiki_node",
     "description": "[Official API] Move a Wiki node to a different parent (within the same space) or to a different space. Pass at least one of target_parent_token / target_space_id.",
     "inputSchema": {
@@ -1260,6 +1563,37 @@
       "required": [
         "message_id",
         "text"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "respond_calendar_event",
+    "description": "[Official API + UAT, v1.3.7] Respond to an event invitation. The current identity must be in the event's attendee list. Requires `calendar:calendar.event:write` scope.",
+    "inputSchema": {
+      "properties": {
+        "calendar_id": {
+          "description": "Calendar ID",
+          "type": "string"
+        },
+        "event_id": {
+          "description": "Event ID",
+          "type": "string"
+        },
+        "rsvp_status": {
+          "description": "Your response",
+          "enum": [
+            "accept",
+            "decline",
+            "tentative"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "calendar_id",
+        "event_id",
+        "rsvp_status"
       ],
       "type": "object"
     }
@@ -1609,6 +1943,85 @@
     }
   },
   {
+    "name": "update_calendar_event",
+    "description": "[Official API + UAT, v1.3.7] Patch fields on an existing calendar event. Pass only the fields you want to change. Requires `calendar:calendar.event:write` scope.",
+    "inputSchema": {
+      "properties": {
+        "attendee_ability": {
+          "enum": [
+            "none",
+            "can_see_others",
+            "can_invite_others",
+            "can_modify_event"
+          ],
+          "type": "string"
+        },
+        "calendar_id": {
+          "description": "Calendar ID",
+          "type": "string"
+        },
+        "description": {
+          "description": "New description (optional)",
+          "type": "string"
+        },
+        "end_time": {
+          "description": "A time object: {timestamp:\"<unix-seconds>\", timezone?:\"Asia/Shanghai\"} OR {date:\"YYYY-MM-DD\"} for all-day events.",
+          "type": "object"
+        },
+        "event_id": {
+          "description": "Event ID",
+          "type": "string"
+        },
+        "free_busy_status": {
+          "enum": [
+            "busy",
+            "free"
+          ],
+          "type": "string"
+        },
+        "location": {
+          "description": "New location object (optional)",
+          "type": "object"
+        },
+        "need_notification": {
+          "description": "Whether to notify attendees of the update",
+          "type": "boolean"
+        },
+        "recurrence": {
+          "description": "RRULE string",
+          "type": "string"
+        },
+        "reminders": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "start_time": {
+          "description": "A time object: {timestamp:\"<unix-seconds>\", timezone?:\"Asia/Shanghai\"} OR {date:\"YYYY-MM-DD\"} for all-day events.",
+          "type": "object"
+        },
+        "summary": {
+          "description": "New title (optional)",
+          "type": "string"
+        },
+        "visibility": {
+          "enum": [
+            "default",
+            "public",
+            "private"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "calendar_id",
+        "event_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "update_group",
     "description": "[Official API] Update group chat name or description.",
     "inputSchema": {
@@ -1657,6 +2070,35 @@
         "content",
         "message_id",
         "msg_type"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "update_task",
+    "description": "[Official API + UAT, v1.3.7] Patch a task. **update_fields** is required by Feishu — list which fields to update (e.g. [\"summary\",\"due\",\"completed_at\"]).",
+    "inputSchema": {
+      "properties": {
+        "task": {
+          "description": "Field values. E.g. {summary:\"new title\", due:{timestamp:\"1717939200000\"}}.",
+          "type": "object"
+        },
+        "task_guid": {
+          "description": "Task GUID",
+          "type": "string"
+        },
+        "update_fields": {
+          "description": "Required. Names of fields to update. E.g. [\"summary\",\"description\",\"due\",\"completed_at\",\"start\",\"extra\",\"repeat_rule\"]. Feishu only patches fields listed here, ignoring other keys in `task`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "task",
+        "task_guid",
+        "update_fields"
       ],
       "type": "object"
     }

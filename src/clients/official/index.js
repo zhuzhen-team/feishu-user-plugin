@@ -12,6 +12,7 @@ const { LarkOfficialClient } = require('./base');
 const DOMAINS = [
   require('./contacts'),
   require('./calendar'),
+  require('./tasks'),
   require('./groups'),
   require('./okr'),
   require('./wiki'),

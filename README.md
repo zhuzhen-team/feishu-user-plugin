@@ -3,10 +3,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-green.svg)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-purple.svg)](https://modelcontextprotocol.io)
-[![Tools](https://img.shields.io/badge/Tools-64-orange.svg)](#tools)
+[![Tools](https://img.shields.io/badge/Tools-76-orange.svg)](#tools)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**All-in-one Feishu/Lark MCP Server -- 64 tools, 9 skills, 3 auth layers for messaging, docs, bitable, calendar, tasks, drive, OKR, and more.**
+**All-in-one Feishu/Lark MCP Server -- 76 tools, 9 skills, 3 auth layers for messaging, docs, bitable, calendar, tasks, drive, OKR, and more.**
 
 The only MCP server that lets you send messages as your **personal identity** (not a bot), while also integrating the full official Feishu API. Works with Claude Code, Cursor, Windsurf, OpenClaw, and any MCP-compatible client.
 
@@ -337,7 +337,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 }
 ```
 
-## Tools (64 total)
+## Tools (76 total)
 
 ### User Identity -- Messaging (10 tools, cookie auth)
 
@@ -428,25 +428,32 @@ All docx / bitable tools' `document_id` / `app_token` parameter also accepts a W
 | `manage_bitable_record` | search / get / create / update / delete | Record CRUD. create/update/delete accept arrays — single record or up to 500/call. |
 | `upload_bitable_attachment` | — | Upload a file into a Bitable Attachment-type field. Returns `file_token` to write into the field as `[{file_token}]`. v1.3.6 |
 
-### Official API -- Calendar (5 tools)
+### Official API -- Calendar (8 tools, write tools v1.3.7)
 
 | Tool | Description |
 |------|-------------|
 | `list_calendars` | List accessible calendars |
-| `create_calendar_event` | Create a calendar event |
 | `list_calendar_events` | List events in a calendar |
-| `delete_calendar_event` | Delete an event |
-| `get_freebusy` | Check user availability |
+| `get_calendar_event` | Full event details |
+| `create_calendar_event` | Create an event (v1.3.7). Requires `calendar:calendar.event:write`. |
+| `update_calendar_event` | Patch event fields (v1.3.7) |
+| `delete_calendar_event` | Delete an event, optionally dissolve its meeting chat (v1.3.7) |
+| `respond_calendar_event` | RSVP as accept / decline / tentative (v1.3.7) |
+| `get_freebusy` | Freebusy lookup for `user_ids` in a time range (v1.3.7) |
 
-### Official API -- Tasks (5 tools)
+### Official API -- Tasks v2 (7 tools, v1.3.7 new domain)
+
+Identifier is `task_guid` (not v1's numeric `task_id`). Requires `task:task` scope.
 
 | Tool | Description |
 |------|-------------|
-| `create_task` | Create a task |
-| `get_task` | Get task details |
-| `list_tasks` | List tasks |
-| `update_task` | Update a task |
-| `complete_task` | Mark task as complete |
+| `list_tasks` | List the current user's tasks (filter by completed / type) |
+| `get_task` | Full task detail |
+| `create_task` | Create a task (summary required; due/members optional) |
+| `update_task` | Patch fields. **`update_fields` is required** — Feishu only updates the listed keys. |
+| `complete_task` | Mark complete (or uncomplete with `completed=false`) |
+| `delete_task` | Permanent delete |
+| `manage_task_members` | `action=add|remove`, members `[{id, role:"assignee"|"follower"}]` |
 
 ### Official API -- Drive (4 tools)
 

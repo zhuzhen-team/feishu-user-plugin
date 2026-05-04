@@ -44,6 +44,7 @@ const TOOL_MODULES = [
   require('./tools/messaging-user'),
   require('./tools/okr'),
   require('./tools/profile'),
+  require('./tools/tasks'),
   require('./tools/uploads'),
   require('./tools/wiki'),
 ];
