@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh" 2>/dev/null || true
+
+bash scripts/sync-claude-md.sh
+
+# Version check only when relevant files staged
+if git diff --cached --name-only | grep -qE "(^|/)package\.json$|(^|/)plugin\.json$|(^|/)SKILL\.md$"; then
+  node scripts/check-version.js || exit 1
+fi
+
+# Tool-count check when server.js or tools/ staged
+if git diff --cached --name-only | grep -qE "^src/server\.js|^src/tools/"; then
+  node scripts/check-tool-count.js || exit 1
+fi
+
+# Smoke test for any src/ change
+if git diff --cached --name-only | grep -q "^src/"; then
+  npm run smoke || { echo "[hook] smoke test failed — fix before committing"; exit 1; }
+fi

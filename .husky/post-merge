@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh" 2>/dev/null || true
+if [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ]; then
+  bash scripts/sync-team-skills.sh || echo "[hook] team-skills sync failed (non-fatal)"
+fi

@@ -566,6 +566,19 @@ Issues and PRs welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for development s
 
 If Feishu updates their protocol and something breaks, please [open an issue](https://github.com/EthanQC/feishu-user-plugin/issues/new?template=bug_report.md) with the error details.
 
+### Automated sync hooks
+
+This repo uses husky to enforce several invariants on every commit:
+
+- **CLAUDE.md sync** — staging `CLAUDE.md` automatically regenerates `AGENTS.md` (identical body, different first line) and `skills/feishu-user-plugin/references/CLAUDE.md` (verbatim copy). Both are re-staged in the same commit.
+- **Version triangle** — if `package.json`, `.claude-plugin/plugin.json`, or `skills/feishu-user-plugin/SKILL.md` are staged, all three `version` fields must agree or the commit is rejected.
+- **Tool-count badge** — if `src/server.js` or any file under `src/tools/` is staged, the `N tools` badge in `README.md` must match the actual `TOOLS.length` exported by `src/server.js`.
+- **Smoke test** — any change under `src/` triggers `npm run smoke` to catch schema regressions before commit.
+
+CI (`.github/workflows/validate.yml`) runs the same checks on every PR to `main`, so bypassing the local hook still gets caught.
+
+On the maintainer's machine, a post-merge hook (`scripts/sync-team-skills.sh`) auto-opens a sync PR in the `~/team-skills` repo after every merge to main. The hook silently skips if `~/team-skills` is absent.
+
 ## License
 
 [MIT](LICENSE)

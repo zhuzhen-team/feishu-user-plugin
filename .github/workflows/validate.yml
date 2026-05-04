@@ -1,0 +1,22 @@
+name: validate
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm ci
+      - run: node scripts/check-version.js
+      - run: node scripts/check-tool-count.js
+      - name: AGENTS.md is in sync with CLAUDE.md
+        run: |
+          tail -n +2 CLAUDE.md > /tmp/body.md
+          { echo "# feishu-user-plugin — Codex Instructions"; cat /tmp/body.md; } > /tmp/expected_AGENTS.md
+          diff /tmp/expected_AGENTS.md AGENTS.md
+      - name: skill reference CLAUDE.md is in sync with root CLAUDE.md
+        run: diff CLAUDE.md skills/feishu-user-plugin/references/CLAUDE.md
+      - run: npm run smoke
