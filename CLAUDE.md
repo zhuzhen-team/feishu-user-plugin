@@ -24,7 +24,7 @@ The 9 Claude Code skills are also exposed as MCP prompts (`prompts/list` + `prom
 
 Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUMENTS` convention used by Claude Code skills). `status` has no arguments.
 
-## Tool Categories (78 tools)
+## Tool Categories (82 tools)
 
 ### User Identity — Messaging (reverse-engineered, cookie-based)
 - `send_to_user` — Search user + send text (one step, most common). Returns candidates if multiple matches.
@@ -65,7 +65,8 @@ Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUM
 - `list_bitable_views` / `create_bitable_view` / `delete_bitable_view` — View management (grid, kanban, gallery, form, gantt, calendar)
 - `search_bitable_records` / `get_bitable_record` — Query records
 - `batch_create_bitable_records` / `batch_update_bitable_records` / `batch_delete_bitable_records` — Record CRUD (single or batch, max 500/call)
-- `list_wiki_spaces` / `search_wiki` / `list_wiki_nodes` / `get_wiki_node` — Wiki (v1.3.4 adds `get_wiki_node` which resolves a wiki node token to its underlying `obj_type` + `obj_token`, so you can feed the node straight into `read_doc`, bitable tools, etc. v1.3.7 hardens this: `get_wiki_node` now also accepts underlying `obj_token`s from `search_wiki` (synthesizes a node-shape so callers don't have to know which ID space they hold), and `list_wiki_spaces` is UAT-first with a `scopeHint` field surfaced when the bot returns an empty list — typically because `wiki:wiki:readonly` is missing or the bot was never invited.)
+- `list_wiki_spaces` / `search_wiki` / `list_wiki_nodes` / `get_wiki_node` — Wiki read (v1.3.4 adds `get_wiki_node` which resolves a wiki node token to its underlying `obj_type` + `obj_token`, so you can feed the node straight into `read_doc`, bitable tools, etc. v1.3.7 hardens this: `get_wiki_node` now also accepts underlying `obj_token`s from `search_wiki` (synthesizes a node-shape so callers don't have to know which ID space they hold), and `list_wiki_spaces` is UAT-first with a `scopeHint` field surfaced when the bot returns an empty list — typically because `wiki:wiki:readonly` is missing or the bot was never invited.)
+- `create_wiki_node` / `update_wiki_node` / `move_wiki_node` / `copy_wiki_node` — Wiki write (v1.3.7). UAT-first so resources are owned by the user. `create_wiki_node` builds a fresh `doc/sheet/bitable/mindnote/file/docx/slides` inside a wiki space (or a `node_type=shortcut` pointer to an existing node). `update_wiki_node` renames (only `title` is updatable via wiki API; content edits go through docx/bitable/sheet tools). `move_wiki_node` and `copy_wiki_node` accept `target_parent_token` + optional `target_space_id` to re-parent within the same space or migrate to another. Note: there is no `delete_wiki_node` — Feishu's open API has no documented wiki node delete endpoint; deletion is done by removing the underlying resource via the docx/sheet/bitable delete path or moving the node out of the wiki space.
 - `list_files` / `create_folder` — Drive
 - `copy_file` / `move_file` / `delete_file` — Drive file operations (copy, move, delete). All three are UAT-first (so user-owned files can be operated on without bot edit permission); `move_file` and `delete_file` require `type` (file/folder/docx/sheet/bitable/mindnote/slides) — Feishu rejects with 1061002 / 1062501 otherwise.
 - `upload_image` / `upload_file` — Upload image/file, returns key for send_image/send_file

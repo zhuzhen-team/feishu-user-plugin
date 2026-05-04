@@ -3,10 +3,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-green.svg)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-purple.svg)](https://modelcontextprotocol.io)
-[![Tools](https://img.shields.io/badge/Tools-78-orange.svg)](#tools)
+[![Tools](https://img.shields.io/badge/Tools-82-orange.svg)](#tools)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**All-in-one Feishu/Lark MCP Server -- 78 tools, 9 skills, 3 auth layers for messaging, docs, bitable, calendar, tasks, drive, OKR, and more.**
+**All-in-one Feishu/Lark MCP Server -- 82 tools, 9 skills, 3 auth layers for messaging, docs, bitable, calendar, tasks, drive, OKR, and more.**
 
 The only MCP server that lets you send messages as your **personal identity** (not a bot), while also integrating the full official Feishu API. Works with Claude Code, Cursor, Windsurf, OpenClaw, and any MCP-compatible client.
 
@@ -337,7 +337,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 }
 ```
 
-## Tools (78 total)
+## Tools (82 total)
 
 ### User Identity -- Messaging (10 tools, cookie auth)
 
@@ -463,11 +463,15 @@ All docx / bitable tools' `document_id` / `app_token` parameter also accepts a W
 | `delete_file` | Delete a file/folder |
 | `upload_drive_file` | Upload a local file into a Drive folder (`drive/v1/files/upload_all`). Optional `wiki_space_id` attaches the upload as a Wiki node atomically. v1.3.6 |
 
-### Official API -- Wiki (4 tools)
+### Official API -- Wiki (8 tools)
 
 | Tool | Description |
 |------|-------------|
 | `list_wiki_spaces` / `search_wiki` / `list_wiki_nodes` / `get_wiki_node` | Wiki spaces, search, browse + resolve a wiki node to underlying obj_token |
+| `create_wiki_node` | Create a new wiki node (doc/sheet/bitable/mindnote/file/docx/slides) inside a space |
+| `update_wiki_node` | Rename a wiki node (title only — content edits via docx/bitable tools) |
+| `move_wiki_node` | Move a wiki node to a different parent or different space |
+| `copy_wiki_node` | Deep-copy a wiki node to a different location (optionally to a different space) |
 
 ### Plugin -- Profiles (2 tools, v1.3.6)
 

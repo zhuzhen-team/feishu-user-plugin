@@ -185,6 +185,39 @@
     }
   },
   {
+    "name": "copy_wiki_node",
+    "description": "[Official API] Deep-copy a Wiki node into a different location (and optionally a different space). Underlying resource is duplicated.",
+    "inputSchema": {
+      "properties": {
+        "node_token": {
+          "description": "Wiki node token to copy",
+          "type": "string"
+        },
+        "space_id": {
+          "description": "Source space ID",
+          "type": "string"
+        },
+        "target_parent_token": {
+          "description": "Destination parent wiki node token (optional)",
+          "type": "string"
+        },
+        "target_space_id": {
+          "description": "Destination space ID (optional; same-space copy if omitted)",
+          "type": "string"
+        },
+        "title": {
+          "description": "Title for the copy (optional; defaults to source title)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "node_token",
+        "space_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "create_bitable",
     "description": "[Official API] Create a new Bitable (multi-dimensional table) app. Can place directly under a Wiki space via wiki_space_id (and optional wiki_parent_node_token).",
     "inputSchema": {
@@ -438,6 +471,57 @@
       },
       "required": [
         "user_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "create_wiki_node",
+    "description": "[Official API] Create a new Wiki node inside a space. obj_type picks the underlying resource (doc/sheet/bitable/mindnote/file/docx/slides). UAT-first so the resource is owned by the user.",
+    "inputSchema": {
+      "properties": {
+        "node_type": {
+          "default": "origin",
+          "description": "origin = real resource, shortcut = pointer to existing node (default: origin)",
+          "enum": [
+            "origin",
+            "shortcut"
+          ],
+          "type": "string"
+        },
+        "obj_type": {
+          "description": "Underlying resource type",
+          "enum": [
+            "doc",
+            "sheet",
+            "bitable",
+            "mindnote",
+            "file",
+            "docx",
+            "slides"
+          ],
+          "type": "string"
+        },
+        "origin_node_token": {
+          "description": "Required when node_type=shortcut — the wiki node this shortcut points at",
+          "type": "string"
+        },
+        "parent_node_token": {
+          "description": "Parent wiki node under which to create (optional; root if omitted)",
+          "type": "string"
+        },
+        "space_id": {
+          "description": "Wiki space ID (from list_wiki_spaces)",
+          "type": "string"
+        },
+        "title": {
+          "description": "Node title (optional; Feishu generates a default if absent)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "obj_type",
+        "space_id"
       ],
       "type": "object"
     }
@@ -1222,6 +1306,35 @@
     }
   },
   {
+    "name": "move_wiki_node",
+    "description": "[Official API] Move a Wiki node to a different parent (within the same space) or to a different space. Pass at least one of target_parent_token / target_space_id.",
+    "inputSchema": {
+      "properties": {
+        "node_token": {
+          "description": "Wiki node token to move",
+          "type": "string"
+        },
+        "space_id": {
+          "description": "Source space ID",
+          "type": "string"
+        },
+        "target_parent_token": {
+          "description": "New parent wiki node token (optional)",
+          "type": "string"
+        },
+        "target_space_id": {
+          "description": "New target space ID (optional; same-space move if omitted)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "node_token",
+        "space_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "pin_message",
     "description": "[Official API] Pin or unpin a message in a chat.",
     "inputSchema": {
@@ -1883,6 +1996,32 @@
         "content",
         "message_id",
         "msg_type"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "update_wiki_node",
+    "description": "[Official API] Rename a Wiki node (only `title` is updatable via the wiki API; the underlying resource content is edited via docx/bitable/sheet tools).",
+    "inputSchema": {
+      "properties": {
+        "node_token": {
+          "description": "Wiki node token (wikcnXXX)",
+          "type": "string"
+        },
+        "space_id": {
+          "description": "Wiki space ID",
+          "type": "string"
+        },
+        "title": {
+          "description": "New title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "node_token",
+        "space_id",
+        "title"
       ],
       "type": "object"
     }

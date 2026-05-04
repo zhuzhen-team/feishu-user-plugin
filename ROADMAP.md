@@ -233,7 +233,7 @@
 
 ##### C5. Wiki / OKR 读写补全(用户问到了)
 
-- [ ] **Wiki 写**:当前只有 read,没有 `create_wiki_node` / `update_wiki_node` / `delete_wiki_node` / `move_wiki_node` / `copy_wiki_node`。补这 5 个
+- [x] **Wiki 写**:加了 `create_wiki_node` / `update_wiki_node`(rename) / `move_wiki_node` / `copy_wiki_node`。**`delete_wiki_node` 暂未实现** —— SDK 没有 wiki.spaceNode.delete,Feishu 开放接口里没有显式的 wiki 节点删除端点(只能删底层 docx/sheet/bitable 资源,或者从 wiki 移出去)。后续如果有用户场景再补 raw REST DELETE 试探或文档化 workaround (v1.3.7)
 - [ ] **OKR 写**:OKR open API 写能力非常受限(飞书侧不开放完整 CRUD,只有 progress 更新和评论)。能补的:
   - `create_okr_progress_record(progress_id, content)` — 进展记录
   - `list_okr_progress_records(progress_id)`

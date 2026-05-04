@@ -40,6 +40,64 @@ const schemas = [
       required: ['node_token'],
     },
   },
+  {
+    name: 'create_wiki_node',
+    description: '[Official API] Create a new Wiki node inside a space. obj_type picks the underlying resource (doc/sheet/bitable/mindnote/file/docx/slides). UAT-first so the resource is owned by the user.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        space_id: { type: 'string', description: 'Wiki space ID (from list_wiki_spaces)' },
+        obj_type: { type: 'string', enum: ['doc', 'sheet', 'bitable', 'mindnote', 'file', 'docx', 'slides'], description: 'Underlying resource type' },
+        title: { type: 'string', description: 'Node title (optional; Feishu generates a default if absent)' },
+        parent_node_token: { type: 'string', description: 'Parent wiki node under which to create (optional; root if omitted)' },
+        node_type: { type: 'string', enum: ['origin', 'shortcut'], description: 'origin = real resource, shortcut = pointer to existing node (default: origin)', default: 'origin' },
+        origin_node_token: { type: 'string', description: 'Required when node_type=shortcut — the wiki node this shortcut points at' },
+      },
+      required: ['space_id', 'obj_type'],
+    },
+  },
+  {
+    name: 'update_wiki_node',
+    description: '[Official API] Rename a Wiki node (only `title` is updatable via the wiki API; the underlying resource content is edited via docx/bitable/sheet tools).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        space_id: { type: 'string', description: 'Wiki space ID' },
+        node_token: { type: 'string', description: 'Wiki node token (wikcnXXX)' },
+        title: { type: 'string', description: 'New title' },
+      },
+      required: ['space_id', 'node_token', 'title'],
+    },
+  },
+  {
+    name: 'move_wiki_node',
+    description: '[Official API] Move a Wiki node to a different parent (within the same space) or to a different space. Pass at least one of target_parent_token / target_space_id.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        space_id: { type: 'string', description: 'Source space ID' },
+        node_token: { type: 'string', description: 'Wiki node token to move' },
+        target_parent_token: { type: 'string', description: 'New parent wiki node token (optional)' },
+        target_space_id: { type: 'string', description: 'New target space ID (optional; same-space move if omitted)' },
+      },
+      required: ['space_id', 'node_token'],
+    },
+  },
+  {
+    name: 'copy_wiki_node',
+    description: '[Official API] Deep-copy a Wiki node into a different location (and optionally a different space). Underlying resource is duplicated.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        space_id: { type: 'string', description: 'Source space ID' },
+        node_token: { type: 'string', description: 'Wiki node token to copy' },
+        target_parent_token: { type: 'string', description: 'Destination parent wiki node token (optional)' },
+        target_space_id: { type: 'string', description: 'Destination space ID (optional; same-space copy if omitted)' },
+        title: { type: 'string', description: 'Title for the copy (optional; defaults to source title)' },
+      },
+      required: ['space_id', 'node_token'],
+    },
+  },
 ];
 
 const { parseFeishuInput } = require('../resolver');
@@ -53,6 +111,31 @@ const handlers = {
   },
   async list_wiki_nodes(args, ctx) {
     return json(await ctx.getOfficialClient().listWikiNodes(args.space_id, { parentNodeToken: args.parent_node_token }));
+  },
+  async create_wiki_node(args, ctx) {
+    return json(await ctx.getOfficialClient().createWikiNode(args.space_id, {
+      obj_type: args.obj_type,
+      node_type: args.node_type || 'origin',
+      parent_node_token: args.parent_node_token,
+      origin_node_token: args.origin_node_token,
+      title: args.title,
+    }));
+  },
+  async update_wiki_node(args, ctx) {
+    return json(await ctx.getOfficialClient().updateWikiNodeTitle(args.space_id, args.node_token, args.title));
+  },
+  async move_wiki_node(args, ctx) {
+    return json(await ctx.getOfficialClient().moveWikiNode(args.space_id, args.node_token, {
+      target_parent_token: args.target_parent_token,
+      target_space_id: args.target_space_id,
+    }));
+  },
+  async copy_wiki_node(args, ctx) {
+    return json(await ctx.getOfficialClient().copyWikiNode(args.space_id, args.node_token, {
+      target_parent_token: args.target_parent_token,
+      target_space_id: args.target_space_id,
+      title: args.title,
+    }));
   },
   async get_wiki_node(args, ctx) {
     const parsed = parseFeishuInput(args.node_token);
