@@ -1,0 +1,2028 @@
+[
+  {
+    "name": "add_reaction",
+    "description": "[Official API] Add an emoji reaction to a message.",
+    "inputSchema": {
+      "properties": {
+        "emoji_type": {
+          "description": "Emoji type string, e.g. \"THUMBSUP\", \"SMILE\", \"HEART\"",
+          "type": "string"
+        },
+        "message_id": {
+          "description": "Message ID (om_xxx)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "emoji_type",
+        "message_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "batch_create_bitable_records",
+    "description": "[Official API] Create one or more records (rows) in a Bitable table. Pass a single record or up to 500.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        },
+        "records": {
+          "description": "Array of {fields: {field_name: value}} objects",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "table_id": {
+          "description": "Table ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token",
+        "records",
+        "table_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "batch_delete_bitable_records",
+    "description": "[Official API] Delete one or more records from a Bitable table. Pass a single ID or up to 500.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        },
+        "record_ids": {
+          "description": "Array of record IDs to delete",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "table_id": {
+          "description": "Table ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token",
+        "record_ids",
+        "table_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "batch_send",
+    "description": "[User Identity / Official API] Send the same or different content to multiple targets in one call. Each target dispatches sequentially with a small delay (anti-rate-limit) and reports per-target success/error. Identity is the cookie user (user-identity sends) unless target.via=bot. Use for broadcast / fan-out scenarios.",
+    "inputSchema": {
+      "properties": {
+        "delay_ms": {
+          "description": "Delay between sends in milliseconds (default 200, increase for risky volumes).",
+          "type": "number"
+        },
+        "targets": {
+          "description": "Array of targets. Each entry: { type: \"user\"|\"group\"|\"chat\", id: <user_name | group_name | chat_id>, content: { kind: \"text\"|\"image\"|\"file\"|\"post\", ... } }. For kind=\"text\": { text }. For \"image\": { image_key }. For \"file\": { file_key, file_name }. For \"post\": { title, paragraphs }. Optional per-target: via=\"bot\" routes through send_message_as_bot (chat_id required).",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "targets"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "batch_update_bitable_records",
+    "description": "[Official API] Update one or more records in a Bitable table. Pass a single record or up to 500.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        },
+        "records": {
+          "description": "Array of {record_id, fields: {field_name: value}} objects",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "table_id": {
+          "description": "Table ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token",
+        "records",
+        "table_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "copy_bitable",
+    "description": "[Official API] Copy a Bitable app to create a new one.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token to copy",
+          "type": "string"
+        },
+        "folder_id": {
+          "description": "Destination folder token (optional)",
+          "type": "string"
+        },
+        "name": {
+          "description": "New Bitable name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token",
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "copy_file",
+    "description": "[Official API] Copy a file/doc in Drive.",
+    "inputSchema": {
+      "properties": {
+        "file_token": {
+          "description": "File token to copy",
+          "type": "string"
+        },
+        "folder_token": {
+          "description": "Destination folder token (optional)",
+          "type": "string"
+        },
+        "name": {
+          "description": "New file name",
+          "type": "string"
+        },
+        "type": {
+          "description": "File type: file, doc, sheet, bitable, docx, mindnote, slides (optional)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file_token",
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "create_bitable",
+    "description": "[Official API] Create a new Bitable (multi-dimensional table) app. Can place directly under a Wiki space via wiki_space_id (and optional wiki_parent_node_token).",
+    "inputSchema": {
+      "properties": {
+        "folder_id": {
+          "description": "Parent folder token (optional, defaults to root; ignored when wiki_space_id is set)",
+          "type": "string"
+        },
+        "name": {
+          "description": "Bitable app name",
+          "type": "string"
+        },
+        "wiki_parent_node_token": {
+          "description": "Parent wiki node token within the space (optional)",
+          "type": "string"
+        },
+        "wiki_space_id": {
+          "description": "Wiki space ID to place the bitable under (optional)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "name": "create_bitable_field",
+    "description": "[Official API] Create a new field (column) in a Bitable table.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        },
+        "field_name": {
+          "description": "Field display name",
+          "type": "string"
+        },
+        "property": {
+          "description": "Field-type-specific properties (optional). E.g. for SingleSelect: {options: [{name:\"A\"},{name:\"B\"}]}",
+          "type": "object"
+        },
+        "table_id": {
+          "description": "Table ID",
+          "type": "string"
+        },
+        "type": {
+          "description": "Field type: 1=Text, 2=Number, 3=SingleSelect, 4=MultiSelect, 5=DateTime, 7=Checkbox, 11=User, 13=Phone, 15=URL, 17=Attachment, 18=Link, 20=Formula, 21=DuplexLink, 22=Location, 23=GroupChat, 1001=CreateTime, 1002=ModifiedTime, 1003=Creator, 1004=Modifier",
+          "type": "number"
+        }
+      },
+      "required": [
+        "app_token",
+        "field_name",
+        "table_id",
+        "type"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "create_bitable_table",
+    "description": "[Official API] Create a new data table in a Bitable app. Optionally define initial fields.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        },
+        "fields": {
+          "description": "Initial field definitions (optional). Each item: {field_name, type} where type is 1=Text, 2=Number, 3=SingleSelect, 4=MultiSelect, 5=DateTime, 7=Checkbox, 11=User, 13=Phone, 15=URL, 17=Attachment, 18=Link, 20=Formula, 21=DuplexLink, 22=Location, 23=GroupChat, 1001=CreateTime, 1002=ModifiedTime, 1003=Creator, 1004=Modifier",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Table name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token",
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "create_bitable_view",
+    "description": "[Official API] Create a new view in a Bitable table.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        },
+        "table_id": {
+          "description": "Table ID",
+          "type": "string"
+        },
+        "view_name": {
+          "description": "View name",
+          "type": "string"
+        },
+        "view_type": {
+          "default": "grid",
+          "description": "View type: grid (default), kanban, gallery, form, gantt, calendar",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token",
+        "table_id",
+        "view_name"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "create_doc",
+    "description": "[Official API] Create a new Feishu document. Can place directly under a Wiki space by passing wiki_space_id (optionally wiki_parent_node_token for nested placement) — the plugin creates the doc in drive then attaches it as a Wiki node.",
+    "inputSchema": {
+      "properties": {
+        "folder_id": {
+          "description": "Parent folder token (optional; ignored when wiki_space_id is set)",
+          "type": "string"
+        },
+        "title": {
+          "description": "Document title",
+          "type": "string"
+        },
+        "wiki_parent_node_token": {
+          "description": "Parent wiki node token within the space (optional; defaults to space root)",
+          "type": "string"
+        },
+        "wiki_space_id": {
+          "description": "Wiki space ID to place the doc under (optional)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "create_doc_block",
+    "description": "[Official API] Insert content blocks into a document. Five modes:\n  (A) Generic — pass `children` array (e.g. [{block_type:2, text:{...}}]) for text/heading/list/etc.\n  (B) Image from local file — pass `image_path` (absolute path); the plugin creates an image block, uploads the file to drive, and patches the block with the token. Returns block_id + image_token.\n  (C) Image from uploaded token — pass `image_token` to reuse an already-uploaded image.\n  (D) File attachment from local file — pass `file_path`; the plugin creates a file block (block_type=23), uploads via parent_type=docx_file, and patches with replace_file.\n  (E) File from uploaded token — pass `file_token` to reuse an already-uploaded file.\n`document_id` accepts native document_id, wiki node token, or Feishu URL.",
+    "inputSchema": {
+      "properties": {
+        "children": {
+          "description": "Generic block objects — mode A. E.g. [{block_type:2, text:{elements:[{text_run:{content:\"Hello\"}}]}}]",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "document_id": {
+          "description": "Document ID, wiki node token, or Feishu URL",
+          "type": "string"
+        },
+        "file_path": {
+          "description": "Local file path for an attachment block — mode D (mutually exclusive with other modes)",
+          "type": "string"
+        },
+        "file_token": {
+          "description": "Pre-uploaded docx file token — mode E (mutually exclusive with other modes)",
+          "type": "string"
+        },
+        "image_path": {
+          "description": "Local image path — mode B (mutually exclusive with other modes)",
+          "type": "string"
+        },
+        "image_token": {
+          "description": "Pre-uploaded docx image token — mode C (mutually exclusive with other modes)",
+          "type": "string"
+        },
+        "index": {
+          "description": "Insert position (optional, appends to end if omitted)",
+          "type": "number"
+        },
+        "parent_block_id": {
+          "description": "Parent block ID (use document_id for root)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id",
+        "parent_block_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "create_folder",
+    "description": "[Official API] Create a new folder in Drive.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Folder name",
+          "type": "string"
+        },
+        "parent_token": {
+          "description": "Parent folder token (optional)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "create_group",
+    "description": "[Official API] Create a new group chat (as bot). Can add initial members.",
+    "inputSchema": {
+      "properties": {
+        "description": {
+          "description": "Group description (optional)",
+          "type": "string"
+        },
+        "name": {
+          "description": "Group name",
+          "type": "string"
+        },
+        "user_ids": {
+          "description": "Initial member open_ids (optional)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "create_p2p_chat",
+    "description": "[User Identity] Create or get a P2P (direct message) chat. Returns numeric chat_id.",
+    "inputSchema": {
+      "properties": {
+        "user_id": {
+          "description": "Target user ID from search_contacts",
+          "type": "string"
+        }
+      },
+      "required": [
+        "user_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "delete_bitable_field",
+    "description": "[Official API] Delete a field (column) from a Bitable table.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        },
+        "field_id": {
+          "description": "Field ID to delete",
+          "type": "string"
+        },
+        "table_id": {
+          "description": "Table ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token",
+        "field_id",
+        "table_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "delete_bitable_table",
+    "description": "[Official API] Delete a data table from a Bitable app.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        },
+        "table_id": {
+          "description": "Table ID to delete",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token",
+        "table_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "delete_bitable_view",
+    "description": "[Official API] Delete a view from a Bitable table.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        },
+        "table_id": {
+          "description": "Table ID",
+          "type": "string"
+        },
+        "view_id": {
+          "description": "View ID to delete",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token",
+        "table_id",
+        "view_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "delete_doc_blocks",
+    "description": "[Official API] Delete a range of blocks from a document.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID",
+          "type": "string"
+        },
+        "end_index": {
+          "description": "End index (exclusive)",
+          "type": "number"
+        },
+        "parent_block_id": {
+          "description": "Parent block ID containing the blocks to delete",
+          "type": "string"
+        },
+        "start_index": {
+          "description": "Start index (inclusive)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "document_id",
+        "end_index",
+        "parent_block_id",
+        "start_index"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "delete_file",
+    "description": "[Official API] Delete a file/folder from Drive.",
+    "inputSchema": {
+      "properties": {
+        "file_token": {
+          "description": "File token to delete",
+          "type": "string"
+        },
+        "type": {
+          "description": "Type: file, folder, doc, sheet, bitable, docx, mindnote, slides",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file_token"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "delete_message",
+    "description": "[Official API] Recall/delete a message (bot can only delete its own messages).",
+    "inputSchema": {
+      "properties": {
+        "message_id": {
+          "description": "Message ID (om_xxx)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "delete_reaction",
+    "description": "[Official API] Remove an emoji reaction from a message.",
+    "inputSchema": {
+      "properties": {
+        "message_id": {
+          "description": "Message ID",
+          "type": "string"
+        },
+        "reaction_id": {
+          "description": "Reaction ID (from add_reaction response)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "reaction_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "download_file",
+    "description": "[User Identity / Official API] Download a file attached to a message (msg_type=file). Returns base64 bytes + mimeType + filename. Tries user identity first, falls back to app. For merge_forward children, pass the child's `parentMessageId` (NOT the child message id) — Feishu keys media by the parent merge_forward id.",
+    "inputSchema": {
+      "properties": {
+        "file_key": {
+          "description": "File key from message content (content.file_key for msg_type=file)",
+          "type": "string"
+        },
+        "message_id": {
+          "description": "Message ID (om_xxx). For merge_forward children use the parent merge_forward message id.",
+          "type": "string"
+        },
+        "save_path": {
+          "description": "Optional absolute local path to save the file to. If omitted, file is only returned as inline base64 in the response.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file_key",
+        "message_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "download_image",
+    "description": "[User Identity / Official API] Download an image so the model can actually see it. Two modes: (1) message image — pass message_id + image_key from read_messages / read_p2p_messages. (2) docx image — pass doc_token + image_token (the block.image.token from get_doc_blocks). doc_token accepts native document_id, wiki node token, or Feishu URL. Tries user identity first, falls back to app. NOTE: for merge_forward children, pass the child's `parentMessageId` (NOT the child message id) — Feishu keys media by the parent merge_forward id.",
+    "inputSchema": {
+      "properties": {
+        "doc_token": {
+          "description": "Document ID, wiki node token, or Feishu URL — for mode 2 only",
+          "type": "string"
+        },
+        "image_key": {
+          "description": "Image key (img_xxx) from message content — for mode 1 only",
+          "type": "string"
+        },
+        "image_token": {
+          "description": "Image token from a docx image block (block.image.token via get_doc_blocks) — for mode 2 only",
+          "type": "string"
+        },
+        "message_id": {
+          "description": "Message ID (om_xxx) — for mode 1 only. For merge_forward children use the parent merge_forward message id.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "name": "find_user",
+    "description": "[Official API] Find a Feishu user by email or mobile number.",
+    "inputSchema": {
+      "properties": {
+        "email": {
+          "description": "User email (optional)",
+          "type": "string"
+        },
+        "mobile": {
+          "description": "User mobile with country code like +86xxx (optional)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "name": "forward_message",
+    "description": "[Official API] Forward a message to another chat.",
+    "inputSchema": {
+      "properties": {
+        "message_id": {
+          "description": "Message ID to forward",
+          "type": "string"
+        },
+        "receive_id": {
+          "description": "Target chat_id or open_id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "receive_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_bitable_meta",
+    "description": "[Official API] Get metadata of a Bitable app (name, revision, etc.).",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_bitable_record",
+    "description": "[Official API] Get a single record by ID from a Bitable table.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        },
+        "record_id": {
+          "description": "Record ID",
+          "type": "string"
+        },
+        "table_id": {
+          "description": "Table ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token",
+        "record_id",
+        "table_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_calendar_event",
+    "description": "[Official API + UAT] Get full details of a single calendar event (summary, description, start/end, attendees, location, attachments, meeting link).",
+    "inputSchema": {
+      "properties": {
+        "calendar_id": {
+          "description": "Calendar ID",
+          "type": "string"
+        },
+        "event_id": {
+          "description": "Event ID from list_calendar_events",
+          "type": "string"
+        }
+      },
+      "required": [
+        "calendar_id",
+        "event_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_chat_info",
+    "description": "[Official API + User Identity fallback] Get chat details: name, description, member count, owner. Supports both oc_xxx and numeric chat_id.",
+    "inputSchema": {
+      "properties": {
+        "chat_id": {
+          "description": "Chat ID (oc_xxx or numeric)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chat_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_doc_blocks",
+    "description": "[Official API] Get structured block tree of a document. Returns block types, content, and hierarchy for precise document analysis.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID (from search_docs or create_doc)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_login_status",
+    "description": "Check cookie session validity and app credentials status. Also refreshes session.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_okrs",
+    "description": "[Official API + UAT] Batch-fetch full OKR details (objectives, key results, progress, alignments) by OKR IDs.",
+    "inputSchema": {
+      "properties": {
+        "lang": {
+          "description": "Response language (optional)",
+          "type": "string"
+        },
+        "okr_ids": {
+          "description": "OKR IDs (max 10 per call). From list_user_okrs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "user_id_type": {
+          "description": "Type of user_ids in response (default: open_id)",
+          "enum": [
+            "user_id",
+            "union_id",
+            "open_id",
+            "people_admin_id"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "okr_ids"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_user_info",
+    "description": "[User Identity] Look up a user's display name by user ID.",
+    "inputSchema": {
+      "properties": {
+        "chat_id": {
+          "description": "Chat context (optional)",
+          "type": "string"
+        },
+        "user_id": {
+          "description": "User ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "user_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_wiki_node",
+    "description": "[Official API] Resolve a Wiki node token to its underlying object (docx / bitable / sheet / mindnote / file). Returns obj_type + obj_token + space_id so you can read/write the real resource via the usual docx / bitable tools. Accepts bare wiki node token (wikcnXXX) or a full Feishu /wiki/ URL.",
+    "inputSchema": {
+      "properties": {
+        "node_token": {
+          "description": "Wiki node token (wikcnXXX / wikmXXX / wiknXXX) or full Feishu /wiki/<token> URL",
+          "type": "string"
+        }
+      },
+      "required": [
+        "node_token"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_bitable_fields",
+    "description": "[Official API] List all fields (columns) in a Bitable table.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        },
+        "table_id": {
+          "description": "Table ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token",
+        "table_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_bitable_tables",
+    "description": "[Official API] List all tables in a Bitable app.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_bitable_views",
+    "description": "[Official API] List all views in a Bitable table.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        },
+        "table_id": {
+          "description": "Table ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token",
+        "table_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_calendar_events",
+    "description": "[Official API + UAT] List events in a calendar within an optional time range. Typical usage: first list_calendars to find calendar_id (primary calendar has type=\"primary\"), then list events in e.g. [now, now+7d] (Unix seconds).",
+    "inputSchema": {
+      "properties": {
+        "calendar_id": {
+          "description": "Calendar ID from list_calendars",
+          "type": "string"
+        },
+        "end_time": {
+          "description": "Range end (Unix seconds, optional)",
+          "type": "string"
+        },
+        "page_size": {
+          "description": "Items per page (default 50)",
+          "type": "number"
+        },
+        "page_token": {
+          "description": "Pagination token",
+          "type": "string"
+        },
+        "start_time": {
+          "description": "Range start (Unix seconds, optional)",
+          "type": "string"
+        },
+        "sync_token": {
+          "description": "Incremental sync token (optional)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "calendar_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_calendars",
+    "description": "[Official API + UAT] List the current user's calendars (primary + shared + subscribed). Requires UAT — app identity only sees calendars it was explicitly invited to. Requires `calendar:calendar:readonly` scope on the OAuth.",
+    "inputSchema": {
+      "properties": {
+        "page_size": {
+          "description": "Items per page (min 50, default 50). Feishu's calendar endpoint rejects page_size < 50.",
+          "type": "number"
+        },
+        "page_token": {
+          "description": "Pagination token",
+          "type": "string"
+        },
+        "sync_token": {
+          "description": "Incremental sync token (optional)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_chats",
+    "description": "[Official API] List all chats the bot has joined. Returns chat_id, name, type.",
+    "inputSchema": {
+      "properties": {
+        "page_size": {
+          "description": "Items per page (default 20, max 100)",
+          "type": "number"
+        },
+        "page_token": {
+          "description": "Pagination token",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_files",
+    "description": "[Official API] List files in a Drive folder.",
+    "inputSchema": {
+      "properties": {
+        "folder_token": {
+          "description": "Folder token (empty for root)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_members",
+    "description": "[Official API] List all members in a group chat.",
+    "inputSchema": {
+      "properties": {
+        "chat_id": {
+          "description": "Chat ID (oc_xxx)",
+          "type": "string"
+        },
+        "page_size": {
+          "description": "Items per page (default 50)",
+          "type": "number"
+        },
+        "page_token": {
+          "description": "Pagination token",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chat_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_okr_periods",
+    "description": "[Official API + UAT] List OKR periods (quarters / years) defined in the tenant. Use period_ids from this to filter list_user_okrs.",
+    "inputSchema": {
+      "properties": {
+        "page_size": {
+          "description": "Items per page (default 10)",
+          "type": "number"
+        },
+        "page_token": {
+          "description": "Pagination token",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_profiles",
+    "description": "[Plugin] List all available identity profiles (sets of LARK_COOKIE/APP_ID/APP_SECRET/UAT). The \"default\" profile uses the top-level env vars; additional profiles come from LARK_PROFILES_JSON. Marks the currently active profile.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_user_chats",
+    "description": "[User UAT] List group chats the user is in. Note: only returns groups, not P2P. For P2P chats, use search_contacts → create_p2p_chat → read_p2p_messages. Requires OAuth setup.",
+    "inputSchema": {
+      "properties": {
+        "page_size": {
+          "description": "Items per page (default 20)",
+          "type": "number"
+        },
+        "page_token": {
+          "description": "Pagination token",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_user_okrs",
+    "description": "[Official API + UAT] List a user's OKRs. Requires the user's open_id (get yours via get_login_status or search_contacts). Filter by period_ids to narrow to a specific quarter.",
+    "inputSchema": {
+      "properties": {
+        "lang": {
+          "description": "Response language (optional, e.g. \"zh_cn\", \"en_us\")",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Items per page (default 10, max 10)",
+          "type": "number"
+        },
+        "offset": {
+          "description": "Pagination offset (default 0)",
+          "type": "number"
+        },
+        "period_ids": {
+          "description": "Filter by OKR period IDs (optional). Get period IDs via list_okr_periods.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "user_id": {
+          "description": "Target user's open_id (or the matching user_id_type)",
+          "type": "string"
+        },
+        "user_id_type": {
+          "description": "Type of user_id (default: open_id)",
+          "enum": [
+            "user_id",
+            "union_id",
+            "open_id",
+            "people_admin_id"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "user_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_wiki_nodes",
+    "description": "[Official API] List nodes in a Wiki space.",
+    "inputSchema": {
+      "properties": {
+        "parent_node_token": {
+          "description": "Parent node token (optional)",
+          "type": "string"
+        },
+        "space_id": {
+          "description": "Wiki space ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "space_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_wiki_spaces",
+    "description": "[Official API] List all accessible Wiki spaces.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    }
+  },
+  {
+    "name": "manage_members",
+    "description": "[Official API] Add or remove members from a group chat.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "Action to perform",
+          "enum": [
+            "add",
+            "remove"
+          ],
+          "type": "string"
+        },
+        "chat_id": {
+          "description": "Group chat ID (oc_xxx)",
+          "type": "string"
+        },
+        "member_ids": {
+          "description": "Array of user open_ids",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "action",
+        "chat_id",
+        "member_ids"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "move_file",
+    "description": "[Official API] Move a file to another folder in Drive.",
+    "inputSchema": {
+      "properties": {
+        "file_token": {
+          "description": "File token to move",
+          "type": "string"
+        },
+        "folder_token": {
+          "description": "Destination folder token",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file_token",
+        "folder_token"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "pin_message",
+    "description": "[Official API] Pin or unpin a message in a chat.",
+    "inputSchema": {
+      "properties": {
+        "message_id": {
+          "description": "Message ID",
+          "type": "string"
+        },
+        "pinned": {
+          "default": true,
+          "description": "true to pin, false to unpin",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "message_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "read_doc",
+    "description": "[Official API] Read the raw text content of a Feishu document.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID or token",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "read_messages",
+    "description": "[Official API + UAT fallback] Read message history from any group. Accepts oc_xxx ID, numeric ID, or chat name (auto-searched). Auto-falls back to UAT for external groups the bot cannot access. Returns newest messages first by default, with sender names resolved. Auto-expands merge_forward messages into their child messages (with original sender / time / content preserved) by default — disable with expand_merge_forward=false. Text messages have URLs extracted into `urls`; Feishu doc links are additionally surfaced as `feishuDocs` so agents can feed them straight into read_doc / get_doc_blocks.",
+    "inputSchema": {
+      "properties": {
+        "chat_id": {
+          "description": "Chat ID (oc_xxx), numeric ID, or chat name (auto-searched via bot groups, im.chat.search, and user contacts)",
+          "type": "string"
+        },
+        "end_time": {
+          "description": "End timestamp in seconds (optional)",
+          "type": "string"
+        },
+        "expand_merge_forward": {
+          "description": "Auto-expand merge_forward placeholders into their child messages (default true). Children carry parentMessageId; use that id (not the child id) with download_image / download_file.",
+          "type": "boolean"
+        },
+        "page_size": {
+          "description": "Messages to fetch (default 20, max 50)",
+          "type": "number"
+        },
+        "sort_type": {
+          "description": "Sort order (default: ByCreateTimeDesc = newest first)",
+          "enum": [
+            "ByCreateTimeDesc",
+            "ByCreateTimeAsc"
+          ],
+          "type": "string"
+        },
+        "start_time": {
+          "description": "Start timestamp in seconds (optional)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chat_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "read_p2p_messages",
+    "description": "[User UAT] Read P2P (direct message) chat history using user_access_token. Works for chats the bot cannot access. Returns newest messages first by default. Auto-expands merge_forward messages into their child messages by default — disable with expand_merge_forward=false. Requires OAuth setup.",
+    "inputSchema": {
+      "properties": {
+        "chat_id": {
+          "description": "Chat ID (numeric from create_p2p_chat, or oc_xxx from list_user_chats). Both formats work.",
+          "type": "string"
+        },
+        "end_time": {
+          "description": "End timestamp in seconds (optional)",
+          "type": "string"
+        },
+        "expand_merge_forward": {
+          "description": "Auto-expand merge_forward placeholders into their child messages (default true). Children carry parentMessageId; use that id (not the child id) with download_image / download_file.",
+          "type": "boolean"
+        },
+        "page_size": {
+          "description": "Messages to fetch (default 20, max 50)",
+          "type": "number"
+        },
+        "sort_type": {
+          "description": "Sort order (default: ByCreateTimeDesc = newest first)",
+          "enum": [
+            "ByCreateTimeDesc",
+            "ByCreateTimeAsc"
+          ],
+          "type": "string"
+        },
+        "start_time": {
+          "description": "Start timestamp in seconds (optional)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chat_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "reply_message",
+    "description": "[Official API] Reply to a specific message by message_id (as bot). Only works for text messages; other types return error 230054.",
+    "inputSchema": {
+      "properties": {
+        "message_id": {
+          "description": "Message ID to reply to (om_xxx)",
+          "type": "string"
+        },
+        "text": {
+          "description": "Reply text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "text"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "search_bitable_records",
+    "description": "[Official API] Search/query records in a Bitable table.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        },
+        "filter": {
+          "description": "Filter conditions (optional)",
+          "type": "object"
+        },
+        "page_size": {
+          "description": "Results per page (default 20)",
+          "type": "number"
+        },
+        "sort": {
+          "description": "Sort conditions (optional)",
+          "type": "array"
+        },
+        "table_id": {
+          "description": "Table ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token",
+        "table_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "search_contacts",
+    "description": "[User Identity] Search Feishu users, bots, or group chats by name. Returns IDs.",
+    "inputSchema": {
+      "properties": {
+        "query": {
+          "description": "Search keyword",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "search_docs",
+    "description": "[Official API] Search Feishu documents by keyword.",
+    "inputSchema": {
+      "properties": {
+        "query": {
+          "description": "Search keyword",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "search_wiki",
+    "description": "[Official API] Search Wiki nodes by keyword.",
+    "inputSchema": {
+      "properties": {
+        "query": {
+          "description": "Search keyword",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "send_as_user",
+    "description": "[User Identity] Send a text message as the logged-in Feishu user. Supports reply threading and real @-mentions (triggers push notifications).",
+    "inputSchema": {
+      "properties": {
+        "ats": {
+          "description": "Optional @-mentions. Each entry: {userId: \"ou_xxx\", name: \"DisplayName\"}. The text must contain each @<name> marker in order — it gets spliced into a real AT element so the mentioned user receives a notification.",
+          "items": {
+            "properties": {
+              "marker": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "userId": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "chat_id": {
+          "description": "Target chat ID (numeric)",
+          "type": "string"
+        },
+        "parent_id": {
+          "description": "Parent message ID (for nested reply, optional)",
+          "type": "string"
+        },
+        "root_id": {
+          "description": "Thread root message ID (for reply, optional)",
+          "type": "string"
+        },
+        "text": {
+          "description": "Message text. If `ats` is provided, include the display marker for each @ in this text (default marker is `@<name>`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chat_id",
+        "text"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "send_audio_as_user",
+    "description": "[User Identity] Send an audio message as the logged-in user. Requires audio_key.",
+    "inputSchema": {
+      "properties": {
+        "audio_key": {
+          "description": "Audio key from upload",
+          "type": "string"
+        },
+        "chat_id": {
+          "description": "Target chat ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "audio_key",
+        "chat_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "send_card_as_user",
+    "description": "[v1.3.6: bot-routed default] Send an interactive card to a chat. **As of v1.3.6, identity defaults to BOT** because user-identity card sending requires reverse-engineering the Feishu web protobuf and is deferred to v1.3.7. The tool name keeps the \"as_user\" suffix so callers don't have to migrate when v1.3.7 lands; once user-identity is implemented the default flips. Pass `card` as a JSON object (Feishu card schema). To force bot explicitly set via=\"bot\".",
+    "inputSchema": {
+      "properties": {
+        "card": {
+          "description": "Feishu card JSON. See https://open.feishu.cn/cardkit for the schema; build cards visually then paste the resulting JSON here."
+        },
+        "chat_id": {
+          "description": "Target chat_id (oc_xxx) or open_id",
+          "type": "string"
+        },
+        "via": {
+          "description": "Identity to send as. Default \"bot\". \"user\" returns an explicit not-yet-implemented error in v1.3.6.",
+          "enum": [
+            "bot",
+            "user"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "card",
+        "chat_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "send_file_as_user",
+    "description": "[User Identity] Send a file as the logged-in user. Requires file_key (upload via Official API first).",
+    "inputSchema": {
+      "properties": {
+        "chat_id": {
+          "description": "Target chat ID",
+          "type": "string"
+        },
+        "file_key": {
+          "description": "File key from upload",
+          "type": "string"
+        },
+        "file_name": {
+          "description": "Display file name",
+          "type": "string"
+        },
+        "root_id": {
+          "description": "Thread root message ID (optional)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chat_id",
+        "file_key",
+        "file_name"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "send_image_as_user",
+    "description": "[User Identity] Send an image as the logged-in user. Requires image_key (upload via Official API first).",
+    "inputSchema": {
+      "properties": {
+        "chat_id": {
+          "description": "Target chat ID",
+          "type": "string"
+        },
+        "image_key": {
+          "description": "Image key from upload (img_v2_xxx or img_v3_xxx)",
+          "type": "string"
+        },
+        "root_id": {
+          "description": "Thread root message ID (optional)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chat_id",
+        "image_key"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "send_message_as_bot",
+    "description": "[Official API] Send a message as the bot to any chat. Supports text, post, interactive, etc. This is the reliable path for @-mentions: include `<at user_id=\"ou_xxx\">Name</at>` inline in text content and Feishu resolves it to a real @-notification.",
+    "inputSchema": {
+      "properties": {
+        "chat_id": {
+          "description": "Target chat_id (oc_xxx) or open_id",
+          "type": "string"
+        },
+        "content": {
+          "description": "Message content (string or object, auto-serialized). Plain text: {\"text\":\"hello\"}. Text with @-mention: {\"text\":\"<at user_id=\\\"ou_xxx\\\">Alice</at> hi\"} — the inline tag becomes a real @-notification."
+        },
+        "msg_type": {
+          "description": "Message type: text, post, image, interactive, etc.",
+          "enum": [
+            "text",
+            "post",
+            "image",
+            "interactive",
+            "share_chat",
+            "share_user",
+            "audio",
+            "media",
+            "file",
+            "sticker"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "chat_id",
+        "content",
+        "msg_type"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "send_post_as_user",
+    "description": "[User Identity] Send a rich text (POST) message with title and formatted paragraphs. Supports real @-mentions that trigger notifications.",
+    "inputSchema": {
+      "properties": {
+        "chat_id": {
+          "description": "Target chat ID",
+          "type": "string"
+        },
+        "paragraphs": {
+          "description": "Array of paragraphs. Each paragraph is an array of elements:\n• {tag:\"text\",text:\"...\"} — plain text\n• {tag:\"a\",href:\"https://...\",text:\"display\"} — hyperlink\n• {tag:\"at\",userId:\"ou_xxx\",name:\"Display Name\"} — real @-mention (triggers notification)",
+          "items": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "root_id": {
+          "description": "Thread root message ID (optional)",
+          "type": "string"
+        },
+        "title": {
+          "description": "Post title (optional)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chat_id",
+        "paragraphs"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "send_sticker_as_user",
+    "description": "[User Identity] Send a sticker/emoji as the logged-in user.",
+    "inputSchema": {
+      "properties": {
+        "chat_id": {
+          "description": "Target chat ID",
+          "type": "string"
+        },
+        "sticker_id": {
+          "description": "Sticker ID",
+          "type": "string"
+        },
+        "sticker_set_id": {
+          "description": "Sticker set ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chat_id",
+        "sticker_id",
+        "sticker_set_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "send_to_group",
+    "description": "[User Identity] Search group by name → send text message. All in one step.",
+    "inputSchema": {
+      "properties": {
+        "ats": {
+          "description": "Optional @-mentions that trigger real notifications. Each entry: {userId, name}. Text must contain `@<name>` marker for each entry.",
+          "items": {
+            "properties": {
+              "marker": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "userId": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "group_name": {
+          "description": "Group chat name",
+          "type": "string"
+        },
+        "text": {
+          "description": "Message text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_name",
+        "text"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "send_to_user",
+    "description": "[User Identity] Search user by name → create P2P chat → send text message. All in one step.",
+    "inputSchema": {
+      "properties": {
+        "ats": {
+          "description": "Optional @-mentions. Same format as send_as_user.ats: [{userId, name}]. Text must contain the `@<name>` marker for each entry.",
+          "items": {
+            "properties": {
+              "marker": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "userId": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "text": {
+          "description": "Message text",
+          "type": "string"
+        },
+        "user_name": {
+          "description": "Recipient name (Chinese or English)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "user_name"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "switch_profile",
+    "description": "[Plugin] Switch the active identity profile. Subsequent tool calls use the new profile's credentials. Cached client instances are reset so the next call rebuilds against the new creds.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Profile name. \"default\" for top-level env vars; any key from LARK_PROFILES_JSON otherwise.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "update_bitable_field",
+    "description": "[Official API] Update an existing field (column) in a Bitable table.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        },
+        "field_id": {
+          "description": "Field ID to update",
+          "type": "string"
+        },
+        "field_name": {
+          "description": "New field name (optional)",
+          "type": "string"
+        },
+        "property": {
+          "description": "Field-type-specific properties (optional)",
+          "type": "object"
+        },
+        "table_id": {
+          "description": "Table ID",
+          "type": "string"
+        },
+        "type": {
+          "description": "Field type (REQUIRED by Feishu API, see create_bitable_field for values)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "app_token",
+        "field_id",
+        "table_id",
+        "type"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "update_bitable_table",
+    "description": "[Official API] Rename a data table in a Bitable app.",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token",
+          "type": "string"
+        },
+        "name": {
+          "description": "New table name",
+          "type": "string"
+        },
+        "table_id": {
+          "description": "Table ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token",
+        "name",
+        "table_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "update_doc_block",
+    "description": "[Official API] Update a specific block in a document. Generic mode: pass update_body. Image-replace mode: pass image_token to swap the picture in an existing image block. File-replace mode: pass file_token to swap an existing file block. document_id accepts native ID, wiki node token, or Feishu URL.",
+    "inputSchema": {
+      "properties": {
+        "block_id": {
+          "description": "Block ID to update",
+          "type": "string"
+        },
+        "document_id": {
+          "description": "Document ID, wiki node token, or Feishu URL",
+          "type": "string"
+        },
+        "file_token": {
+          "description": "Pre-uploaded file token — patches the block with {replace_file:{token}}",
+          "type": "string"
+        },
+        "image_token": {
+          "description": "Pre-uploaded image token — if provided, update_body is ignored and the block is patched with {replace_image:{token}}",
+          "type": "string"
+        },
+        "update_body": {
+          "description": "Generic update payload. E.g. {update_text_elements:{elements:[{text_run:{content:\"new text\"}}]}}",
+          "type": "object"
+        }
+      },
+      "required": [
+        "block_id",
+        "document_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "update_group",
+    "description": "[Official API] Update group chat name or description.",
+    "inputSchema": {
+      "properties": {
+        "chat_id": {
+          "description": "Chat ID (oc_xxx)",
+          "type": "string"
+        },
+        "description": {
+          "description": "New description (optional)",
+          "type": "string"
+        },
+        "name": {
+          "description": "New group name (optional)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chat_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "update_message",
+    "description": "[Official API] Edit a sent message (bot can only edit its own messages). Supports text and post.",
+    "inputSchema": {
+      "properties": {
+        "content": {
+          "description": "New content. For text: {\"text\":\"updated text\"}"
+        },
+        "message_id": {
+          "description": "Message ID (om_xxx)",
+          "type": "string"
+        },
+        "msg_type": {
+          "description": "Message type: text or post",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "message_id",
+        "msg_type"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "upload_bitable_attachment",
+    "description": "[Official API] Upload a file as a Bitable attachment (drive/v1/medias/upload_all with parent_type=bitable_image or bitable_file). Returns file_token suitable for writing into a Bitable Attachment-type field via batch_create/update_bitable_records (the field value should be [{file_token}]).",
+    "inputSchema": {
+      "properties": {
+        "app_token": {
+          "description": "Bitable app token (the bascn... or basc... id)",
+          "type": "string"
+        },
+        "file_path": {
+          "description": "Absolute path to the file on disk",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Whether the attachment is an image (bitable_image) or a generic file (bitable_file). Default: file.",
+          "enum": [
+            "image",
+            "file"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "app_token",
+        "file_path"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "upload_drive_file",
+    "description": "[Official API] Upload a file from disk to a Feishu Drive folder (drive/v1/files/upload_all, parent_type=explorer). Returns file_token + url. If wiki_space_id is provided, the uploaded file is then attached to that Wiki space via move_docs_to_wiki (obj_type=file). UAT-first with app fallback.",
+    "inputSchema": {
+      "properties": {
+        "file_path": {
+          "description": "Absolute path to the file on disk",
+          "type": "string"
+        },
+        "folder_token": {
+          "description": "Destination folder token. Use list_files to find one, or pass the user \"我的空间\" root token.",
+          "type": "string"
+        },
+        "wiki_parent_node_token": {
+          "description": "Optional. Parent node under which to attach in the Wiki space.",
+          "type": "string"
+        },
+        "wiki_space_id": {
+          "description": "Optional. If set, also attach the uploaded file to this Wiki space.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file_path",
+        "folder_token"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "upload_file",
+    "description": "[Official API] Upload a file to Feishu. Returns file_key for use with send_file_as_user.",
+    "inputSchema": {
+      "properties": {
+        "file_name": {
+          "description": "Display file name (optional, defaults to basename)",
+          "type": "string"
+        },
+        "file_path": {
+          "description": "Absolute path to the file on disk",
+          "type": "string"
+        },
+        "file_type": {
+          "description": "File type (default: stream for generic files)",
+          "enum": [
+            "opus",
+            "mp4",
+            "pdf",
+            "doc",
+            "xls",
+            "ppt",
+            "stream"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "file_path"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "upload_image",
+    "description": "[Official API] Upload an image file to Feishu. Returns image_key for use with send_image_as_user.",
+    "inputSchema": {
+      "properties": {
+        "image_path": {
+          "description": "Absolute path to the image file on disk",
+          "type": "string"
+        },
+        "image_type": {
+          "description": "Image usage type (default: message)",
+          "enum": [
+            "message",
+            "avatar"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "image_path"
+      ],
+      "type": "object"
+    }
+  }
+]
