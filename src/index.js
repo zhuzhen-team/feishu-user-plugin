@@ -21,7 +21,11 @@ const { resolveToObj, resolveToken, parseFeishuInput } = require('./resolver');
 // default branch. Task 28 will replace this hand-wired dispatch with
 // src/server.js's registry-based one.
 const EXTERNAL_TOOL_MODULES = [
+  require('./tools/calendar'),
+  require('./tools/diagnostics'),
+  require('./tools/okr'),
   require('./tools/profile'),
+  require('./tools/wiki'),
 ];
 
 // --- Chat ID Mapper ---
@@ -385,11 +389,7 @@ const TOOLS = [
       required: ['user_id'],
     },
   },
-  {
-    name: 'get_login_status',
-    description: 'Check cookie session validity and app credentials status. Also refreshes session.',
-    inputSchema: { type: 'object', properties: {} },
-  },
+  // get_login_status → src/tools/diagnostics.js
 
   // ========== IM — Official API (User Identity via UAT) ==========
   {
@@ -681,33 +681,7 @@ const TOOLS = [
     },
   },
 
-  // ========== Wiki — Official API ==========
-  {
-    name: 'list_wiki_spaces',
-    description: '[Official API] List all accessible Wiki spaces.',
-    inputSchema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'search_wiki',
-    description: '[Official API] Search Wiki nodes by keyword.',
-    inputSchema: {
-      type: 'object',
-      properties: { query: { type: 'string', description: 'Search keyword' } },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'list_wiki_nodes',
-    description: '[Official API] List nodes in a Wiki space.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        space_id: { type: 'string', description: 'Wiki space ID' },
-        parent_node_token: { type: 'string', description: 'Parent node token (optional)' },
-      },
-      required: ['space_id'],
-    },
-  },
+  // ========== Wiki — extracted to src/tools/wiki.js ==========
 
   // ========== Drive — Official API ==========
   {
@@ -1123,130 +1097,10 @@ const TOOLS = [
     },
   },
 
-  // ========== Message Resources (Image/File Download) ==========
-  {
-    name: 'download_image',
-    description: '[User Identity / Official API] Download an image so the model can actually see it. Two modes: (1) message image — pass message_id + image_key from read_messages / read_p2p_messages. (2) docx image — pass doc_token + image_token (the block.image.token from get_doc_blocks). doc_token accepts native document_id, wiki node token, or Feishu URL. Tries user identity first, falls back to app. NOTE: for merge_forward children, pass the child\'s `parentMessageId` (NOT the child message id) — Feishu keys media by the parent merge_forward id.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        message_id: { type: 'string', description: 'Message ID (om_xxx) — for mode 1 only. For merge_forward children use the parent merge_forward message id.' },
-        image_key: { type: 'string', description: 'Image key (img_xxx) from message content — for mode 1 only' },
-        doc_token: { type: 'string', description: 'Document ID, wiki node token, or Feishu URL — for mode 2 only' },
-        image_token: { type: 'string', description: 'Image token from a docx image block (block.image.token via get_doc_blocks) — for mode 2 only' },
-      },
-    },
-  },
-  {
-    name: 'download_file',
-    description: '[User Identity / Official API] Download a file attached to a message (msg_type=file). Returns base64 bytes + mimeType + filename. Tries user identity first, falls back to app. For merge_forward children, pass the child\'s `parentMessageId` (NOT the child message id) — Feishu keys media by the parent merge_forward id.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        message_id: { type: 'string', description: 'Message ID (om_xxx). For merge_forward children use the parent merge_forward message id.' },
-        file_key: { type: 'string', description: 'File key from message content (content.file_key for msg_type=file)' },
-        save_path: { type: 'string', description: 'Optional absolute local path to save the file to. If omitted, file is only returned as inline base64 in the response.' },
-      },
-      required: ['message_id', 'file_key'],
-    },
-  },
-
-  // ========== Wiki Node — Object Resolution (v1.3.4) ==========
-  {
-    name: 'get_wiki_node',
-    description: '[Official API] Resolve a Wiki node token to its underlying object (docx / bitable / sheet / mindnote / file). Returns obj_type + obj_token + space_id so you can read/write the real resource via the usual docx / bitable tools. Accepts bare wiki node token (wikcnXXX) or a full Feishu /wiki/ URL.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        node_token: { type: 'string', description: 'Wiki node token (wikcnXXX / wikmXXX / wiknXXX) or full Feishu /wiki/<token> URL' },
-      },
-      required: ['node_token'],
-    },
-  },
-
-  // ========== OKR — Official API (v1.3.4) ==========
-  {
-    name: 'list_user_okrs',
-    description: '[Official API + UAT] List a user\'s OKRs. Requires the user\'s open_id (get yours via get_login_status or search_contacts). Filter by period_ids to narrow to a specific quarter.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        user_id: { type: 'string', description: 'Target user\'s open_id (or the matching user_id_type)' },
-        user_id_type: { type: 'string', enum: ['user_id', 'union_id', 'open_id', 'people_admin_id'], description: 'Type of user_id (default: open_id)' },
-        period_ids: { type: 'array', items: { type: 'string' }, description: 'Filter by OKR period IDs (optional). Get period IDs via list_okr_periods.' },
-        offset: { type: 'number', description: 'Pagination offset (default 0)' },
-        limit: { type: 'number', description: 'Items per page (default 10, max 10)' },
-        lang: { type: 'string', description: 'Response language (optional, e.g. "zh_cn", "en_us")' },
-      },
-      required: ['user_id'],
-    },
-  },
-  {
-    name: 'get_okrs',
-    description: '[Official API + UAT] Batch-fetch full OKR details (objectives, key results, progress, alignments) by OKR IDs.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        okr_ids: { type: 'array', items: { type: 'string' }, description: 'OKR IDs (max 10 per call). From list_user_okrs.' },
-        user_id_type: { type: 'string', enum: ['user_id', 'union_id', 'open_id', 'people_admin_id'], description: 'Type of user_ids in response (default: open_id)' },
-        lang: { type: 'string', description: 'Response language (optional)' },
-      },
-      required: ['okr_ids'],
-    },
-  },
-  {
-    name: 'list_okr_periods',
-    description: '[Official API + UAT] List OKR periods (quarters / years) defined in the tenant. Use period_ids from this to filter list_user_okrs.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        page_size: { type: 'number', description: 'Items per page (default 10)' },
-        page_token: { type: 'string', description: 'Pagination token' },
-      },
-    },
-  },
-
-  // ========== Calendar — Official API (v1.3.4) ==========
-  {
-    name: 'list_calendars',
-    description: '[Official API + UAT] List the current user\'s calendars (primary + shared + subscribed). Requires UAT — app identity only sees calendars it was explicitly invited to. Requires `calendar:calendar:readonly` scope on the OAuth.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        page_size: { type: 'number', description: 'Items per page (min 50, default 50). Feishu\'s calendar endpoint rejects page_size < 50.' },
-        page_token: { type: 'string', description: 'Pagination token' },
-        sync_token: { type: 'string', description: 'Incremental sync token (optional)' },
-      },
-    },
-  },
-  {
-    name: 'list_calendar_events',
-    description: '[Official API + UAT] List events in a calendar within an optional time range. Typical usage: first list_calendars to find calendar_id (primary calendar has type="primary"), then list events in e.g. [now, now+7d] (Unix seconds).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        calendar_id: { type: 'string', description: 'Calendar ID from list_calendars' },
-        start_time: { type: 'string', description: 'Range start (Unix seconds, optional)' },
-        end_time: { type: 'string', description: 'Range end (Unix seconds, optional)' },
-        page_size: { type: 'number', description: 'Items per page (default 50)' },
-        page_token: { type: 'string', description: 'Pagination token' },
-        sync_token: { type: 'string', description: 'Incremental sync token (optional)' },
-      },
-      required: ['calendar_id'],
-    },
-  },
-  {
-    name: 'get_calendar_event',
-    description: '[Official API + UAT] Get full details of a single calendar event (summary, description, start/end, attendees, location, attachments, meeting link).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        calendar_id: { type: 'string', description: 'Calendar ID' },
-        event_id: { type: 'string', description: 'Event ID from list_calendar_events' },
-      },
-      required: ['calendar_id', 'event_id'],
-    },
-  },
+  // download_image / download_file → src/tools/diagnostics.js
+  // get_wiki_node → src/tools/wiki.js
+  // list_user_okrs / get_okrs / list_okr_periods → src/tools/okr.js
+  // list_calendars / list_calendar_events / get_calendar_event → src/tools/calendar.js
 
 ];
 
@@ -1456,41 +1310,7 @@ async function handleTool(name, args) {
       }
       return text(n ? `User ${args.user_id}: ${n}` : `Could not resolve user ${args.user_id}. This user may be from an external tenant. Try search_contacts with the user's display name instead.`);
     }
-    case 'get_login_status': {
-      const parts = [];
-      try {
-        const c = await getUserClient();
-        const status = await c.checkSession();
-        parts.push(`Cookie: ${status.valid ? 'Active' : 'Expired'} (${status.userName || status.userId || 'unknown'})`);
-        parts.push(`  ${status.message}`);
-      } catch (e) { parts.push(`Cookie: ${e.message}`); }
-      const hasApp = !!(process.env.LARK_APP_ID && process.env.LARK_APP_SECRET);
-      if (!hasApp) {
-        parts.push(`App credentials: Not set`);
-      } else {
-        const official = getOfficialClient();
-        const probe = await official.verifyApp();
-        if (probe.valid) {
-          const nameBit = probe.appName ? ` "${probe.appName}"` : '';
-          parts.push(`App credentials: Valid — app_id=${probe.appId}${nameBit}`);
-        } else {
-          parts.push(`App credentials: INVALID — app_id=${probe.appId} rejected by Feishu (${probe.error})`);
-          parts.push(`  → Likely wrong/stale APP_ID. Re-run the install prompt from team-skills/plugins/feishu-user-plugin/README.md to get the correct credentials.`);
-        }
-        if (official.hasUAT) {
-          try {
-            await official.listChatsAsUser({ pageSize: 1 });
-            parts.push('User access token: Valid (P2P/group UAT reading enabled)');
-          } catch (e) {
-            parts.push(`User access token: INVALID — ${e.message}`);
-            parts.push('  → Re-run OAuth: npx feishu-user-plugin oauth, then restart Claude Code / Codex so running MCP servers load the new token.');
-          }
-        } else {
-          parts.push('User access token: Not set (optional — needed for P2P chat reading. Run OAuth flow to obtain, see README for details)');
-        }
-      }
-      return text(parts.join('\n'));
-    }
+    // get_login_status → src/tools/diagnostics.js (dispatched via default branch)
 
     // --- User UAT: IM ---
 
@@ -1645,12 +1465,7 @@ async function handleTool(name, args) {
 
     // --- Official API: Wiki ---
 
-    case 'list_wiki_spaces':
-      return json(await getOfficialClient().listWikiSpaces());
-    case 'search_wiki':
-      return json(await getOfficialClient().searchWiki(args.query));
-    case 'list_wiki_nodes':
-      return json(await getOfficialClient().listWikiNodes(args.space_id, { parentNodeToken: args.parent_node_token }));
+    // list_wiki_spaces / search_wiki / list_wiki_nodes → src/tools/wiki.js
 
     // --- Official API: Drive ---
 
@@ -1816,86 +1631,10 @@ async function handleTool(name, args) {
     case 'delete_file':
       return text(`File deleted: task=${(await getOfficialClient().deleteFile(args.file_token, args.type)).taskId}`);
 
-    case 'download_image': {
-      const official = getOfficialClient();
-      let r;
-      let source;
-      if (args.image_token) {
-        // Docx image mode — doc_token may be a URL / wiki node; resolve it.
-        const docToken = args.doc_token ? await resolveDocId(args.doc_token) : undefined;
-        r = await official.downloadDocImage(args.image_token, docToken);
-        source = docToken ? `docx ${docToken}` : 'drive media';
-      } else if (args.message_id && args.image_key) {
-        r = await official.downloadMessageResource(args.message_id, args.image_key, 'image');
-        source = `message ${args.message_id}`;
-      } else {
-        return text('download_image requires either (message_id + image_key) for chat images, or (image_token, optionally with doc_token) for docx images.');
-      }
-      // Return as MCP image content so the model sees the pixels directly.
-      return {
-        content: [
-          { type: 'text', text: `Image downloaded from ${source} (${r.viaUser ? 'as user' : 'as app'}, ${r.bytes} bytes, ${r.mimeType}):` },
-          { type: 'image', data: r.base64, mimeType: r.mimeType },
-        ],
-      };
-    }
-
-    case 'download_file': {
-      if (!args.message_id || !args.file_key) {
-        return text('download_file requires message_id + file_key. For merge_forward children pass the PARENT merge_forward message id, not the child id.');
-      }
-      const r = await getOfficialClient().downloadMessageResource(args.message_id, args.file_key, 'file');
-      let saveNote = '';
-      if (args.save_path) {
-        try {
-          const fs = require('fs');
-          fs.writeFileSync(args.save_path, Buffer.from(r.base64, 'base64'));
-          saveNote = `\nSaved to: ${args.save_path}`;
-        } catch (e) {
-          saveNote = `\nSave to ${args.save_path} failed: ${e.message}`;
-        }
-      }
-      // Files are returned as a text summary plus a resource link so agents can
-      // either read the saved copy or decode the base64 themselves. We do not
-      // embed binary file content as MCP image blobs (wrong content-type).
-      const summary = `File downloaded from message ${args.message_id} (${r.viaUser ? 'as user' : 'as app'}, ${r.bytes} bytes, ${r.mimeType})${saveNote}`;
-      return {
-        content: [
-          { type: 'text', text: summary },
-          { type: 'text', text: `base64 (${r.bytes} bytes, truncated display):\n${r.base64.slice(0, 400)}${r.base64.length > 400 ? '…' : ''}` },
-        ],
-      };
-    }
-
-    // --- Wiki Node Resolution (v1.3.4) ---
-    case 'get_wiki_node': {
-      // Accept either a bare wiki node token or a full /wiki/ URL — parse first.
-      const parsed = parseFeishuInput(args.node_token);
-      const token = (parsed.kind === 'wiki' || parsed.kind === 'raw') ? parsed.token : args.node_token;
-      return json(await getOfficialClient().getWikiNode(token));
-    }
-
-    // --- OKR (v1.3.4) ---
-    case 'list_user_okrs':
-      return json(await getOfficialClient().listUserOkrs(args.user_id, {
-        periodIds: args.period_ids, offset: args.offset, limit: args.limit, lang: args.lang,
-        userIdType: args.user_id_type,
-      }));
-    case 'get_okrs':
-      return json(await getOfficialClient().getOkrs(args.okr_ids, { lang: args.lang, userIdType: args.user_id_type }));
-    case 'list_okr_periods':
-      return json(await getOfficialClient().listOkrPeriods({ pageSize: args.page_size, pageToken: args.page_token }));
-
-    // --- Calendar (v1.3.4) ---
-    case 'list_calendars':
-      return json(await getOfficialClient().listCalendars({ pageSize: args.page_size, pageToken: args.page_token, syncToken: args.sync_token }));
-    case 'list_calendar_events':
-      return json(await getOfficialClient().listCalendarEvents(args.calendar_id, {
-        startTime: args.start_time, endTime: args.end_time,
-        pageSize: args.page_size, pageToken: args.page_token, syncToken: args.sync_token,
-      }));
-    case 'get_calendar_event':
-      return json(await getOfficialClient().getCalendarEvent(args.calendar_id, args.event_id));
+    // download_image / download_file → src/tools/diagnostics.js
+    // get_wiki_node → src/tools/wiki.js
+    // list_user_okrs / get_okrs / list_okr_periods → src/tools/okr.js
+    // list_calendars / list_calendar_events / get_calendar_event → src/tools/calendar.js
 
     default: {
       // Hand off to extracted tool modules. ctx exposes the closure state
