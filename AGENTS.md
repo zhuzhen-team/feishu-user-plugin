@@ -35,6 +35,7 @@ Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUM
 - `send_file_as_user` — Send file (requires file_key from `upload_file`)
 - `send_post_as_user` — Send rich text with title + formatted paragraphs. Elements: `{tag:"text"}`, `{tag:"a",href,text}`, `{tag:"at",userId,name}`. **@-mentions trigger real notifications** (fixed by registering AT element IDs in RichText.atIds field 6 — reverse-engineered from Feishu Web bundle's AtProperty + RichText schemas).
 - `send_as_user` / `send_to_user` / `send_to_group` — plain text sends now accept optional `ats: [{userId, name}]`; the text must contain the `@<name>` marker for each entry. The marker is spliced into a real AT element so the mentioned user is notified. Identity is the cookie user (not bot).
+- **Cookie sends accept oc_xxx chat IDs (v1.3.7 C1.4)**: `send_as_user`, `send_image_as_user`, `send_file_as_user`, `send_post_as_user`, `send_card_as_user`, and `batch_send` previously required numeric chat IDs from `create_p2p_chat` / cookie search. They now auto-resolve `oc_xxx` via `getChatInfo(name) → cookie search(name) → numeric id` and cache the mapping. Numeric IDs still work and skip the resolver. If resolution fails (chat not in your search index, no group with matching name), the tool throws a clear error with remediation guidance.
 
 ### User Identity — Contacts & Info
 - `search_contacts` — Search users/groups by name
@@ -503,6 +504,9 @@ For team-skills repo: see [Syncing to team-skills](#syncing-to-team-skills) abov
 1. Write a standalone test script (`node -e "..."`) to reproduce the bug before fixing
 2. After fixing, verify with the same script
 3. If the bug affects MCP tool behavior, test via MCP tool call after server restart
+
+### Testing methodology
+See `docs/TESTING-METHODOLOGY.md` for the full regression playbook (when to use unit / smoke / live MCP / `scripts/test-all-tools.js`). The semi-automated path is `node scripts/test-all-tools.js`; the smoke gate is `npm run smoke` (regenerate baseline with `npm run smoke:baseline` only when a tool schema delta is intentional).
 
 ### Commit conventions
 - `feat:` new tools or capabilities

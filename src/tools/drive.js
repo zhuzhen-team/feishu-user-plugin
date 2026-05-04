@@ -101,7 +101,8 @@ const handlers = {
         return text(`File moved: task=${(await c.moveFile(args.file_token, args.folder_token, args.type)).taskId}`);
       }
       case 'delete': {
-        return text(`File deleted: task=${(await c.deleteFile(args.file_token, args.type)).taskId}`);
+        const r = await c.deleteFile(args.file_token, args.type);
+        return text(r.taskId ? `File deletion queued: task=${r.taskId}` : `File deleted (${args.type})`);
       }
     }
   },
