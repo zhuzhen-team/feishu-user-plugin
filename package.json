@@ -13,7 +13,8 @@
     "oauth": "node src/oauth.js",
     "smoke": "node scripts/smoke.js diff",
     "smoke:baseline": "node scripts/smoke.js write-baseline",
-    "prepublishOnly": "node scripts/confirm-version.js"
+    "prepublishOnly": "node scripts/check-version.js && node scripts/check-tool-count.js && node scripts/confirm-version.js",
+    "prepare": "husky"
   },
   "keywords": [
     "feishu",
@@ -57,5 +58,8 @@
     "@modelcontextprotocol/sdk": "^1.12.1",
     "dotenv": "^16.4.7",
     "protobufjs": "^7.4.0"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
   }
 }
