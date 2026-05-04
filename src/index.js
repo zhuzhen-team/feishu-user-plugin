@@ -21,6 +21,7 @@ const { resolveToObj, resolveToken, parseFeishuInput } = require('./resolver');
 // default branch. Task 28 will replace this hand-wired dispatch with
 // src/server.js's registry-based one.
 const EXTERNAL_TOOL_MODULES = [
+  require('./tools/bitable'),
   require('./tools/calendar'),
   require('./tools/contacts'),
   require('./tools/diagnostics'),
@@ -493,168 +494,7 @@ const TOOLS = [
     },
   },
 
-  // ========== Bitable — Official API ==========
-  {
-    name: 'create_bitable',
-    description: '[Official API] Create a new Bitable (multi-dimensional table) app. Can place directly under a Wiki space via wiki_space_id (and optional wiki_parent_node_token).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Bitable app name' },
-        folder_id: { type: 'string', description: 'Parent folder token (optional, defaults to root; ignored when wiki_space_id is set)' },
-        wiki_space_id: { type: 'string', description: 'Wiki space ID to place the bitable under (optional)' },
-        wiki_parent_node_token: { type: 'string', description: 'Parent wiki node token within the space (optional)' },
-      },
-    },
-  },
-  {
-    name: 'list_bitable_tables',
-    description: '[Official API] List all tables in a Bitable app.',
-    inputSchema: {
-      type: 'object',
-      properties: { app_token: { type: 'string', description: 'Bitable app token' } },
-      required: ['app_token'],
-    },
-  },
-  {
-    name: 'create_bitable_table',
-    description: '[Official API] Create a new data table in a Bitable app. Optionally define initial fields.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token' },
-        name: { type: 'string', description: 'Table name' },
-        fields: {
-          type: 'array',
-          description: 'Initial field definitions (optional). Each item: {field_name, type} where type is 1=Text, 2=Number, 3=SingleSelect, 4=MultiSelect, 5=DateTime, 7=Checkbox, 11=User, 13=Phone, 15=URL, 17=Attachment, 18=Link, 20=Formula, 21=DuplexLink, 22=Location, 23=GroupChat, 1001=CreateTime, 1002=ModifiedTime, 1003=Creator, 1004=Modifier',
-          items: { type: 'object' },
-        },
-      },
-      required: ['app_token', 'name'],
-    },
-  },
-  {
-    name: 'list_bitable_fields',
-    description: '[Official API] List all fields (columns) in a Bitable table.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token' },
-        table_id: { type: 'string', description: 'Table ID' },
-      },
-      required: ['app_token', 'table_id'],
-    },
-  },
-  {
-    name: 'create_bitable_field',
-    description: '[Official API] Create a new field (column) in a Bitable table.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token' },
-        table_id: { type: 'string', description: 'Table ID' },
-        field_name: { type: 'string', description: 'Field display name' },
-        type: { type: 'number', description: 'Field type: 1=Text, 2=Number, 3=SingleSelect, 4=MultiSelect, 5=DateTime, 7=Checkbox, 11=User, 13=Phone, 15=URL, 17=Attachment, 18=Link, 20=Formula, 21=DuplexLink, 22=Location, 23=GroupChat, 1001=CreateTime, 1002=ModifiedTime, 1003=Creator, 1004=Modifier' },
-        property: { type: 'object', description: 'Field-type-specific properties (optional). E.g. for SingleSelect: {options: [{name:"A"},{name:"B"}]}' },
-      },
-      required: ['app_token', 'table_id', 'field_name', 'type'],
-    },
-  },
-  {
-    name: 'update_bitable_field',
-    description: '[Official API] Update an existing field (column) in a Bitable table.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token' },
-        table_id: { type: 'string', description: 'Table ID' },
-        field_id: { type: 'string', description: 'Field ID to update' },
-        field_name: { type: 'string', description: 'New field name (optional)' },
-        type: { type: 'number', description: 'Field type (REQUIRED by Feishu API, see create_bitable_field for values)' },
-        property: { type: 'object', description: 'Field-type-specific properties (optional)' },
-      },
-      required: ['app_token', 'table_id', 'field_id', 'type'],
-    },
-  },
-  {
-    name: 'delete_bitable_field',
-    description: '[Official API] Delete a field (column) from a Bitable table.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token' },
-        table_id: { type: 'string', description: 'Table ID' },
-        field_id: { type: 'string', description: 'Field ID to delete' },
-      },
-      required: ['app_token', 'table_id', 'field_id'],
-    },
-  },
-  {
-    name: 'list_bitable_views',
-    description: '[Official API] List all views in a Bitable table.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token' },
-        table_id: { type: 'string', description: 'Table ID' },
-      },
-      required: ['app_token', 'table_id'],
-    },
-  },
-  {
-    name: 'search_bitable_records',
-    description: '[Official API] Search/query records in a Bitable table.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token' },
-        table_id: { type: 'string', description: 'Table ID' },
-        filter: { type: 'object', description: 'Filter conditions (optional)' },
-        sort: { type: 'array', description: 'Sort conditions (optional)' },
-        page_size: { type: 'number', description: 'Results per page (default 20)' },
-      },
-      required: ['app_token', 'table_id'],
-    },
-  },
-  {
-    name: 'batch_create_bitable_records',
-    description: '[Official API] Create one or more records (rows) in a Bitable table. Pass a single record or up to 500.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token' },
-        table_id: { type: 'string', description: 'Table ID' },
-        records: { type: 'array', description: 'Array of {fields: {field_name: value}} objects', items: { type: 'object' } },
-      },
-      required: ['app_token', 'table_id', 'records'],
-    },
-  },
-  {
-    name: 'batch_update_bitable_records',
-    description: '[Official API] Update one or more records in a Bitable table. Pass a single record or up to 500.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token' },
-        table_id: { type: 'string', description: 'Table ID' },
-        records: { type: 'array', description: 'Array of {record_id, fields: {field_name: value}} objects', items: { type: 'object' } },
-      },
-      required: ['app_token', 'table_id', 'records'],
-    },
-  },
-  {
-    name: 'batch_delete_bitable_records',
-    description: '[Official API] Delete one or more records from a Bitable table. Pass a single ID or up to 500.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token' },
-        table_id: { type: 'string', description: 'Table ID' },
-        record_ids: { type: 'array', description: 'Array of record IDs to delete', items: { type: 'string' } },
-      },
-      required: ['app_token', 'table_id', 'record_ids'],
-    },
-  },
+  // ========== Bitable — extracted to src/tools/bitable.js ==========
 
   // ========== Wiki — extracted to src/tools/wiki.js ==========
 
@@ -801,97 +641,7 @@ const TOOLS = [
     },
   },
 
-  // ========== Bitable — Additional ==========
-  {
-    name: 'get_bitable_record',
-    description: '[Official API] Get a single record by ID from a Bitable table.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token' },
-        table_id: { type: 'string', description: 'Table ID' },
-        record_id: { type: 'string', description: 'Record ID' },
-      },
-      required: ['app_token', 'table_id', 'record_id'],
-    },
-  },
-  {
-    name: 'delete_bitable_table',
-    description: '[Official API] Delete a data table from a Bitable app.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token' },
-        table_id: { type: 'string', description: 'Table ID to delete' },
-      },
-      required: ['app_token', 'table_id'],
-    },
-  },
-
-  {
-    name: 'get_bitable_meta',
-    description: '[Official API] Get metadata of a Bitable app (name, revision, etc.).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token' },
-      },
-      required: ['app_token'],
-    },
-  },
-  {
-    name: 'update_bitable_table',
-    description: '[Official API] Rename a data table in a Bitable app.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token' },
-        table_id: { type: 'string', description: 'Table ID' },
-        name: { type: 'string', description: 'New table name' },
-      },
-      required: ['app_token', 'table_id', 'name'],
-    },
-  },
-  {
-    name: 'create_bitable_view',
-    description: '[Official API] Create a new view in a Bitable table.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token' },
-        table_id: { type: 'string', description: 'Table ID' },
-        view_name: { type: 'string', description: 'View name' },
-        view_type: { type: 'string', description: 'View type: grid (default), kanban, gallery, form, gantt, calendar', default: 'grid' },
-      },
-      required: ['app_token', 'table_id', 'view_name'],
-    },
-  },
-  {
-    name: 'delete_bitable_view',
-    description: '[Official API] Delete a view from a Bitable table.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token' },
-        table_id: { type: 'string', description: 'Table ID' },
-        view_id: { type: 'string', description: 'View ID to delete' },
-      },
-      required: ['app_token', 'table_id', 'view_id'],
-    },
-  },
-  {
-    name: 'copy_bitable',
-    description: '[Official API] Copy a Bitable app to create a new one.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        app_token: { type: 'string', description: 'Bitable app token to copy' },
-        name: { type: 'string', description: 'New Bitable name' },
-        folder_id: { type: 'string', description: 'Destination folder token (optional)' },
-      },
-      required: ['app_token', 'name'],
-    },
-  },
+  // ========== Bitable — Additional schemas → src/tools/bitable.js ==========
 
   // ========== Drive — File Operations — extracted to src/tools/drive.js ==========
 
@@ -1186,58 +936,7 @@ async function handleTool(name, args) {
       return text(`Document created${ownership}: ${r.documentId}${wikiNote}${warn}`);
     }
 
-    // --- Official API: Bitable ---
-
-    case 'create_bitable': {
-      const r = await getOfficialClient().createBitable(args.name, args.folder_id, {
-        wikiSpaceId: args.wiki_space_id,
-        wikiParentNodeToken: args.wiki_parent_node_token,
-      });
-      const ownership = r.viaUser ? ' (as user)' : ' (as app — UAT unavailable or failed; bitable owned by the app, not you)';
-      const wikiNote = r.wikiNodeToken ? `\nWiki node: ${r.wikiNodeToken}`
-        : r.wikiAttachTaskId ? `\nWiki attach queued — task_id: ${r.wikiAttachTaskId}`
-        : r.wikiAttachError ? `\nWARNING: wiki attach failed — ${r.wikiAttachError}. Bitable exists in drive root/folder.`
-        : '';
-      const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
-      return text(`Bitable created${ownership}: ${r.appToken}\nURL: ${r.url || ''}${wikiNote}${warn}`);
-    }
-    case 'list_bitable_tables':
-      return json(await getOfficialClient().listBitableTables(await resolveDocId(args.app_token)));
-    case 'create_bitable_table': {
-      const r = await getOfficialClient().createBitableTable(await resolveDocId(args.app_token), args.name, args.fields);
-      const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
-      return text(`Table created: ${r.tableId}${warn}`);
-    }
-    case 'list_bitable_fields':
-      return json(await getOfficialClient().listBitableFields(await resolveDocId(args.app_token), args.table_id));
-    case 'create_bitable_field': {
-      const config = { field_name: args.field_name, type: args.type };
-      if (args.property) config.property = args.property;
-      return json(await getOfficialClient().createBitableField(await resolveDocId(args.app_token), args.table_id, config));
-    }
-    case 'update_bitable_field': {
-      const config = {};
-      if (args.field_name) config.field_name = args.field_name;
-      if (args.type) config.type = args.type;
-      if (args.property) config.property = args.property;
-      return json(await getOfficialClient().updateBitableField(await resolveDocId(args.app_token), args.table_id, args.field_id, config));
-    }
-    case 'delete_bitable_field': {
-      const r = await getOfficialClient().deleteBitableField(await resolveDocId(args.app_token), args.table_id, args.field_id);
-      return text(r.deleted ? `Field ${r.fieldId} deleted` : `Field deletion returned deleted=${r.deleted}`);
-    }
-    case 'list_bitable_views':
-      return json(await getOfficialClient().listBitableViews(await resolveDocId(args.app_token), args.table_id));
-    case 'search_bitable_records':
-      return json(await getOfficialClient().searchBitableRecords(await resolveDocId(args.app_token), args.table_id, {
-        filter: args.filter, sort: args.sort, pageSize: args.page_size,
-      }));
-    case 'batch_create_bitable_records':
-      return json(await getOfficialClient().batchCreateBitableRecords(await resolveDocId(args.app_token), args.table_id, args.records));
-    case 'batch_update_bitable_records':
-      return json(await getOfficialClient().batchUpdateBitableRecords(await resolveDocId(args.app_token), args.table_id, args.records));
-    case 'batch_delete_bitable_records':
-      return json(await getOfficialClient().batchDeleteBitableRecords(await resolveDocId(args.app_token), args.table_id, args.record_ids));
+    // Bitable handlers → src/tools/bitable.js
 
     // --- Official API: Wiki ---
 
@@ -1323,22 +1022,7 @@ async function handleTool(name, args) {
     case 'delete_doc_blocks':
       return text(`Blocks deleted: ${(await getOfficialClient().deleteDocBlocks(await resolveDocId(args.document_id), args.parent_block_id, args.start_index, args.end_index)).deleted}`);
 
-    // --- Official API: Bitable Additional ---
-
-    case 'get_bitable_record':
-      return json(await getOfficialClient().getBitableRecord(await resolveDocId(args.app_token), args.table_id, args.record_id));
-    case 'delete_bitable_table':
-      return text(`Table deleted: ${(await getOfficialClient().deleteBitableTable(await resolveDocId(args.app_token), args.table_id)).deleted}`);
-    case 'get_bitable_meta':
-      return json(await getOfficialClient().getBitableMeta(await resolveDocId(args.app_token)));
-    case 'update_bitable_table':
-      return text(`Table renamed: ${(await getOfficialClient().updateBitableTable(await resolveDocId(args.app_token), args.table_id, args.name)).name}`);
-    case 'create_bitable_view':
-      return json(await getOfficialClient().createBitableView(await resolveDocId(args.app_token), args.table_id, args.view_name, args.view_type));
-    case 'delete_bitable_view':
-      return text(`View deleted: ${(await getOfficialClient().deleteBitableView(await resolveDocId(args.app_token), args.table_id, args.view_id)).deleted}`);
-    case 'copy_bitable':
-      return json(await getOfficialClient().copyBitable(await resolveDocId(args.app_token), args.name, args.folder_id));
+    // Bitable additional handlers → src/tools/bitable.js
 
     // copy_file / move_file / delete_file → src/tools/drive.js
 
