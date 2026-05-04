@@ -218,8 +218,12 @@ module.exports = {
       );
       return { pin: res.data.pin };
     }
+    // Feishu unpin is DELETE /pins/{message_id} — path param only, no body.
+    // SDK's pin.delete expects `path: {message_id}`. Sending `data: {message_id}`
+    // (the previous shape) yielded a 400 with "message_id is required" because
+    // the message_id never made it onto the URL.
     await this._safeSDKCall(
-      () => this.client.im.pin.delete({ data: { message_id: messageId } }),
+      () => this.client.im.pin.delete({ path: { message_id: messageId } }),
       'unpinMessage'
     );
     return { unpinned: true };

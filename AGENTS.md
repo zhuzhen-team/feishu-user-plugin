@@ -53,12 +53,12 @@ Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUM
 ### Official API Tools (app credentials)
 - `list_chats` / `read_messages` — Chat history (read_messages accepts chat name, oc_ ID, or numeric ID; auto-resolves via bot's group list → im.chat.search → search_contacts). **Auto-falls back to UAT for external groups the bot cannot access.** Returns newest messages first by default. Messages include sender names. **v1.3.5**: `merge_forward` messages now auto-expand into their child messages (2 images + 4 texts, with original sender / time / origin chat preserved); text messages get `urls[]` + `feishuDocs[]` extracted so agents can feed them straight into `read_doc` / WebFetch. Disable expansion with `expand_merge_forward=false`.
 - `send_message_as_bot` — Bot sends message to any chat (text, post, interactive, etc.)
-- `reply_message` / `forward_message` — Message operations (as bot)
-- `delete_message` / `update_message` — Recall or edit bot's own messages
+- `reply_message` / `forward_message` — Message operations (as bot). `forward_message` accepts `receive_id_type` (chat_id/open_id/union_id/user_id/email; auto-detects when omitted by inspecting the receive_id prefix).
+- `delete_message` / `update_message` — Recall or edit bot's own messages. `update_message` only supports `msg_type=text` or `interactive` (Feishu API limit; other types are rejected with a clear error before hitting the API).
 - `add_reaction` / `delete_reaction` — Emoji reactions on messages
 - `pin_message` — Pin or unpin a message (pinned=true/false)
 - `create_group` / `update_group` — Create and manage group chats
-- `list_members` / `manage_members` — Group membership (manage_members: action=add/remove)
+- `list_members` / `manage_members` — Group membership (manage_members: action=add/remove, member_id_type=open_id|union_id|user_id — default open_id; pass union_id/user_id explicitly when your member_ids use those formats, otherwise Feishu rejects with code 9499)
 - `search_docs` / `read_doc` / `get_doc_blocks` / `create_doc` — Document operations
 - `create_doc_block` / `update_doc_block` / `delete_doc_blocks` — Document content editing (insert/update/delete blocks)
 - `create_bitable` / `get_bitable_meta` / `copy_bitable` — Bitable app management (create, get info, copy)
@@ -67,9 +67,9 @@ Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUM
 - `list_bitable_views` / `create_bitable_view` / `delete_bitable_view` — View management (grid, kanban, gallery, form, gantt, calendar)
 - `search_bitable_records` / `get_bitable_record` — Query records
 - `batch_create_bitable_records` / `batch_update_bitable_records` / `batch_delete_bitable_records` — Record CRUD (single or batch, max 500/call)
-- `list_wiki_spaces` / `search_wiki` / `list_wiki_nodes` / `get_wiki_node` — Wiki (v1.3.4 adds `get_wiki_node` which resolves a wiki node token to its underlying `obj_type` + `obj_token`, so you can feed the node straight into `read_doc`, bitable tools, etc.)
+- `list_wiki_spaces` / `search_wiki` / `list_wiki_nodes` / `get_wiki_node` — Wiki (v1.3.4 adds `get_wiki_node` which resolves a wiki node token to its underlying `obj_type` + `obj_token`, so you can feed the node straight into `read_doc`, bitable tools, etc. v1.3.7 hardens this: `get_wiki_node` now also accepts underlying `obj_token`s from `search_wiki` (synthesizes a node-shape so callers don't have to know which ID space they hold), and `list_wiki_spaces` is UAT-first with a `scopeHint` field surfaced when the bot returns an empty list — typically because `wiki:wiki:readonly` is missing or the bot was never invited.)
 - `list_files` / `create_folder` — Drive
-- `copy_file` / `move_file` / `delete_file` — Drive file operations (copy, move, delete)
+- `copy_file` / `move_file` / `delete_file` — Drive file operations (copy, move, delete). All three are UAT-first (so user-owned files can be operated on without bot edit permission); `move_file` and `delete_file` require `type` (file/folder/docx/sheet/bitable/mindnote/slides) — Feishu rejects with 1061002 / 1062501 otherwise.
 - `upload_image` / `upload_file` — Upload image/file, returns key for send_image/send_file
 - `upload_drive_file` — Upload a local file into a Drive folder (`drive/v1/files/upload_all`, `parent_type=explorer`). Returns `file_token` + `url`. If `wiki_space_id` is provided, the upload is followed by `attachToWiki(obj_type=file)` so the file lands as a Wiki node atomically. UAT-first with bot fallback.
 - `upload_bitable_attachment` — Upload a local file as a Bitable attachment (`drive/v1/medias/upload_all` with `parent_type=bitable_image` or `bitable_file`). Returns `file_token` to write into an Attachment-type field via `batch_create/update_bitable_records` as `[{file_token: "..."}]`.
@@ -602,5 +602,5 @@ If a tool returns `access_denied` or error code `99991672` (scope not granted), 
 - Cookie auth requires human interaction (QR scan) — cannot be fully automated
 - Refresh token expires after 7 days without use — set up `keepalive` cron to prevent this
 - `update_bitable_field` requires `type` parameter even when only changing field name (Feishu API requirement)
-- `list_wiki_spaces` may return empty if bot lacks `wiki:wiki:readonly` permission
+- `list_wiki_spaces` may return empty if bot lacks `wiki:wiki:readonly` permission (v1.3.7+: `scopeHint` field is appended to the response when this happens)
 - `search_wiki` uses same API as `search_docs` — `docs_types` filter may not work as expected

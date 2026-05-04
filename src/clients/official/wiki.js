@@ -8,8 +8,24 @@ module.exports = {
   // --- Wiki ---
 
   async listWikiSpaces() {
-    const res = await this._safeSDKCall(() => this.client.wiki.space.list({ params: { page_size: 50 } }), 'listSpaces');
-    return { items: res.data.items || [] };
+    // Try UAT first — most users access only their own / team Wiki spaces
+    // which the bot may not have been invited to. Falling back to app keeps
+    // the bot-shared-spaces case working too.
+    const res = await this._asUserOrApp({
+      uatPath: '/open-apis/wiki/v2/spaces?page_size=50',
+      method: 'GET',
+      sdkFn: () => this.client.wiki.space.list({ params: { page_size: 50 } }),
+      label: 'listSpaces',
+    });
+    const items = res.data.items || [];
+    const out = { items, viaUser: !!res._viaUser };
+    if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
+    // Empty + bot path means scope is missing; surface a clear hint instead
+    // of silently returning nothing.
+    if (items.length === 0 && !res._viaUser) {
+      out.scopeHint = 'No spaces returned via app — the bot likely lacks `wiki:wiki:readonly` scope, or has not been invited to any Wiki space. Run `npx feishu-user-plugin oauth` and ensure the wiki scope is granted; or invite the bot to the target Wiki space.';
+    }
+    return out;
   },
 
   async searchWiki(query) {
@@ -23,6 +39,12 @@ module.exports = {
   // Resolves a wiki node token to its underlying object (docx / sheet / bitable / ...).
   // `spaceId` argument is kept for backward compatibility but isn't used — the Feishu
   // endpoint `wiki.v2.getNode` takes only the token.
+  //
+  // Accepts both wiki node tokens (wikcnXXX from list_wiki_nodes) and underlying
+  // obj_tokens (docxXXX / bascnXXX from search_wiki). For obj_tokens the wiki
+  // endpoint returns 95300x errors; the handler in tools/wiki.js detects this
+  // and returns a synthesized node-shaped result so callers don't have to know
+  // which ID space they're holding.
   async getWikiNode(nodeToken, _spaceId) {
     const res = await this._safeSDKCall(() => this.client.wiki.space.getNode({ params: { token: nodeToken } }), 'getNode');
     return res.data.node;

@@ -42,11 +42,11 @@ module.exports = {
     return { items: res.data.items || [], hasMore: res.data.has_more, pageToken: res.data.page_token };
   },
 
-  async addChatMembers(chatId, userIds) {
+  async addChatMembers(chatId, userIds, memberIdType = 'open_id') {
     const res = await this._safeSDKCall(
       () => this.client.im.chatMembers.create({
         path: { chat_id: chatId },
-        params: { member_id_type: 'open_id' },
+        params: { member_id_type: memberIdType },
         data: { id_list: userIds },
       }),
       'addChatMembers'
@@ -54,11 +54,11 @@ module.exports = {
     return { invalidIds: res.data.invalid_id_list || [] };
   },
 
-  async removeChatMembers(chatId, userIds) {
+  async removeChatMembers(chatId, userIds, memberIdType = 'open_id') {
     const res = await this._safeSDKCall(
       () => this.client.im.chatMembers.delete({
         path: { chat_id: chatId },
-        params: { member_id_type: 'open_id' },
+        params: { member_id_type: memberIdType },
         data: { id_list: userIds },
       }),
       'removeChatMembers'

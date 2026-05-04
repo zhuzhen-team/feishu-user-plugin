@@ -672,15 +672,27 @@
   },
   {
     "name": "forward_message",
-    "description": "[Official API] Forward a message to another chat.",
+    "description": "[Official API] Forward a message to another chat or user. `receive_id` may be a group chat_id (oc_xxx), an open_id (ou_xxx), a union_id, a user_id, or an email — set `receive_id_type` to match (default: chat_id).",
     "inputSchema": {
       "properties": {
         "message_id": {
-          "description": "Message ID to forward",
+          "description": "Message ID to forward (om_xxx)",
           "type": "string"
         },
         "receive_id": {
-          "description": "Target chat_id or open_id",
+          "description": "Target chat_id (oc_xxx), open_id (ou_xxx), union_id, user_id, or email — set receive_id_type to match.",
+          "type": "string"
+        },
+        "receive_id_type": {
+          "default": "chat_id",
+          "description": "Format of receive_id (default: chat_id). Set to \"open_id\" when forwarding to a user via their open_id.",
+          "enum": [
+            "chat_id",
+            "open_id",
+            "union_id",
+            "user_id",
+            "email"
+          ],
           "type": "string"
         }
       },
@@ -849,11 +861,11 @@
   },
   {
     "name": "get_wiki_node",
-    "description": "[Official API] Resolve a Wiki node token to its underlying object (docx / bitable / sheet / mindnote / file). Returns obj_type + obj_token + space_id so you can read/write the real resource via the usual docx / bitable tools. Accepts bare wiki node token (wikcnXXX) or a full Feishu /wiki/ URL.",
+    "description": "[Official API] Resolve a Wiki node token to its underlying object (docx / bitable / sheet / mindnote / file). Returns obj_type + obj_token + space_id so you can read/write the real resource via the usual docx / bitable tools. Accepts bare wiki node token (wikcnXXX), an underlying obj_token (docxXXX / bascnXXX from search_wiki), or a full Feishu /wiki/ URL — the handler tries the wiki endpoint first and falls back to a synthesized node-shape for non-wiki tokens.",
     "inputSchema": {
       "properties": {
         "node_token": {
-          "description": "Wiki node token (wikcnXXX / wikmXXX / wiknXXX) or full Feishu /wiki/<token> URL",
+          "description": "Wiki node token (wikcnXXX / wikmXXX / wiknXXX), underlying obj_token (docxXXX / bascnXXX), or full Feishu /wiki/<token> URL",
           "type": "string"
         }
       },
@@ -1149,7 +1161,7 @@
   },
   {
     "name": "manage_members",
-    "description": "[Official API] Add or remove members from a group chat.",
+    "description": "[Official API] Add or remove members from a group chat. The Feishu API rejects with code 9499 when the IDs in `member_ids` do not match `member_id_type` — pass `member_id_type` explicitly when using union_id or user_id (default: open_id).",
     "inputSchema": {
       "properties": {
         "action": {
@@ -1164,8 +1176,18 @@
           "description": "Group chat ID (oc_xxx)",
           "type": "string"
         },
+        "member_id_type": {
+          "default": "open_id",
+          "description": "Format of member_ids (default: open_id).",
+          "enum": [
+            "open_id",
+            "union_id",
+            "user_id"
+          ],
+          "type": "string"
+        },
         "member_ids": {
-          "description": "Array of user open_ids",
+          "description": "Array of member identifiers — IDs must match member_id_type.",
           "items": {
             "type": "string"
           },
@@ -1182,21 +1204,36 @@
   },
   {
     "name": "move_file",
-    "description": "[Official API] Move a file to another folder in Drive.",
+    "description": "[Official API] Move a file/doc/folder to another folder in Drive. `type` is required (Feishu rejects with 1061002 otherwise) — pass `file`, `folder`, `doc`, `sheet`, `bitable`, `docx`, `mindnote`, or `slides` to match the resource being moved.",
     "inputSchema": {
       "properties": {
         "file_token": {
-          "description": "File token to move",
+          "description": "File/folder token to move",
           "type": "string"
         },
         "folder_token": {
           "description": "Destination folder token",
           "type": "string"
+        },
+        "type": {
+          "description": "Resource type — Feishu requires this to know which API table to look up.",
+          "enum": [
+            "file",
+            "folder",
+            "doc",
+            "sheet",
+            "bitable",
+            "docx",
+            "mindnote",
+            "slides"
+          ],
+          "type": "string"
         }
       },
       "required": [
         "file_token",
-        "folder_token"
+        "folder_token",
+        "type"
       ],
       "type": "object"
     }
@@ -1887,18 +1924,22 @@
   },
   {
     "name": "update_message",
-    "description": "[Official API] Edit a sent message (bot can only edit its own messages). Supports text and post.",
+    "description": "[Official API] Edit a sent message (bot can only edit its own messages). Feishu supports edit only for `text` and `interactive` (card) messages — other types (post, image, file, etc.) are rejected by the API.",
     "inputSchema": {
       "properties": {
         "content": {
-          "description": "New content. For text: {\"text\":\"updated text\"}"
+          "description": "New content. For text: {\"text\":\"updated text\"}. For interactive: full card JSON."
         },
         "message_id": {
           "description": "Message ID (om_xxx)",
           "type": "string"
         },
         "msg_type": {
-          "description": "Message type: text or post",
+          "description": "Message type: text or interactive. Other types are not editable per Feishu API.",
+          "enum": [
+            "text",
+            "interactive"
+          ],
           "type": "string"
         }
       },

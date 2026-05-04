@@ -185,19 +185,19 @@
 - [ ] **`send_audio_as_user`** — 同上,AUDIO 编码失败
 - [ ] **`send_sticker_as_user`** — 任意 sticker_id 都失败。要么修(从飞书拿 sticker_id 列表),要么直接删(见 C2)
 - [ ] **`send_as_user` / `send_post_as_user` 不接受 `oc_xxx`** — 数字 ID 才工作。在工具入口加自动 oc_→numeric 解析(走 `get_chat_info` 拿 numeric chatId)
-- [ ] **`forward_message`** — schema 没有 `receive_id_type`,默认走 chat_id,导致 open_id / user_id 等不可用。补 schema 字段并透传
-- [ ] **`forward_message` 用 `send_to_user` 返回的数字 ID 报 invalid receive_id** — 同上,需要根据 ID 形态自动判别 receive_id_type
-- [ ] **`update_message` 仅 interactive 有效** — 飞书 API 限制,但 schema 描述写"text/post"是误导。改 schema description 加约束;handler 里如果 msg_type 不是 interactive 直接返回明确错误,不要让飞书原始报文穿透
-- [ ] **`pin_message(pinned=false)`** — 当前实现把 message_id 放到 data 里,SDK 要求放 path。修 `official.js::pinMessage`,unpin 走 `client.im.message.unpin({ path: { message_id } })`
+- [x] **`forward_message`** — schema 加 `receive_id_type` 枚举(chat_id/open_id/union_id/user_id/email),handler 透传 (v1.3.7)
+- [x] **`forward_message` 用 `send_to_user` 返回的数字 ID 报 invalid receive_id** — handler 自动按 ID 前缀判别(ou_/on_/email/...)。explicit `receive_id_type` 仍可覆盖 (v1.3.7)
+- [x] **`update_message` 仅 text/interactive 有效** — schema enum 收紧到 `[text, interactive]`,description 改写;handler 提前拒绝不支持的 msg_type 并返回明确错误 (v1.3.7)
+- [x] **`pin_message(pinned=false)`** — `client.im.pin.delete` 改为 `path: {message_id}`(SDK 实际签名),原本传 `data` 导致 unpin 拿不到 message_id (v1.3.7)
 - [ ] **`create_bitable_field`** — UAT 路径返回 `1254001 WrongRequestBody`,app 路径 `91403 Forbidden`。复现:全新建的 UAT-owned bitable 都触发。需要看是否最近改 `_uatREST` body 序列化时 break 掉了 field 创建。git bisect 定位
-- [ ] **`move_file`** — `1061002 params error`。Feishu drive move API 要求 body 里带 `type` 字段(file/folder/docx/sheet/bitable/...),当前没传。在 schema 加 `type` 必填 + 透传
-- [ ] **`delete_file`** — `1062501 operate node no permission`,因为走的是 `_safeSDKCall`(bot-only),对 UAT 创建的资源完全无权限。改成 `_asUserOrApp`,UAT-first
-- [ ] **`copy_file`** — 同 delete_file,`_safeSDKCall` → `_asUserOrApp`
-- [ ] **`manage_members(action=remove)`** — 报 `9499 object is not supported`。可能 SDK 版本变化或 receive_id_type 缺失。复测找根因
+- [x] **`move_file`** — schema 加 `type` 枚举必填(file/folder/docx/sheet/bitable/...),client 方法透传到 body;同时切到 `_asUserOrApp`(用户拥有的资源 bot 通常无 edit 权限) (v1.3.7)
+- [x] **`delete_file`** — `_safeSDKCall` → `_asUserOrApp`,UAT-first;`type` 透传到 query (v1.3.7)
+- [x] **`copy_file`** — `_safeSDKCall` → `_asUserOrApp`,UAT-first (v1.3.7)
+- [x] **`manage_members(action=remove)`** — schema 加 `member_id_type` 枚举(默认 open_id),client 方法接收并透传。9499 是 ID 跟 type 不匹配引起的;现在可显式指定 union_id / user_id 以匹配传入 ID 形态 (v1.3.7)
 - [ ] **`find_user`** — 实现只回 email/mobile 字段,不回 open_id。要么修(回完整 user object 含 open_id / name),要么删(见 C2,跟 search_contacts 重叠)
 - [ ] **`get_user_info` 把自己当外部租户** — 自己看自己反而拿不到名,senderName: null。`tenant_key` 比较逻辑或 fallback 顺序出错。重写
-- [ ] **`get_wiki_node` 用 `search_wiki` 返回的 docs_token 报 not found** — 文档没说清:`search_wiki` 返回的是 underlying obj_token,不是 wiki node token;`get_wiki_node` 只接受 wiki node token(必须从 `list_wiki_nodes` 拿)。要么(a)改 schema 描述,要么(b)同时支持两种 token 自动判别
-- [ ] **`list_wiki_spaces` 静默返空数组** — bot 缺 `wiki:wiki:readonly` 时不报错。改成主动检测 scope,缺则返回明确错误"应用缺 wiki:wiki:readonly,请重跑 npx feishu-user-plugin oauth"
+- [x] **`get_wiki_node` 用 `search_wiki` 返回的 docs_token 报 not found** — handler 先尝试 wiki API,失败时按 token 前缀(docx/bascn/shtcn/...)推断 obj_type 并返回 synthesized node-shape,这样 caller 能拿到 obj_type/obj_token 直接喂给 read_doc / list_bitable_tables 等 (v1.3.7)
+- [x] **`list_wiki_spaces` 静默返空数组** — 改走 `_asUserOrApp` UAT-first;bot 路径返回空时附 `scopeHint` 提示缺 `wiki:wiki:readonly` 或未邀请 bot 进 space (v1.3.7)
 
 ##### C2. 工具删除(共 4 个)
 
