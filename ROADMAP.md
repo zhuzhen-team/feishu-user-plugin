@@ -105,39 +105,16 @@
 
 当前 `src/` 15 文件平铺 + 两个 god file:`index.js` 1979 行、`official.js` 1944 行。每加一个 feature 都让这两个文件再涨几十行,新人读代码先要花一小时定位 handler。
 
-- [ ] 拆出 `src/server.js` (~150 行):MCP bootstrap、ListTools/CallTool/ListPrompts handler 注册、stdio 启动、global console redirect
-- [ ] `src/tools/` — 每个能力域一个文件,文件 = `{ schemas: [], handlers: { name: fn } }`,在 server.js 用 `for (const mod of toolModules) register(mod)` 集中注册
-  - `tools/messaging-user.js` — Cookie 路径的 send_to_user / send_to_group / send_as_user / batch_send / send_image / send_file / send_post / send_sticker / send_audio / send_card
-  - `tools/messaging-bot.js` — send_message_as_bot / reply_message / forward_message / delete_message / update_message / pin_message / add_reaction / delete_reaction
-  - `tools/im-read.js` — list_chats / read_messages / read_p2p_messages / list_user_chats / get_chat_info
-  - `tools/contacts.js` — search_contacts / find_user / get_user_info / create_p2p_chat
-  - `tools/groups.js` — create_group / update_group / list_members / manage_members
-  - `tools/docs.js` — search_docs / read_doc / get_doc_blocks / create_doc / *_doc_block
-  - `tools/bitable.js` — 全部 20 个 bitable
-  - `tools/drive.js` — list_files / create_folder / copy_file / move_file / delete_file / upload_drive_file
-  - `tools/wiki.js` — list_wiki_spaces / search_wiki / list_wiki_nodes / get_wiki_node
-  - `tools/uploads.js` — upload_image / upload_file / upload_bitable_attachment
-  - `tools/calendar.js` — list/get + 新增 create/update/delete/get_freebusy/respond_invite
-  - `tools/okr.js` — list_user_okrs / get_okrs / list_okr_periods
-  - `tools/tasks.js` — 新增整组(详见 C 节)
-  - `tools/profile.js` — list_profiles / switch_profile
-  - `tools/diagnostics.js` — get_login_status / download_image / download_file
-- [ ] 拆 `src/clients/`
-  - `clients/user.js` — 当前 `client.js`(Cookie + Protobuf 网关)
-  - `clients/official/index.js` — `_asUserOrApp` / `_safeSDKCall` / `_uatREST` 公共底座 + UAT 刷新跨进程锁
-  - `clients/official/im.js` / `docs.js` / `bitable.js` / `drive.js` / `wiki.js` / `calendar.js` / `okr.js` / `tasks.js` — 拆 `official.js` 1944 行
-- [ ] 拆 `src/auth/`
-  - `auth/cookie.js` — 心跳、续期、persistToConfig 调用
-  - `auth/uat.js` — refresh、跨进程文件锁、`_adoptPersistedUATIfNewer`、JWT exp 解析
-  - `auth/credentials.js` — 单一可信源读写(详见 B 节)
-- [ ] 拆 `src/config/`
-  - `config/discovery.js` — 旧 `findMcpConfig`(只用于一次性迁移)
-  - `config/persistence.js` — atomic write helpers
-  - `config/setup.js` — `setup` CLI 实现搬过来
-- [ ] 保留:`resolver.js` / `doc-blocks.js` / `error-codes.js` / `utils.js` / `logger.js`(新)
-- [ ] 跟改:`package.json` `main` 字段、`scripts/mcp_stdio_bridge.js` 硬编码路径、CLAUDE.md / AGENTS.md 中所有 `src/index.js` 引用、CHANGELOG.md
-- [ ] 单元保护:重构前先跑一遍 `node -e` 自测每个 handler 至少能拿到响应(不要求成功,只要不挂),作为 before/after 对照
-- [ ] **风险 tradeoff 文档**:写一段 `docs/REFACTOR-NOTES.md`(允许这一份新建)记录拆完之后的边界规则——以后哪个 feature 落到哪个文件、什么时候允许新建文件,避免回到 god file
+- [x] 拆出 `src/server.js`:MCP bootstrap、ListTools/CallTool handler 注册、stdio 启动、ctx 装配、startup diagnostics(195 行)
+- [x] `src/tools/` 14 个域模块,每个 `{ schemas, handlers }` 结构,在 server.js 用 `TOOL_MODULES.flatMap` 集中注册:messaging-user / messaging-bot / im-read / contacts / groups / docs / bitable / drive / wiki / uploads / calendar / okr / profile / diagnostics
+- [x] `src/clients/user.js` — 旧 `client.js` 搬过来(Cookie + Protobuf 网关)
+- [x] `src/clients/official/` 拆完:base.js(底座 + UAT 跨进程锁 + 公共 helper)+ 10 个域文件(im / docs / bitable / drive / wiki / uploads / calendar / okr / contacts / groups)+ index.js(mixin 组装器)。base.js 1944 → 426 行(78% 减)
+- [ ] `src/auth/credentials.js` 占位(re-export `src/config`),`uat.js` / `cookie.js` 推迟到 Phase B(与单一可信源凭证迁移同批做,详见 `docs/REFACTOR-NOTES.md`)
+- [ ] `src/config/` 拆分推迟到 Phase B(同上理由,Phase B 替换凭证存储后 config.js 主体被重写)
+- [x] 保留:`resolver.js` / `doc-blocks.js` / `error-codes.js` / `utils.js` / `logger.js`(新)
+- [x] 跟改:`package.json` `main` 字段(仍 `src/index.js`,变成 6 行入口)、`scripts/mcp_stdio_bridge.js` 路径(`src/index.js` 仍存在)、CLAUDE.md / AGENTS.md / skill reference 全部同步,CHANGELOG.md 待 v1.3.7 发布时整理
+- [x] 单元保护:`scripts/smoke.js` 冻结 baseline(81 工具 + login_status shape),每个 commit 自动跑 diff 拦截回归。29 个 commit 全程 smoke 绿
+- [x] **风险 tradeoff 文档**:`docs/REFACTOR-NOTES.md` 完成,含目录结构图、决策树、禁忌清单、Phase B 推迟项
 
 #### B. Skill → MCP prompts + 单一可信源凭证 + hooks(用户已批)
 
