@@ -327,6 +327,51 @@ function migrate({ dryRun = true } = {}) {
   return { ok: true, credentials };
 }
 
+// --- Profile hints (v1.3.8) ---
+//
+// profileHints maps resourceKey → profileName, persisted in credentials.json.
+// Used by src/auth/profile-router.js to remember which profile owns / has
+// access to a given resource. Reads pass through; writes are atomic.
+//
+// resourceKey format: "<kind>:<token>", e.g. "doc:doccnXXX" or "chat:oc_zzz".
+// Caller is responsible for canonicalising tokens (resolveDocId etc).
+
+function getProfileHints() {
+  const f = _readFile();
+  if (!f) return {};
+  return { ...f.profileHints };
+}
+
+function setProfileHint(resourceKey, profileName) {
+  if (typeof resourceKey !== 'string' || !resourceKey) {
+    throw new Error('setProfileHint: resourceKey must be a non-empty string');
+  }
+  const f = _readFile();
+  if (!f) return false;
+  if (!f.profiles[profileName]) {
+    throw new Error(`setProfileHint: profile "${profileName}" not in credentials.json. Known: ${Object.keys(f.profiles).join(', ')}`);
+  }
+  if (f.profileHints[resourceKey] === profileName) return true;
+  f.profileHints[resourceKey] = profileName;
+  _atomicWriteJson(_credentialsPath(), f);
+  return true;
+}
+
+function clearProfileHint(resourceKey) {
+  const f = _readFile();
+  if (!f) return false;
+  if (resourceKey === undefined) {
+    if (Object.keys(f.profileHints).length === 0) return true;
+    f.profileHints = {};
+    _atomicWriteJson(_credentialsPath(), f);
+    return true;
+  }
+  if (!(resourceKey in f.profileHints)) return false;
+  delete f.profileHints[resourceKey];
+  _atomicWriteJson(_credentialsPath(), f);
+  return true;
+}
+
 // --- Re-exports for back-compat ---
 
 module.exports = {
@@ -338,6 +383,10 @@ module.exports = {
   setActiveProfile,
   persistProfileUpdate,
   migrate,
+  // profile hints (v1.3.8)
+  getProfileHints,
+  setProfileHint,
+  clearProfileHint,
   // back-compat with src/config
   readCredentials,
   persistToConfig,
