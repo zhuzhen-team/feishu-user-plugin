@@ -164,6 +164,11 @@ Whole new domain. Identifier is `task_guid` (not numeric task_id like v1). Requi
 ### External-group message read
 `read_messages` / `read_p2p_messages` expose a `via` field (`"bot"`/`"user"`/`"contacts"`). On known bot failures (external tenant / no permission / not in chat) the plugin hops straight to UAT; transient errors (rate limit / 5xx / ECONNRESET / timeout) retry once with 2 s delay before falling back. Without UAT, the error points to `npx feishu-user-plugin oauth`.
 
+### Multi-profile auto-switch (v1.3.8)
+For users with ≥2 profiles in `~/.feishu-user-plugin/credentials.json`. Read-only tools (`read_*` / `list_*` / `get_*` / `search_*` / `download_*`) auto-retry across profiles on `91403 / 1254301 / 1254000 / 99991672 / HTTP 403`. Writes never auto-switch.
+
+Override per call with `via_profile: "<name>"` to pin, or `via_profile: "auto"` to allow auto-switch on a write. Hints persist in `credentials.json::profileHints` and are inspectable via `manage_profile_hints`.
+
 ### Multi-profile registration
 For more profiles beyond the default, set `LARK_PROFILES_JSON` in the MCP env (or use `credentials.json` profiles map):
 ```json

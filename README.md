@@ -474,12 +474,27 @@ Identifier is `task_guid` (not v1's numeric `task_id`). Requires `task:task` sco
 | `move_wiki_node` | Move a wiki node to a different parent or different space |
 | `copy_wiki_node` | Deep-copy a wiki node to a different location (optionally to a different space) |
 
-### Plugin -- Profiles (2 tools, v1.3.6)
+### Plugin -- Profiles (3 tools, v1.3.6 + v1.3.8)
 
 | Tool | Description |
 |------|-------------|
 | `list_profiles` | List available identity profiles (default + extras from `LARK_PROFILES_JSON`) and the active one |
 | `switch_profile` | Hot-swap active profile; cached client instances rebuild against new credentials |
+| `manage_profile_hints` | Inspect/set/clear the resourceKey → profile cache used by the v1.3.8 auto-switch middleware |
+
+### Multi-profile auto-switch (v1.3.8)
+
+When `~/.feishu-user-plugin/credentials.json` has more than one profile, the plugin auto-switches between them on **read** paths when the active profile gets a permission-denied error. The winning profile is cached per resource so subsequent calls go straight to the right account.
+
+**Whitelist** -- only `read_*`, `list_*`, `get_*`, `search_*`, `download_*` (and the read-action variants of `manage_bitable_*`) get auto-retry. Writes never auto-switch -- they fail loud so you don't accidentally create resources under the wrong account.
+
+**Triggers** -- error codes 91403, 1254301, 1254000, 99991672, HTTP 403, plus message patterns `access_denied / permission_denied / docx_no_permission / no permission / forbidden`.
+
+**Per-call override** -- pass `via_profile: "<name>"` in any tool call to pin to that profile (no auto-switch). Pass `via_profile: "auto"` to opt **into** auto-switch on a write call (escape hatch -- be careful).
+
+**Cache management** -- `manage_profile_hints(action="list" | "set" | "clear", resource_key?, profile?)` lets you inspect or edit the cache.
+
+Single-profile users (the vast majority): zero behaviour change -- the router short-circuits and `manage_profile_hints` is a no-op.
 
 ## Claude Code Slash Commands (9 skills)
 
