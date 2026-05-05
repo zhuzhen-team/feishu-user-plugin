@@ -66,6 +66,10 @@ const HANDLERS = Object.fromEntries(TOOL_MODULES.flatMap((m) => Object.entries(m
 
 let userClient = null;
 let officialClient = null;
+let wsServer = null;
+function getEventBuffer() {
+  return wsServer ? wsServer.buffer : null;
+}
 // The "current" profile this in-memory MCP server is pinned to. Initialised
 // from the persisted active profile (credentials.json) at boot, but in-process
 // switches may diverge from the persisted active until the next server restart.
@@ -144,6 +148,7 @@ function buildCtx() {
   return {
     getUserClient,
     getOfficialClient,
+    getEventBuffer,
     listProfiles: () => credentials.listProfileNames(),
     getActiveProfile: () => currentProfile,
     setActiveProfile: (n) => {
@@ -205,6 +210,8 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
   console.error('[feishu-user-plugin] Unhandled rejection:', reason);
 });
+process.on('SIGTERM', () => { try { wsServer?.stop(); } catch {} process.exit(0); });
+process.on('SIGINT',  () => { try { wsServer?.stop(); } catch {} process.exit(0); });
 
 // --- main ---
 
@@ -265,6 +272,28 @@ async function main() {
     } catch (e) {
       console.error(`[feishu-user-plugin] WARNING: Could not verify APP_ID (${e.message}); network issue or cold start. Proceeding anyway.`);
     }
+  }
+
+  // --- Real-time events (v1.3.8 C.3) ---
+  // Boot WS only when APP_ID/SECRET are valid. WS uses app credentials
+  // (not UAT), so cookie-only setups don't get realtime.
+  if (hasApp) {
+    try {
+      const { createWSServer } = require('./events');
+      wsServer = createWSServer({
+        appId: activeEnv.LARK_APP_ID,
+        appSecret: activeEnv.LARK_APP_SECRET,
+        registrations: ['im.message.receive_v1'],
+      });
+      // Start asynchronously — don't block MCP serving on WS handshake.
+      wsServer.start().catch((e) => {
+        console.error(`[feishu-user-plugin] WS deferred start error: ${e.message}`);
+      });
+    } catch (e) {
+      console.error(`[feishu-user-plugin] WS init failed: ${e.message}. Continuing without realtime.`);
+    }
+  } else {
+    console.error('[feishu-user-plugin] WS not started — APP_ID/SECRET missing. Realtime events (get_new_events) will return empty.');
   }
 }
 
