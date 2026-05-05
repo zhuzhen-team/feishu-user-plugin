@@ -160,7 +160,7 @@ const schemas = [
   },
   {
     name: 'send_card_as_user',
-    description: '[v1.3.6: bot-routed default] Send an interactive card to a chat. **As of v1.3.6, identity defaults to BOT** because user-identity card sending requires reverse-engineering the Feishu web protobuf and is deferred to v1.3.7. The tool name keeps the "as_user" suffix so callers don\'t have to migrate when v1.3.7 lands; once user-identity is implemented the default flips. Pass `card` as a JSON object (Feishu card schema). To force bot explicitly set via="bot".',
+    description: '[v1.3.6+: bot-routed default] Send an interactive card to a chat. **Identity defaults to BOT** because user-identity card sending requires reverse-engineering the Feishu web protobuf (deferred to v1.3.9; v1.3.8 shipped the capture/decode tooling). The tool name keeps the "as_user" suffix so callers don\'t have to migrate when v1.3.9 lands; once user-identity is implemented the default flips. Pass `card` as a JSON object (Feishu card schema). To force bot explicitly set via="bot".',
     inputSchema: {
       type: 'object',
       properties: {

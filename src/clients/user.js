@@ -189,11 +189,13 @@ class LarkUserClient {
       // missing required fields. Verified for IMAGE (v1.3.7 testing): the
       // simple {imageKey} content payload is rejected — Feishu Web encodes
       // images with extra metadata (image dimensions, mime type, etc.) that
-      // we don't have in proto/lark.proto. Reverse-engineering requires Chrome
-      // DevTools capture and is deferred to v1.3.8. Surface a clear error
-      // routing the user to send_message_as_bot, which works.
+      // we don't have in proto/lark.proto. v1.3.8 shipped the capture/decode
+      // tooling (scripts/decode-feishu-protobuf.js + capture-feishu-protobuf.js
+      // + docs/COOKIE-PROTOBUF-CAPTURES.md). Actual reverse-engineering moved
+      // to v1.3.9. Surface a clear error routing the user to
+      // send_message_as_bot, which works.
       if (type === MsgType.IMAGE) {
-        throw new Error('send_image_as_user: Feishu cookie protobuf gateway rejected the IMAGE wire format (HTTP 400). User-identity image sends are not yet supported — wire format reverse-engineering is deferred to v1.3.8. Workaround: use send_message_as_bot(chat_id, msg_type="image", payload={image_key:"..."}).');
+        throw new Error('send_image_as_user: Feishu cookie protobuf gateway rejected the IMAGE wire format (HTTP 400). User-identity image sends are not yet supported — wire format reverse-engineering is deferred to v1.3.9 (v1.3.8 shipped the capture/decode tooling at scripts/decode-feishu-protobuf.js). Workaround: use send_message_as_bot(chat_id, msg_type="image", payload={image_key:"..."}).');
       }
       throw new Error(`_sendMsg: cookie protobuf gateway returned non-2xx for type=${type}. The wire format likely doesn't match what Feishu expects.`);
     }
