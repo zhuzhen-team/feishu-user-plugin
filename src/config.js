@@ -274,23 +274,23 @@ function persistToConfig(updates) {
  *   client: 'claude' (default) | 'codex' | 'both'
  * @returns {{ configPath: string, codexConfigPath?: string }}
  */
-function writeNewConfig(env, configPath, projectPath, client) {
+function writeNewConfig(env, configPath, projectPath, client, options = {}) {
   const results = {};
 
   // --- Claude Code (JSON) ---
   if (client !== 'codex') {
-    results.configPath = _writeClaudeConfig(env, configPath, projectPath);
+    results.configPath = _writeClaudeConfig(env, configPath, projectPath, options);
   }
 
   // --- Codex (TOML) ---
   if (client === 'codex' || client === 'both') {
-    results.codexConfigPath = _writeCodexConfig(env);
+    results.codexConfigPath = _writeCodexConfig(env, options);
   }
 
   return results;
 }
 
-function _writeClaudeConfig(env, configPath, projectPath) {
+function _writeClaudeConfig(env, configPath, projectPath, options = {}) {
   if (!configPath) {
     configPath = path.join(process.env.HOME || '', '.claude.json');
   }
@@ -312,7 +312,9 @@ function _writeClaudeConfig(env, configPath, projectPath) {
   const serverEntry = {
     command: 'npx',
     args: ['-y', 'feishu-user-plugin'],
-    env,
+    env: options.pointerOnly
+      ? { FEISHU_PLUGIN_PROFILE: env.FEISHU_PLUGIN_PROFILE || 'default' }
+      : env,
   };
 
   if (projectPath && config.projects?.[projectPath]) {
@@ -334,7 +336,7 @@ function _writeClaudeConfig(env, configPath, projectPath) {
   return configPath;
 }
 
-function _writeCodexConfig(env) {
+function _writeCodexConfig(env, options = {}) {
   const home = process.env.HOME || '';
   const codexDir = path.join(home, '.codex');
   const configPath = path.join(codexDir, 'config.toml');
@@ -352,8 +354,11 @@ function _writeCodexConfig(env) {
     content = _removeTomlServer(content, name);
   }
 
-  // Append new entry
-  content = content.trimEnd() + '\n\n' + _generateTomlServerEntry('feishu-user-plugin', env);
+  // Append new entry — pointer-only writes only FEISHU_PLUGIN_PROFILE
+  const envToWrite = options.pointerOnly
+    ? { FEISHU_PLUGIN_PROFILE: env.FEISHU_PLUGIN_PROFILE || 'default' }
+    : env;
+  content = content.trimEnd() + '\n\n' + _generateTomlServerEntry('feishu-user-plugin', envToWrite);
 
   _atomicWrite(configPath, content);
   console.error(`[feishu-user-plugin] Codex config written to ${configPath}`);
