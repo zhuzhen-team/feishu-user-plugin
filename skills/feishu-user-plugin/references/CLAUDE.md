@@ -24,7 +24,7 @@ The 9 Claude Code skills are also exposed as MCP prompts (`prompts/list` + `prom
 
 Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUMENTS` convention used by Claude Code skills). `status` has no arguments.
 
-## Tool Categories (81 tools)
+## Tool Categories (82 tools)
 
 Per-tool descriptions live in each tool's MCP `inputSchema.description`. This section lists names + cross-domain caveats only.
 
@@ -110,6 +110,14 @@ Per-tool descriptions live in each tool's MCP `inputSchema.description`. This se
 
 - `switch_profile` invalidates cached client instances; next call rebuilds against the new profile. Multi-profile registered via `LARK_PROFILES_JSON` env or `credentials.json` profiles map.
 - `manage_profile_hints(action=list|set|clear, resource_key?, profile?)` (v1.3.8) inspects / edits the resourceKey → profile cache the auto-switch middleware uses. No-op when credentials.json doesn't exist.
+
+### Plugin — Realtime Events (1 tool, v1.3.8)
+`get_new_events`
+
+- WS connection started at MCP boot when APP_ID + APP_SECRET are configured. Connects to feishu.cn — Lark international not supported.
+- Buffer cap 1000 events; oldest dropped. Drain semantics: consumers see each event once.
+- Currently emits `im.message.receive_v1` only. Future: approval / calendar / docs comments behind config flag.
+- Filter by `event_type` / `event_types` / `chat_id` / `since_seconds`. `peek=true` keeps events in buffer.
 
 ## Usage Patterns
 
@@ -289,6 +297,14 @@ UAT is failing (expired / scope missing / race), so the plugin fell back to bot.
 
 ### `list_user_chats` doesn't return P2P chats
 Expected — Feishu API only returns groups. P2P flow: `search_contacts` → `create_p2p_chat` → `read_p2p_messages`.
+
+### Realtime events (`get_new_events`) returns empty / `Realtime events are not available`
+- **APP_ID/SECRET not configured**: `get_login_status` will show this. Fix: re-run setup.
+- **Feishu WS handshake failed**: check server stderr for `WS start failed` — common reasons:
+  - Lark international tenant (lark.com) — not supported by Feishu's WSClient. No fix; use polling tools (`read_messages`) instead.
+  - Network restriction — corporate proxy blocking outbound WSS.
+- **Bot not in the chat where the message was sent**: `im.message.receive_v1` only fires for chats the bot is a member of. Add the bot to the chat to receive events.
+- **Multiple MCP processes**: Each process has its own WS, so events are duplicated. De-dupe on `event_id` in your consumer.
 
 ## Architecture
 
