@@ -26,6 +26,7 @@ const { LarkOfficialClient } = require('./clients/official');
 const { resolveToken } = require('./resolver');
 const { listPrompts, getPrompt } = require('./prompts');
 const credentials = require('./auth/credentials');
+const profileRouter = require('./auth/profile-router');
 
 // --- Tool modules ---
 // Adding a new domain: create src/tools/<x>.js exporting { schemas, handlers }
@@ -174,8 +175,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (!handler) {
     return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
   }
+  // Strip via_profile from args before passing to the handler — it's a
+  // routing-layer concern, not a tool argument. Keep a copy for routing.
+  const cleanArgs = (args && typeof args === 'object') ? { ...args } : {};
+  delete cleanArgs.via_profile;
+
   try {
-    return await handler(args || {}, buildCtx());
+    return await profileRouter.withProfileRouting(buildCtx(), name, args || {}, async () => {
+      return handler(cleanArgs, buildCtx());
+    });
   } catch (err) {
     return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
   }

@@ -1500,6 +1500,35 @@
     }
   },
   {
+    "name": "manage_profile_hints",
+    "description": "[Plugin v1.3.8] Inspect / set / clear profileHints — the resourceKey → profileName cache the auto-switch middleware uses to remember which profile owns each Feishu resource. Useful when a hint goes stale (e.g., a profile lost access to a doc).",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "list = show all hints; set = upsert one; clear = remove one or all.",
+          "enum": [
+            "list",
+            "set",
+            "clear"
+          ],
+          "type": "string"
+        },
+        "profile": {
+          "description": "For set: the profile name to associate with the resource_key.",
+          "type": "string"
+        },
+        "resource_key": {
+          "description": "For set/clear: the resourceKey, e.g. \"doc:doccnXXX\" or \"chat:oc_zzz\". Omit on clear to wipe all hints.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "manage_task_members",
     "description": "[Official API + UAT, v1.3.7] Add or remove members on a task. Members are objects {id:\"<open_id>\", role:\"assignee\"|\"follower\", type?:\"user\", name?:\"\"}.",
     "inputSchema": {
