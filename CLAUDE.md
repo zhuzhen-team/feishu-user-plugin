@@ -298,6 +298,14 @@ UAT is failing (expired / scope missing / race), so the plugin fell back to bot.
 ### `list_user_chats` doesn't return P2P chats
 Expected — Feishu API only returns groups. P2P flow: `search_contacts` → `create_p2p_chat` → `read_p2p_messages`.
 
+### Realtime events (`get_new_events`) returns empty / `Realtime events are not available`
+- **APP_ID/SECRET not configured**: `get_login_status` will show this. Fix: re-run setup.
+- **Feishu WS handshake failed**: check server stderr for `WS start failed` — common reasons:
+  - Lark international tenant (lark.com) — not supported by Feishu's WSClient. No fix; use polling tools (`read_messages`) instead.
+  - Network restriction — corporate proxy blocking outbound WSS.
+- **Bot not in the chat where the message was sent**: `im.message.receive_v1` only fires for chats the bot is a member of. Add the bot to the chat to receive events.
+- **Multiple MCP processes**: Each process has its own WS, so events are duplicated. De-dupe on `event_id` in your consumer.
+
 ## Architecture
 
 ### Two distribution channels
