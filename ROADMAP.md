@@ -91,9 +91,9 @@ v1.3.7 落地了 credentials.json + setActiveProfile + UAT 写回单文件，但
 
 - [ ] OpenClaw 的偏好文件（用户明确说先不管，留底）
 
-## v1.4 候选 — 本地 md → 飞书知识库同步
+## v1.3.9 — 本地 md → 飞书知识库同步
 
-依赖 md parser 选型 + `src/doc-blocks.js` 补齐，独立性较高，从 v1.3.4/1.3.6/1.3.7 持续推迟。
+依赖 md parser 选型 + `src/doc-blocks.js` 补齐，独立性较高，从 v1.3.4/1.3.6/1.3.7/1.3.8 持续推迟。
 
 - [ ] md parser 选型（remark / markdown-it / unified）
 - [ ] `src/doc-blocks.js` 补齐 heading / bullet / ordered / code / quote / divider / table / todo / callout 构造器
