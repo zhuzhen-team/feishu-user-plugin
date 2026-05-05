@@ -3,10 +3,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-green.svg)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-purple.svg)](https://modelcontextprotocol.io)
-[![Tools](https://img.shields.io/badge/Tools-81-orange.svg)](#tools)
+[![Tools](https://img.shields.io/badge/Tools-82-orange.svg)](#tools)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**All-in-one Feishu/Lark MCP Server -- 81 tools, 9 skills, 3 auth layers for messaging, docs, bitable, calendar, tasks, drive, OKR, and more.**
+**All-in-one Feishu/Lark MCP Server -- 82 tools, 9 skills, 3 auth layers for messaging, docs, bitable, calendar, tasks, drive, OKR, and more.**
 
 The only MCP server that lets you send messages as your **personal identity** (not a bot), while also integrating the full official Feishu API. Works with Claude Code, Cursor, Windsurf, OpenClaw, and any MCP-compatible client.
 
@@ -21,6 +21,7 @@ The only MCP server that lets you send messages as your **personal identity** (n
 - **Calendar & Tasks** -- Create events, check free/busy, manage tasks.
 - **9 slash commands** for Claude Code -- `/send`, `/reply`, `/search`, `/digest`, `/doc`, `/table`, `/wiki`, `/drive`, `/status`
 - **Auto session management** -- Cookie heartbeat every 4h, UAT auto-refresh with token rotation.
+- **Real-time events** (v1.3.8) -- `get_new_events` drains an in-memory queue of incoming Feishu messages — react to replies / group activity within seconds without polling. WS connection auto-starts on boot.
 - **Multi-platform** -- Claude Code, Cursor, Windsurf, VS Code, OpenClaw.
 
 ## Why This Exists

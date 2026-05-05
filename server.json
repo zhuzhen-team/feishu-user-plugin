@@ -140,6 +140,10 @@
       "description": "Manage a Drive file/doc/folder. action=copy (duplicate to a new name + folder), move (relocate, returns task_id), delete (remove, returns task_id). `type` is always required (Feishu rejects with 10610"
     },
     {
+      "name": "get_new_events",
+      "description": "Drain real-time events received since the last call. Currently surfaces \"im.message.receive_v1\" events (replies, group messages). Returns empty when WS isn't connected or no events have arrived. Use f"
+    },
+    {
       "name": "create_group",
       "description": "Create a new group chat (as bot). Can add initial members."
     },

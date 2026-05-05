@@ -39,6 +39,7 @@ const TOOL_MODULES = [
   require('./tools/diagnostics'),
   require('./tools/docs'),
   require('./tools/drive'),
+  require('./tools/events'),
   require('./tools/groups'),
   require('./tools/im-read'),
   require('./tools/messaging-bot'),
