@@ -14,7 +14,7 @@
     "smoke": "node scripts/smoke.js diff",
     "smoke:baseline": "node scripts/smoke.js write-baseline",
     "test:tools": "node scripts/test-all-tools.js",
-    "prepublishOnly": "node scripts/check-version.js && node scripts/check-tool-count.js && node scripts/sync-server-json.js check && node scripts/confirm-version.js",
+    "prepublishOnly": "node scripts/check-version.js && node scripts/check-tool-count.js && node scripts/sync-server-json.js check && node scripts/check-docs-sync.js && node scripts/check-changelog.js && node scripts/confirm-version.js",
     "prepare": "husky"
   },
   "keywords": [
