@@ -81,7 +81,7 @@ v1.3.7 落地了 credentials.json + setActiveProfile + UAT 写回单文件，但
 ### G. v1.3.7 C7 复测残留
 
 - [ ] `upload_drive_file` 带 `wiki_space_id` 模式，wiki scope 不全时直接 attach 失败的兜底路径未测
-- [ ] `switch_profile` 多 profile 实测（当前只有 default 一个）
+- [ ] `switch_profile` 多 profile 实测 — 阻塞在测试用第二 profile（需要真实 LARK_APP_ID + UAT）。Plan 2 (B) 落地后必须再做这步：用 mock 第二 profile 写 e2e 测试，否则 `setActiveProfile` 的 client-cache 失效路径仍未端到端验证
 
 ### H. v1.3.6 测试残留清理
 
