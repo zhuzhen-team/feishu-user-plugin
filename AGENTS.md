@@ -24,7 +24,7 @@ The 9 Claude Code skills are also exposed as MCP prompts (`prompts/list` + `prom
 
 Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUMENTS` convention used by Claude Code skills). `status` has no arguments.
 
-## Tool Categories (80 tools)
+## Tool Categories (81 tools)
 
 Per-tool descriptions live in each tool's MCP `inputSchema.description`. This section lists names + cross-domain caveats only.
 
@@ -105,10 +105,11 @@ Per-tool descriptions live in each tool's MCP `inputSchema.description`. This se
 - `update_task` requires explicit `update_fields=["summary","due","completed_at",...]` array — Feishu only patches listed fields.
 - Needs `task:task` scope.
 
-### Plugin — Diagnostics & Profiles (3 tools)
-`get_login_status` / `list_profiles` / `switch_profile`
+### Plugin — Diagnostics & Profiles (4 tools)
+`get_login_status` / `list_profiles` / `switch_profile` / `manage_profile_hints`
 
 - `switch_profile` invalidates cached client instances; next call rebuilds against the new profile. Multi-profile registered via `LARK_PROFILES_JSON` env or `credentials.json` profiles map.
+- `manage_profile_hints(action=list|set|clear, resource_key?, profile?)` (v1.3.8) inspects / edits the resourceKey → profile cache the auto-switch middleware uses. No-op when credentials.json doesn't exist.
 
 ## Usage Patterns
 

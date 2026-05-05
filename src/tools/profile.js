@@ -23,6 +23,19 @@ const schemas = [
       required: ['name'],
     },
   },
+  {
+    name: 'manage_profile_hints',
+    description: '[Plugin v1.3.8] Inspect / set / clear profileHints — the resourceKey → profileName cache the auto-switch middleware uses to remember which profile owns each Feishu resource. Useful when a hint goes stale (e.g., a profile lost access to a doc).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['list', 'set', 'clear'], description: 'list = show all hints; set = upsert one; clear = remove one or all.' },
+        resource_key: { type: 'string', description: 'For set/clear: the resourceKey, e.g. "doc:doccnXXX" or "chat:oc_zzz". Omit on clear to wipe all hints.' },
+        profile: { type: 'string', description: 'For set: the profile name to associate with the resource_key.' },
+      },
+      required: ['action'],
+    },
+  },
 ];
 
 const handlers = {
@@ -37,6 +50,24 @@ const handlers = {
     }
     ctx.setActiveProfile(target);
     return text(`Switched to profile: ${target}`);
+  },
+  async manage_profile_hints(args, _ctx) {
+    const credentials = require('../auth/credentials');
+    if (args.action === 'list') {
+      return json({ hints: credentials.getProfileHints() });
+    }
+    if (args.action === 'set') {
+      if (!args.resource_key) return text('manage_profile_hints(set): resource_key is required');
+      if (!args.profile) return text('manage_profile_hints(set): profile is required');
+      const ok = credentials.setProfileHint(args.resource_key, args.profile);
+      return text(ok ? `Hint set: ${args.resource_key} → ${args.profile}` : 'Hint not set (no credentials.json — run `npx feishu-user-plugin migrate --confirm`)');
+    }
+    if (args.action === 'clear') {
+      const ok = credentials.clearProfileHint(args.resource_key);
+      const target = args.resource_key || '<all>';
+      return text(ok ? `Hint cleared: ${target}` : `No hint to clear for: ${target}`);
+    }
+    return text(`manage_profile_hints: unknown action "${args.action}". Use list / set / clear.`);
   },
 };
 

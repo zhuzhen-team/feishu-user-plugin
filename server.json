@@ -272,6 +272,10 @@
       "description": "Switch the active identity profile. Subsequent tool calls use the new profile's credentials. Cached client instances are reset so the next call rebuilds against the new creds."
     },
     {
+      "name": "manage_profile_hints",
+      "description": "Inspect / set / clear profileHints — the resourceKey → profileName cache the auto-switch middleware uses to remember which profile owns each Feishu resource. Useful when a hint goes stale (e.g., a pro"
+    },
+    {
       "name": "list_tasks",
       "description": "List the current user's tasks. Filter by completion or type."
     },
