@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.8] - 2026-05-05
+
+### Added
+- **Multi-profile auto-switch (B)**: when `~/.feishu-user-plugin/credentials.json` has ≥2 profiles, read-only tools (`read_*` / `list_*` / `get_*` / `search_*` / `download_*` plus `manage_bitable_*` read-action variants) auto-retry across profiles on permission-denied errors. Trigger codes `91403 / 1254301 / 1254000 / 99991672 / HTTP 403` plus message patterns. The winning profile is cached to `credentials.json::profileHints` so subsequent calls go straight to the right account. Writes never auto-switch — pass `via_profile: "auto"` per call to opt in. New tool: `manage_profile_hints(action=list|set|clear, resource_key?, profile?)`. Single-profile users see no behaviour change.
+- **Real-time WebSocket events (C)**: MCP server opens a `WSClient` connection at boot when `LARK_APP_ID/SECRET` are configured; events accumulate into an in-memory FIFO buffer (cap 1000) and surface via the new `get_new_events(event_type?, event_types?, chat_id?, since_seconds?, max_events=50, peek=false)` tool. Currently registers `im.message.receive_v1` (replies / group activity). feishu.cn only — Lark international not supported by Feishu's `WSClient`. Buffer is in-memory; events received before MCP boot aren't replayed.
+- **Cookie protobuf wire-format tooling (A.0)**: `scripts/decode-feishu-protobuf.js` decodes a captured payload against `proto/lark.proto` and reports unknown field tags + wire types so we know what to add. `scripts/capture-feishu-protobuf.js` documents the per-type session recipe and runs DECODE on `/tmp/feishu-captures`. Living write-up in `docs/COOKIE-PROTOBUF-CAPTURES.md`. Actual IMAGE / AUDIO / STICKER / CARD / search_messages captures move to v1.3.9 — tooling is in place; capture session is high-touch and preferably done by hand.
+- **`FEISHU_PLUGIN_PROFILE` env override (E.1)**: harness env can pin an active profile, validated at boot (fatal exit 2 on typo). Lets a single `credentials.json` serve different harnesses with different active profiles (Claude Code on "work", Codex on "personal").
+- **`setup --pointer-only` mode (E.2)**: writes only `FEISHU_PLUGIN_PROFILE=default` to harness env; real creds live solely in `credentials.json`. Eliminates env-vs-file divergence on UAT refresh. Opt-in (interactive prompt + flag).
+- **Migrate startup nudge (E.3)**: legacy env-only setups get a one-line TIP at MCP boot pointing at `npx feishu-user-plugin migrate --confirm`. Skipped when `credentials.json` already exists.
+- **CI / docs gates (F)**: `scripts/sync-server-json.js` regenerates `server.json` from `package.json + TOOLS` (was frozen at v1.2.0 / 33 tools — now matches reality). `scripts/check-tool-count.js` extended to verify `SKILL.md::allowed-tools` in addition to README badge. `scripts/check-changelog.js` blocks publish when CHANGELOG has no section for the tag version. `scripts/check-docs-sync.js` enforces CLAUDE.md / AGENTS.md / skill-ref triple-sync at prepublish + CI.
+
+### Changed
+- **`src/auth/uat.js` and `src/auth/cookie.js` extracted (D.1, D.2)** from `clients/official/base.js` and `clients/user.js` respectively. State (`this._uat` / `this._heartbeatTimer` / etc.) still lives on the client; only function bodies moved. base.js drops ~200 lines. Closes the v1.3.7 Phase B deferrals noted in `docs/REFACTOR-NOTES.md`.
+
+### Fixed
+- **G.1 wiki-attach fallback retest scaffold**: `scripts/test-wiki-attach-fallback.js` monkey-patches `attachToWiki` to throw 91403 and verifies `upload_drive_file` surfaces the failure rather than silently uploading to drive root. POSIX skip 77 when missing creds / `FEISHU_TEST_FOLDER_TOKEN`.
+
+### Deferred to v1.3.9
+- Cookie protobuf wire format reverse for IMAGE / AUDIO / STICKER / CARD / search_messages — tooling is in place (`scripts/decode-feishu-protobuf.js`, `scripts/capture-feishu-protobuf.js`, `docs/COOKIE-PROTOBUF-CAPTURES.md`), capture sessions are pending.
+- `switch_profile` multi-profile e2e — needs a real second profile in tests.
+- Test group `oc_daaa6a50f2a97dc668aaf79ae4dc6e4e` dissolution — needs owner-permission transfer.
+
 ## [1.3.7] - 2026-05-04
 
 ### Added
