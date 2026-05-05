@@ -16,10 +16,15 @@ if git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
 fi
 git checkout -b "$BRANCH"
 git add "plugins/feishu-user-plugin/"
-# team-skills also has scripts/generate-catalog.py that mirrors plugin.json
-# into catalog.yaml; CI fails if catalog drifted. Run it if available.
-if [ -x "scripts/generate-catalog.py" ] || [ -f "scripts/generate-catalog.py" ]; then
-  python3 scripts/generate-catalog.py >/dev/null 2>&1 || true
+# team-skills' generate-catalog.py picks PyYAML when importable (different
+# output) or the embedded to_yaml_manual otherwise. CI runs it without PyYAML
+# installed, so the canonical catalog.yaml format is the manual one. We must
+# match it byte-for-byte or "Check catalog is up to date" fails.
+#
+# Force the manual path by stubbing `import yaml` via sys.modules['yaml']=None
+# before runpy executes the script. Verified bit-identical to CI output.
+if [ -f "scripts/generate-catalog.py" ]; then
+  python3 -c "import sys, runpy; sys.modules['yaml']=None; runpy.run_path('scripts/generate-catalog.py', run_name='__main__')" >/dev/null 2>&1 || true
   git add catalog.yaml 2>/dev/null || true
 fi
 git commit -m "chore: sync feishu-user-plugin v$VERSION skills + plugin.json" || { echo "[hook] nothing to sync"; exit 0; }
