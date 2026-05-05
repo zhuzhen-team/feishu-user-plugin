@@ -233,6 +233,10 @@ async function main() {
   if (hasCanonical && (process.env.LARK_COOKIE || process.env.LARK_APP_ID || process.env.LARK_USER_ACCESS_TOKEN)) {
     console.error('[feishu-user-plugin] NOTE: credentials.json AND legacy LARK_* env vars are both set. Plugin reads credentials.json; the env vars are ignored. To clean up: remove the LARK_* keys from your harness config, leaving FEISHU_PLUGIN_PROFILE only.');
   }
+  // Nudge legacy env-only users to migrate.
+  if (!hasCanonical && (hasCookie || hasApp || hasUAT)) {
+    console.error('[feishu-user-plugin] TIP: run `npx feishu-user-plugin migrate --confirm` to consolidate credentials into ~/.feishu-user-plugin/credentials.json (single source of truth, removes UAT-refresh drift across harnesses).');
+  }
 
   // Validate APP_ID/SECRET against Feishu before serving any tool calls.
   // Catches the "Claude filled in a wrong/stale APP_ID during install" failure
