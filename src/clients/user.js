@@ -1,6 +1,7 @@
 const path = require('path');
 const protobuf = require('protobufjs');
 const { generateRequestId, generateCid, parseCookie, formatCookie, fetchWithTimeout } = require('../utils');
+const cookieHeartbeat = require('../auth/cookie');
 
 const GATEWAY_URL = 'https://internal-api-lark-api.feishu.cn/im/gateway/';
 const CSRF_URL = 'https://internal-api-lark-api.feishu.cn/accounts/csrf';
@@ -86,26 +87,9 @@ class LarkUserClient {
   }
 
   // --- Cookie Heartbeat ---
-
-  _startHeartbeat() {
-    // Refresh CSRF token every 4 hours to keep session alive
-    // Feishu sl_session has 12h max-age; CSRF refresh also refreshes sl_session
-    this._heartbeatTimer = setInterval(async () => {
-      try {
-        await this._getCsrfToken();
-        // Lazy require to avoid circular dependency at module load time.
-        // auth/credentials writes to credentials.json (single source of truth)
-        // when it exists; falls back to legacy mcpServers persistence otherwise.
-        const { persistToConfig } = require('../auth/credentials');
-        persistToConfig({ LARK_COOKIE: this.cookieStr });
-        console.error('[feishu-user-plugin] Cookie heartbeat: session refreshed and persisted');
-      } catch (e) {
-        console.error('[feishu-user-plugin] Cookie heartbeat failed:', e.message);
-      }
-    }, 4 * 60 * 60 * 1000); // 4 hours
-    // Don't keep the process alive just for heartbeat
-    if (this._heartbeatTimer.unref) this._heartbeatTimer.unref();
-  }
+  // Body extracted to src/auth/cookie.js (v1.3.8 D.2). Timer state stays on
+  // this instance; auth/cookie.js mutates this._heartbeatTimer.
+  _startHeartbeat() { cookieHeartbeat.startHeartbeat(this); }
 
   async checkSession() {
     try {
