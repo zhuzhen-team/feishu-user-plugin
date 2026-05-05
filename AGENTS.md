@@ -411,69 +411,80 @@ See `docs/TESTING-METHODOLOGY.md` for the full regression playbook (when to use 
 - `chore:` dependencies, CI, config changes
 
 ### Publishing
-**IMPORTANT: Version number must ALWAYS be confirmed with the user before publishing.**
-Any operation involving `npm version`, modifying `package.json` version, `git tag v*`, or `git push --tags` requires explicit user confirmation of the target version number. Do not auto-decide version numbers.
+**IMPORTANT: User confirmation is required exactly TWICE per release** — once on target version (before any publish operation), once on the announcement card before sending. Don't ask between steps; run end-to-end.
 
 Three-layer version safety:
-1. **Claude rule** (this section): Ask user to confirm version before any publish-related operation
+1. **Claude rule** (this section): Confirm version once with user. Then run all publish steps without asking. Stop only on (a) failure, or (b) the announcement-preview gate.
 2. **Local gate** (`prepublishOnly`): Interactive confirmation when running `npm publish` locally (skipped in CI)
 3. **CI gate** (`.github/workflows/publish.yml`): Tag must match `package.json` version or publish fails
 
 Steps:
-1. Confirm target version with user
-2. Update `version` in `package.json`
-3. `git add <files> && git commit -m "v1.x.x: description"`
-4. `git tag v1.x.x && git push && git push --tags`
-5. GitHub Actions verifies tag matches package.json, then auto-publishes to npm
+1. Confirm target version with user (once)
+2. Bump `version` in `package.json` + `.claude-plugin/plugin.json` + `skills/feishu-user-plugin/SKILL.md` (single commit; `scripts/check-version.js` enforces triangle equality)
+3. Open release PR, wait for CI green (auto-merge enabled on this repo, so `gh pr merge --auto --squash`)
+4. After merge, `git tag vX.Y.Z && git push origin vX.Y.Z` triggers GitHub Actions `Publish to npm` workflow
+5. Verify: `npm view feishu-user-plugin version` returns the new version
+6. post-merge hook runs `scripts/sync-team-skills.sh` which auto-syncs team-skills (skills + plugin.json + child README changelog + root README catalog row + catalog.yaml regen + `gh pr merge --admin --squash` on the sync PR). No manual touches in team-skills.
+7. Run `node scripts/generate-release-artifacts.js` to produce `/tmp/feishu-release/v$VERSION/feishu-card.json`
+8. Present the card preview to user. Wait for "发"
+9. `send_card_as_user(chat_id="7599552782038813643", card=<JSON>)` — only after user explicitly approves
 6. **After npm confirms the new version is live, draft a release announcement in Chinese for the "AI技术解决（内部）" Feishu group and show it to the user for approval BEFORE sending.** Do not send until the user explicitly approves.
 
 ### Release announcement rules (every release)
-After a successful publish, draft a group announcement to "AI技术解决（内部）" (chat_id `7599552782038813643`) and ALWAYS show it to the user for review first. Only send after explicit approval.
 
-**Transport**: `send_post_as_user` (rich-text post). No @-mentions — announcements are impersonal broadcasts. No emojis. No marketing language.
+After successful publish, send announcement to "AI技术解决（内部）" group (chat_id `7599552782038813643`). **Never send without explicit user approval** — show preview first, wait for "发".
 
-**Structure** (in this order; omit a section if it doesn't apply this release):
+**Transport (v1.3.9+)**: `send_card_as_user` (interactive Feishu card). No @-mentions, no emojis, no marketing.
 
-```
-feishu-user-plugin vX.Y.Z 发布
+**Source of truth**: `CHANGELOG.md` v$VERSION section. **Never hand-write announcements** — the generator script extracts the text deterministically:
 
-<一到两句开篇总结本次发布的主题，陈述语气，不推销>
-
-修复
-• <缺陷描述>：<根因与修复机制，引用具体错误码/接口名/参数>
-• ...
-
-新增
-• 新增 <tool 名> 工具：<一句话功能描述>。<关键约束或调用条件>
-• ...
-
-调整
-• <行为变化的描述>
-• ...
-
-下版本计划
-• <条目>
-• ...
-
-升级方式
-• 重启 Claude Code / Codex 即可自动拉取 X.Y.Z
-• <若有相关新日志/错误提示，说明怎么应对>
-• 建议复测 N 个场景：<场景 1>、<场景 2>、<场景 3>
+```bash
+node scripts/generate-release-artifacts.js [version]
+# Outputs to /tmp/feishu-release/v<version>/:
+#   feishu-card.json          ← full Feishu card payload, ready for send_card_as_user
+#   team-skills-changelog.md  ← markdown block injected into team-skills child README by post-merge hook
+#   team-skills-readme-row.md ← root README catalog row replacement
 ```
 
-**写作规范**:
-- **开篇**：一到两句陈述式总结，不宣传、不夸大。参考 v1.3.2："本次更新主要补齐了 X 能力，并修复了 Y 问题；同时将 Z 统一调整为 ..."
-- **每条 bullet**：先写用户可见现象，再写底层机制。引用具体错误码（如 1770032 / 91403）、接口名（如 manage_doc_block）、参数名（如 RichText.atIds）——专业读者信赖的是细节
-- **字符**：bullet 用 `•`（U+2022），不用 `-` 或 `*`；代码/工具名在正文中直接写，不加反引号
-- **禁用**：emoji、🔴🟡🟢 之类严重度标记、`@` 任何人、营销词（"强大"、"全新"、"重磅"）、夸张修辞
-- **语气**：技术 release note 的中性语气，像写给同行的内部更新。参考 v1.3.2 全文
-- **长度**：单屏为宜，一般 400–700 汉字。每条 bullet 一到三行
-- **下版本计划**：复制自上一版公告仍未完成的条目 + 本次发布中暴露的新方向。本版已完成的条目必须删除
-- **升级方式**：至少包含重启指令；若本次修了某类错误（如 APP_ID 校验），列出对应诊断日志字样；以"建议复测 N 个场景"收尾，场景要具体可操作
+**CHANGELOG conventions** (the generator parses these — keep the convention or output diverges):
 
-**结尾**：不加 CHANGELOG 链接（v1.3.2 风格未含链接，群内读者不需要）。
+```markdown
+## [X.Y.Z] - YYYY-MM-DD
 
-**发送前**：始终先用 `send_to_user` 或类似工具发给用户自己审核，或直接以文本形式贴在对话里等用户批准。用户说"发"才调 `send_post_as_user` 到目标群。
+<一到两句陈述式开篇，可空，generator 用作 card 第一段；不宣传不夸大>
+
+### Added              （翻译为"新增"）
+- **简短标题 (代号)**：用户可见现象。底层机制 / 错误码 / 接口名 / 文件路径。
+- ...
+
+### Changed            （"调整"）
+### Fixed              （"修复"）
+### Removed | Deprecated | Security  （"移除" / "废弃" / "安全"）
+### Deferred to vN.M.P （"下版本计划 (vN.M.P)"，从上版本拷过来 - 本版完成的条目）
+
+### Test scenarios     （可选；用作"升级方式"段的"建议复测"行）
+- 调用 X 时观察 Y 出现 Z
+- ...
+```
+
+**写作规范** (writes flow into the card directly):
+- 每条 bullet：先用户可见现象，再底层机制。引用具体错误码 (91403 / 1254301)、接口名 (`manage_bitable_record`)、参数名 (`via_profile`)、文件路径 (`src/auth/profile-router.js`)
+- 代号语：`(B)` `(D.1)` 等可保留，对应 ROADMAP / plan 编号
+- 禁用：emoji / `@` 任何人 / "强大"等营销词 / 夸张修辞
+- 长度：单屏，整段 400-800 汉字。每条 bullet 1-3 行
+
+**升级方式** is generated automatically by the script:
+- "重启 Claude Code / Codex 自动拉取 X.Y.Z" — always
+- "推荐运行 npx feishu-user-plugin migrate --confirm ..." — added when bullets mention migrate / credentials.json / FEISHU_PLUGIN_PROFILE
+- "启动看 stderr 带 WS connected ..." — added when bullets mention WS / WebSocket / get_new_events
+- "建议复测 N 个场景：..." — uses `### Test scenarios` bullets if present, otherwise top-3 Added bullet titles
+
+**Step-by-step at release time**:
+1. Bump version → tag → push → wait for `Publish to npm` workflow success → confirm `npm view feishu-user-plugin version`
+2. post-merge hook on this repo runs `scripts/sync-team-skills.sh`, which calls `scripts/generate-release-artifacts.js` and auto-injects v$VERSION block into team-skills child README + updates root README catalog row + opens & `--admin --squash`-merges the team-skills sync PR. Zero manual steps in team-skills.
+3. `node scripts/generate-release-artifacts.js` (idempotent — same input gives same output) on this repo to (re)produce `feishu-card.json`
+4. **Show the rendered card preview to user** — paste a summary or re-render via `cat /tmp/feishu-release/v$VERSION/feishu-card.json | jq` and let user inspect. Do not send.
+5. User says "发" → `send_card_as_user(chat_id=7599552782038813643, card=<JSON content>)`
 
 ## OAuth Scopes (when re-running `npx feishu-user-plugin oauth`)
 

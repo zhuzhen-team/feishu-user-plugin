@@ -6,25 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [1.3.8] - 2026-05-05
 
+本次更新主线是多 profile 自动切换和 WebSocket 实时事件两块新能力，同时把 v1.3.7 推迟的 auth 模块拆分和凭证 pointer-only 模式补齐，并加固 CI 闸门（server.json 自动重生、SKILL.md allowed-tools 与 TOOLS 1:1 校验、CHANGELOG section 校验、文档三方同步校验）。工具数 80 → 82。
+
 ### Added
-- **Multi-profile auto-switch (B)**: when `~/.feishu-user-plugin/credentials.json` has ≥2 profiles, read-only tools (`read_*` / `list_*` / `get_*` / `search_*` / `download_*` plus `manage_bitable_*` read-action variants) auto-retry across profiles on permission-denied errors. Trigger codes `91403 / 1254301 / 1254000 / 99991672 / HTTP 403` plus message patterns. The winning profile is cached to `credentials.json::profileHints` so subsequent calls go straight to the right account. Writes never auto-switch — pass `via_profile: "auto"` per call to opt in. New tool: `manage_profile_hints(action=list|set|clear, resource_key?, profile?)`. Single-profile users see no behaviour change.
-- **Real-time WebSocket events (C)**: MCP server opens a `WSClient` connection at boot when `LARK_APP_ID/SECRET` are configured; events accumulate into an in-memory FIFO buffer (cap 1000) and surface via the new `get_new_events(event_type?, event_types?, chat_id?, since_seconds?, max_events=50, peek=false)` tool. Currently registers `im.message.receive_v1` (replies / group activity). feishu.cn only — Lark international not supported by Feishu's `WSClient`. Buffer is in-memory; events received before MCP boot aren't replayed.
-- **Cookie protobuf wire-format tooling (A.0)**: `scripts/decode-feishu-protobuf.js` decodes a captured payload against `proto/lark.proto` and reports unknown field tags + wire types so we know what to add. `scripts/capture-feishu-protobuf.js` documents the per-type session recipe and runs DECODE on `/tmp/feishu-captures`. Living write-up in `docs/COOKIE-PROTOBUF-CAPTURES.md`. Actual IMAGE / AUDIO / STICKER / CARD / search_messages captures move to v1.3.9 — tooling is in place; capture session is high-touch and preferably done by hand.
-- **`FEISHU_PLUGIN_PROFILE` env override (E.1)**: harness env can pin an active profile, validated at boot (fatal exit 2 on typo). Lets a single `credentials.json` serve different harnesses with different active profiles (Claude Code on "work", Codex on "personal").
-- **`setup --pointer-only` mode (E.2)**: writes only `FEISHU_PLUGIN_PROFILE=default` to harness env; real creds live solely in `credentials.json`. Eliminates env-vs-file divergence on UAT refresh. Opt-in (interactive prompt + flag).
-- **Migrate startup nudge (E.3)**: legacy env-only setups get a one-line TIP at MCP boot pointing at `npx feishu-user-plugin migrate --confirm`. Skipped when `credentials.json` already exists.
-- **CI / docs gates (F)**: `scripts/sync-server-json.js` regenerates `server.json` from `package.json + TOOLS` (was frozen at v1.2.0 / 33 tools — now matches reality). `scripts/check-tool-count.js` extended to verify `SKILL.md::allowed-tools` in addition to README badge. `scripts/check-changelog.js` blocks publish when CHANGELOG has no section for the tag version. `scripts/check-docs-sync.js` enforces CLAUDE.md / AGENTS.md / skill-ref triple-sync at prepublish + CI.
+- **多 profile 自动切换 (B)**：当 `~/.feishu-user-plugin/credentials.json` 配了 ≥2 profile，读取类工具（`read_*` / `list_*` / `get_*` / `search_*` / `download_*` 加 `manage_bitable_*` 的 read-action 变体）遇到 91403 / 1254301 / 1254000 / 99991672 / HTTP 403 时自动尝试其它 profile 重试。命中后 resourceKey → profile 写入 `profileHints`，下次直接走对的账号。写操作绝不自动切；显式 `via_profile="alt"` 单次锁定，`via_profile="auto"` 在写操作上手动允许。
+- **新工具 manage_profile_hints**：`action=list|set|clear, resource_key?, profile?`，检查或编辑 profile 命中缓存。
+- **WebSocket 实时事件 (C)**：MCP server 启动时后台连飞书 WSClient（仅 feishu.cn，Lark 国际版不支持），事件入 1000 容量 FIFO buffer。新工具 `get_new_events(event_type?, event_types?, chat_id?, since_seconds?, max_events=50, peek=false)` 拉取，默认 drain 语义；当前注册 `im.message.receive_v1`。
+- **Cookie protobuf 工具链 (A.0)**：`scripts/decode-feishu-protobuf.js` 解码 + 报告未知字段；`scripts/capture-feishu-protobuf.js` 抓包 recipe；`docs/COOKIE-PROTOBUF-CAPTURES.md` 流程文档。下版本用这套真做 send_image / audio / sticker / card / search_messages 反向。
+- **`FEISHU_PLUGIN_PROFILE` 启动 env (E.1)**：让 harness 各自指向不同 profile，启动时校验存在（拼错直接 exit 2，不静默 fall through）。
+- **`setup --pointer-only` 模式 (E.2)**：harness env 只写 `FEISHU_PLUGIN_PROFILE=default`，真凭证全部留 `credentials.json`，消除 UAT 刷新后两端 diverge。
 
 ### Changed
-- **`src/auth/uat.js` and `src/auth/cookie.js` extracted (D.1, D.2)** from `clients/official/base.js` and `clients/user.js` respectively. State (`this._uat` / `this._heartbeatTimer` / etc.) still lives on the client; only function bodies moved. base.js drops ~200 lines. Closes the v1.3.7 Phase B deferrals noted in `docs/REFACTOR-NOTES.md`.
+- **`src/auth/uat.js` + `src/auth/cookie.js` 拆分 (D.1, D.2)**：从 `clients/official/base.js` 和 `clients/user.js` 拆出来，client 实例上变 1-line delegate；状态字段保留在客户端实例。base.js 减约 200 行，关掉 v1.3.7 Phase B 的拆分欠账。
+- **启动诊断更主动 (E.3)**：credentials.json + 旧 LARK_* env 双存在打 NOTE 提示 env 已被忽略；env-only 用户打 TIP 建议运行 `npx feishu-user-plugin migrate --confirm`。
 
 ### Fixed
-- **G.1 wiki-attach fallback retest scaffold**: `scripts/test-wiki-attach-fallback.js` monkey-patches `attachToWiki` to throw 91403 and verifies `upload_drive_file` surfaces the failure rather than silently uploading to drive root. POSIX skip 77 when missing creds / `FEISHU_TEST_FOLDER_TOKEN`.
+- **server.json 长期 drift**：长期停在 v1.2.0 / 33 tools 且包含已删工具。新增 `scripts/sync-server-json.js` 从 package.json + TOOLS 自动重生，prepublishOnly 与 CI 验证 drift；本版同步到 v1.3.8 / 82 tools。
+- **`check-tool-count.js` 扩展**：除 README badge 之外同时校验 `SKILL.md::allowed-tools` 与 TOOLS 一致，避免 SKILL.md 单独 drift 漏掉。
+- **G.1 wiki-attach 兜底回归脚本**：`scripts/test-wiki-attach-fallback.js` 把 `attachToWiki` monkey-patch 成抛 91403，验证 `upload_drive_file` 把失败透出来而不是默默上传到 drive root。POSIX skip 77 缺凭证时跳过。
 
 ### Deferred to v1.3.9
-- Cookie protobuf wire format reverse for IMAGE / AUDIO / STICKER / CARD / search_messages — tooling is in place (`scripts/decode-feishu-protobuf.js`, `scripts/capture-feishu-protobuf.js`, `docs/COOKIE-PROTOBUF-CAPTURES.md`), capture sessions are pending.
-- `switch_profile` multi-profile e2e — needs a real second profile in tests.
-- Test group `oc_daaa6a50f2a97dc668aaf79ae4dc6e4e` dissolution — needs owner-permission transfer.
+- Cookie protobuf 实际抓包：`send_image_as_user` / `send_audio_as_user` / `send_sticker_as_user` / `send_card_as_user` 真用户身份 / `search_messages`。工具链已 ship（`scripts/decode-feishu-protobuf.js` 等），抓包 session 留下版本一并做。
+- 机器级 SSOT 完整化：WebSocket 单 owner + 共享 events.jsonl + 单一 drain 游标；active profile 跨进程 stat 同步；setup 非交互模式自动 pointer-only。
+- 本地 md → 飞书 wiki 同步、`read_doc_markdown` 工具、`src/config/` 目录化拆分。
+- `switch_profile` 多 profile e2e（mock 第二 profile 测 setActiveProfile cache 失效路径）。
+- 测试群 `oc_daaa6a50f2a97dc668aaf79ae4dc6e4e` 解散（卡 group owner 权限转让）。
+
+### Test scenarios
+- 调用 `read_doc` 命中外部租户文档时观察 stderr 出现 `profile-router: default → alt on read_doc (code=91403)`，结果回到 alt profile 的内容
+- 用 `send_to_user` 给自己发条文本后调 `get_new_events`，看到对应的 `im.message.receive_v1` 事件
+- 跑 `npx feishu-user-plugin migrate --confirm` 后重启 MCP，启动 stderr 显示 `Auth: ... source: credentials.json profile=default`，所有工具调用照常
 
 ## [1.3.7] - 2026-05-04
 
