@@ -427,12 +427,12 @@ Steps:
 6. post-merge hook runs `scripts/sync-team-skills.sh` which auto-syncs team-skills (skills + plugin.json + child README changelog + root README catalog row + catalog.yaml regen + `gh pr merge --admin --squash` on the sync PR). No manual touches in team-skills.
 7. Run `node scripts/generate-release-artifacts.js` to produce `/tmp/feishu-release/v$VERSION/feishu-card.json`
 8. Present the card preview to user. Wait for "发"
-9. `send_card_as_user(chat_id="7599552782038813643", card=<JSON>)` — only after user explicitly approves
+9. `send_card_as_user(chat_id="oc_0fab8e155f500f28bd437e8686921870", card=<JSON>)` — only after user explicitly approves
 6. **After npm confirms the new version is live, draft a release announcement in Chinese for the "AI技术解决（内部）" Feishu group and show it to the user for approval BEFORE sending.** Do not send until the user explicitly approves.
 
 ### Release announcement rules (every release)
 
-After successful publish, send announcement to "AI技术解决（内部）" group (chat_id `7599552782038813643`). **Never send without explicit user approval** — show preview first, wait for "发".
+After successful publish, send announcement to "AI技术解决（内部）" group (chat_id `oc_0fab8e155f500f28bd437e8686921870`). **Never send without explicit user approval** — show preview first, wait for "发".
 
 **Transport (v1.3.9+)**: `send_card_as_user` (interactive Feishu card). No @-mentions, no emojis, no marketing.
 
@@ -484,7 +484,7 @@ node scripts/generate-release-artifacts.js [version]
 2. post-merge hook on this repo runs `scripts/sync-team-skills.sh`, which calls `scripts/generate-release-artifacts.js` and auto-injects v$VERSION block into team-skills child README + updates root README catalog row + opens & `--admin --squash`-merges the team-skills sync PR. Zero manual steps in team-skills.
 3. `node scripts/generate-release-artifacts.js` (idempotent — same input gives same output) on this repo to (re)produce `feishu-card.json`
 4. **Show the rendered card preview to user** — paste a summary or re-render via `cat /tmp/feishu-release/v$VERSION/feishu-card.json | jq` and let user inspect. Do not send.
-5. User says "发" → `send_card_as_user(chat_id=7599552782038813643, card=<JSON content>)`
+5. User says "发" → `send_card_as_user(chat_id=oc_0fab8e155f500f28bd437e8686921870, card=<JSON content>)`
 
 ## OAuth Scopes (when re-running `npx feishu-user-plugin oauth`)
 
