@@ -241,7 +241,7 @@
     },
     {
       "name": "send_card_as_user",
-      "description": "Send an interactive card to a chat. **As of v1.3.6, identity defaults to BOT** because user-identity card sending requires reverse-engineering the Feishu web protobuf and is deferred to v1.3.7. The to"
+      "description": "Send an interactive card to a chat. **Identity defaults to BOT** because user-identity card sending requires reverse-engineering the Feishu web protobuf (deferred to v1.3.9; v1.3.8 shipped the capture"
     },
     {
       "name": "list_user_okrs",
