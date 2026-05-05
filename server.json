@@ -1,56 +1,361 @@
 {
   "name": "feishu-user-plugin",
   "display_name": "Feishu User Plugin for Claude Code",
-  "description": "All-in-one Feishu plugin — send messages as yourself, read chats, manage docs/tables/wiki. 33 tools + 9 skills, 3 auth layers.",
-  "version": "1.2.0",
+  "description": "All-in-one Feishu plugin for Claude Code & Codex — messaging (with merge_forward expansion + batch_send), docs (image + file blocks read/write), bitable, wiki (full CRUD), drive, OKR (with progress writes), calendar (rea",
+  "version": "1.3.7",
   "icon": "https://www.feishu.cn/favicon.ico",
   "repository": {
     "type": "git",
     "url": "https://github.com/EthanQC/feishu-user-plugin"
   },
   "license": "MIT",
-  "categories": ["communication", "messaging", "productivity"],
-  "tags": ["feishu", "lark", "im", "messaging", "docs", "bitable", "wiki", "protobuf", "plugin", "claude-code"],
+  "categories": [
+    "communication",
+    "messaging",
+    "productivity"
+  ],
+  "tags": [
+    "feishu",
+    "lark",
+    "im",
+    "messaging",
+    "docs",
+    "bitable",
+    "wiki",
+    "protobuf",
+    "plugin",
+    "claude-code"
+  ],
   "tools": [
-    { "name": "send_to_user", "description": "Search user + send text message as yourself — one step" },
-    { "name": "send_to_group", "description": "Search group + send text message as yourself — one step" },
-    { "name": "send_as_user", "description": "Send text to any chat by ID, supports reply threading" },
-    { "name": "send_image_as_user", "description": "Send image message (requires image_key)" },
-    { "name": "send_file_as_user", "description": "Send file message (requires file_key)" },
-    { "name": "send_post_as_user", "description": "Send rich text with title, paragraphs, links, @mentions" },
-    { "name": "send_sticker_as_user", "description": "Send sticker/emoji" },
-    { "name": "send_audio_as_user", "description": "Send audio message" },
-    { "name": "search_contacts", "description": "Search users, bots, or groups by name" },
-    { "name": "create_p2p_chat", "description": "Create/get a P2P (direct message) chat" },
-    { "name": "get_chat_info", "description": "Get group details: name, members, owner" },
-    { "name": "get_user_info", "description": "Look up user display name by ID" },
-    { "name": "get_login_status", "description": "Check cookie, app credentials, and UAT status" },
-    { "name": "read_p2p_messages", "description": "Read P2P chat history via OAuth UAT" },
-    { "name": "list_user_chats", "description": "List group chats the user is in (groups only, not P2P)" },
-    { "name": "list_chats", "description": "List all chats the bot has joined" },
-    { "name": "read_messages", "description": "Read message history (accepts chat name or oc_ ID)" },
-    { "name": "reply_message", "description": "Reply to a specific message (as bot)" },
-    { "name": "forward_message", "description": "Forward a message to another chat" },
-    { "name": "search_docs", "description": "Search documents by keyword" },
-    { "name": "read_doc", "description": "Read raw text content of a document" },
-    { "name": "create_doc", "description": "Create a new document" },
-    { "name": "list_bitable_tables", "description": "List tables in a Bitable app" },
-    { "name": "list_bitable_fields", "description": "List fields (columns) in a table" },
-    { "name": "search_bitable_records", "description": "Query records with filter/sort" },
-    { "name": "create_bitable_record", "description": "Create a new record (row)" },
-    { "name": "update_bitable_record", "description": "Update an existing record" },
-    { "name": "list_wiki_spaces", "description": "List all accessible wiki spaces" },
-    { "name": "search_wiki", "description": "Search wiki/docs by keyword" },
-    { "name": "list_wiki_nodes", "description": "Browse wiki node tree" },
-    { "name": "list_files", "description": "List files in a Drive folder" },
-    { "name": "create_folder", "description": "Create a new folder in Drive" },
-    { "name": "find_user", "description": "Find user by email or mobile number" }
+    {
+      "name": "manage_bitable_app",
+      "description": "Manage a Bitable app. action=create (new app, optional wiki_space_id to attach), copy (duplicate an existing app), get_meta (read app metadata)."
+    },
+    {
+      "name": "manage_bitable_table",
+      "description": "Manage a table inside a Bitable app. action=list, create (with optional initial fields), update (rename), delete."
+    },
+    {
+      "name": "manage_bitable_field",
+      "description": "Manage fields (columns) inside a Bitable table. action=list, create, update (Feishu requires `type` even when only renaming), delete."
+    },
+    {
+      "name": "manage_bitable_view",
+      "description": "Manage views inside a Bitable table. action=list, create, delete. (Feishu open API does not expose view update — recreate with a new name to change.)"
+    },
+    {
+      "name": "manage_bitable_record",
+      "description": "Manage records (rows) inside a Bitable table. action=search, get, create, update, delete. create/update/delete accept arrays — single record or up to 500."
+    },
+    {
+      "name": "list_calendars",
+      "description": "List the current user's calendars (primary + shared + subscribed). Requires UAT — app identity only sees calendars it was explicitly invited to. Requires `calendar:calendar:readonly` scope on the OAut"
+    },
+    {
+      "name": "list_calendar_events",
+      "description": "List events in a calendar within an optional time range. Typical usage: first list_calendars to find calendar_id (primary calendar has type=\"primary\"), then list events in e.g. [now, now+7d] (Unix sec"
+    },
+    {
+      "name": "get_calendar_event",
+      "description": "Get full details of a single calendar event (summary, description, start/end, attendees, location, attachments, meeting link)."
+    },
+    {
+      "name": "create_calendar_event",
+      "description": "Create a new calendar event. Requires `calendar:calendar.event:write` scope (re-run `npx feishu-user-plugin oauth` after enabling). The current identity (UAT-first) must have writer or owner permissio"
+    },
+    {
+      "name": "update_calendar_event",
+      "description": "Patch fields on an existing calendar event. Pass only the fields you want to change. Requires `calendar:calendar.event:write` scope."
+    },
+    {
+      "name": "delete_calendar_event",
+      "description": "Delete a calendar event. Requires `calendar:calendar.event:write` scope."
+    },
+    {
+      "name": "respond_calendar_event",
+      "description": "Respond to an event invitation. The current identity must be in the event's attendee list. Requires `calendar:calendar.event:write` scope."
+    },
+    {
+      "name": "get_freebusy",
+      "description": "Query freebusy windows for one or more users in a time range. Use to find a meeting slot. Requires `calendar:calendar:readonly` (already in default scope set)."
+    },
+    {
+      "name": "search_contacts",
+      "description": "Search Feishu users, bots, or group chats by name. Returns IDs."
+    },
+    {
+      "name": "create_p2p_chat",
+      "description": "Create or get a P2P (direct message) chat. Returns numeric chat_id."
+    },
+    {
+      "name": "get_user_info",
+      "description": "Look up a user's display name by user ID."
+    },
+    {
+      "name": "get_login_status",
+      "description": "Check cookie session validity and app credentials status. Also refreshes session."
+    },
+    {
+      "name": "download_message_resource",
+      "description": "Download an image or file attached to a message so the model can see / store it. v1.3.7 (C2.4) consolidates the v1.3.6 download_image (mode 1) + download_file. UAT-first, falls back to app."
+    },
+    {
+      "name": "download_doc_image",
+      "description": "Download an image embedded in a docx document so the model can see it. Pass the `image_token` from `get_doc_blocks` (block.image.token), and optionally the doc/wiki/URL token to scope the lookup. UAT-"
+    },
+    {
+      "name": "search_docs",
+      "description": "Search Feishu documents by keyword."
+    },
+    {
+      "name": "read_doc",
+      "description": "Read the raw text content of a Feishu document."
+    },
+    {
+      "name": "get_doc_blocks",
+      "description": "Get structured block tree of a document. Returns block types, content, and hierarchy for precise document analysis."
+    },
+    {
+      "name": "create_doc",
+      "description": "Create a new Feishu document. Can place directly under a Wiki space by passing wiki_space_id (optionally wiki_parent_node_token for nested placement) — the plugin creates the doc in drive then attache"
+    },
+    {
+      "name": "manage_doc_block",
+      "description": "Manage content blocks in a document. Single tool replaces v1.3.6 create_doc_block / update_doc_block / delete_doc_blocks."
+    },
+    {
+      "name": "list_files",
+      "description": "List files in a Drive folder."
+    },
+    {
+      "name": "create_folder",
+      "description": "Create a new folder in Drive."
+    },
+    {
+      "name": "upload_drive_file",
+      "description": "Upload a file from disk to a Feishu Drive folder (drive/v1/files/upload_all, parent_type=explorer). Returns file_token + url. If wiki_space_id is provided, the uploaded file is then attached to that W"
+    },
+    {
+      "name": "manage_drive_file",
+      "description": "Manage a Drive file/doc/folder. action=copy (duplicate to a new name + folder), move (relocate, returns task_id), delete (remove, returns task_id). `type` is always required (Feishu rejects with 10610"
+    },
+    {
+      "name": "create_group",
+      "description": "Create a new group chat (as bot). Can add initial members."
+    },
+    {
+      "name": "update_group",
+      "description": "Update group chat name or description."
+    },
+    {
+      "name": "list_members",
+      "description": "List all members in a group chat."
+    },
+    {
+      "name": "manage_members",
+      "description": "Add or remove members from a group chat. The Feishu API rejects with code 9499 when the IDs in `member_ids` do not match `member_id_type` — pass `member_id_type` explicitly when using union_id or user"
+    },
+    {
+      "name": "get_chat_info",
+      "description": "Get chat details: name, description, member count, owner. Supports both oc_xxx and numeric chat_id."
+    },
+    {
+      "name": "read_p2p_messages",
+      "description": "Read P2P (direct message) chat history using user_access_token. Works for chats the bot cannot access. Returns newest messages first by default. Auto-expands merge_forward messages into their child me"
+    },
+    {
+      "name": "list_user_chats",
+      "description": "List group chats the user is in. Note: only returns groups, not P2P. For P2P chats, use search_contacts → create_p2p_chat → read_p2p_messages. Requires OAuth setup."
+    },
+    {
+      "name": "list_chats",
+      "description": "List all chats the bot has joined. Returns chat_id, name, type."
+    },
+    {
+      "name": "read_messages",
+      "description": "Read message history from any group. Accepts oc_xxx ID, numeric ID, or chat name (auto-searched). Auto-falls back to UAT for external groups the bot cannot access. Returns newest messages first by def"
+    },
+    {
+      "name": "send_message_as_bot",
+      "description": "Send a message as the bot to any chat. Supports text, post, interactive, etc. This is the reliable path for @-mentions: include `<at user_id=\"ou_xxx\">Name</at>` inline in text content and Feishu resol"
+    },
+    {
+      "name": "reply_message",
+      "description": "Reply to a specific message by message_id (as bot). Only works for text messages; other types return error 230054."
+    },
+    {
+      "name": "forward_message",
+      "description": "Forward a message to another chat or user. `receive_id` may be a group chat_id (oc_xxx), an open_id (ou_xxx), a union_id, a user_id, or an email — set `receive_id_type` to match (default: chat_id)."
+    },
+    {
+      "name": "delete_message",
+      "description": "Recall/delete a message (bot can only delete its own messages)."
+    },
+    {
+      "name": "update_message",
+      "description": "Edit a sent message (bot can only edit its own messages). Feishu supports edit only for `text` and `interactive` (card) messages — other types (post, image, file, etc.) are rejected by the API."
+    },
+    {
+      "name": "pin_message",
+      "description": "Pin or unpin a message in a chat."
+    },
+    {
+      "name": "add_reaction",
+      "description": "Add an emoji reaction to a message."
+    },
+    {
+      "name": "delete_reaction",
+      "description": "Remove an emoji reaction from a message."
+    },
+    {
+      "name": "send_as_user",
+      "description": "Send a text message as the logged-in Feishu user. Supports reply threading and real @-mentions (triggers push notifications)."
+    },
+    {
+      "name": "send_to_user",
+      "description": "Search user by name → create P2P chat → send text message. All in one step."
+    },
+    {
+      "name": "send_to_group",
+      "description": "Search group by name → send text message. All in one step."
+    },
+    {
+      "name": "batch_send",
+      "description": "Send the same or different content to multiple targets in one call. Each target dispatches sequentially with a small delay (anti-rate-limit) and reports per-target success/error. Identity is the cooki"
+    },
+    {
+      "name": "send_image_as_user",
+      "description": "Send an image as the logged-in user. Requires image_key (upload via Official API first)."
+    },
+    {
+      "name": "send_file_as_user",
+      "description": "Send a file as the logged-in user. Requires file_key (upload via Official API first)."
+    },
+    {
+      "name": "send_post_as_user",
+      "description": "Send a rich text (POST) message with title and formatted paragraphs. Supports real @-mentions that trigger notifications."
+    },
+    {
+      "name": "send_card_as_user",
+      "description": "Send an interactive card to a chat. **As of v1.3.6, identity defaults to BOT** because user-identity card sending requires reverse-engineering the Feishu web protobuf and is deferred to v1.3.7. The to"
+    },
+    {
+      "name": "list_user_okrs",
+      "description": "List a user's OKRs. Requires the user's open_id (get yours via get_login_status or search_contacts). Filter by period_ids to narrow to a specific quarter."
+    },
+    {
+      "name": "get_okrs",
+      "description": "Batch-fetch full OKR details (objectives, key results, progress, alignments) by OKR IDs."
+    },
+    {
+      "name": "list_okr_periods",
+      "description": "List OKR periods (quarters / years) defined in the tenant. Use period_ids from this to filter list_user_okrs."
+    },
+    {
+      "name": "create_okr_progress_record",
+      "description": "Add a progress note to an OKR objective or key result. Feishu requires `source_title`, `source_url`, and a block-structured `content`; this tool exposes a simple `content_text` and auto-wraps it into "
+    },
+    {
+      "name": "list_okr_progress_records",
+      "description": "List progress records for an OKR. Feishu has no native list endpoint — this tool calls get_okrs internally and walks the objective_list / kr_list to extract progress_record IDs (with their target_id a"
+    },
+    {
+      "name": "delete_okr_progress_record",
+      "description": "Delete an OKR progress record by its progress_id (from list_okr_progress_records)."
+    },
+    {
+      "name": "list_profiles",
+      "description": "List all available identity profiles (sets of LARK_COOKIE/APP_ID/APP_SECRET/UAT). The \"default\" profile uses the top-level env vars; additional profiles come from LARK_PROFILES_JSON. Marks the current"
+    },
+    {
+      "name": "switch_profile",
+      "description": "Switch the active identity profile. Subsequent tool calls use the new profile's credentials. Cached client instances are reset so the next call rebuilds against the new creds."
+    },
+    {
+      "name": "list_tasks",
+      "description": "List the current user's tasks. Filter by completion or type."
+    },
+    {
+      "name": "get_task",
+      "description": "Get full details of a single task by GUID."
+    },
+    {
+      "name": "create_task",
+      "description": "Create a new task. summary is required; due / members / etc. are optional."
+    },
+    {
+      "name": "update_task",
+      "description": "Patch a task. **update_fields** is required by Feishu — list which fields to update (e.g. [\"summary\",\"due\",\"completed_at\"])."
+    },
+    {
+      "name": "complete_task",
+      "description": "Mark a task complete (or uncomplete it). Convenience wrapper around update_task with completed_at."
+    },
+    {
+      "name": "delete_task",
+      "description": "Permanently delete a task."
+    },
+    {
+      "name": "manage_task_members",
+      "description": "Add or remove members on a task. Members are objects {id:\"<open_id>\", role:\"assignee\"|\"follower\", type?:\"user\", name?:\"\"}."
+    },
+    {
+      "name": "upload_image",
+      "description": "Upload an image file to Feishu. Returns image_key for use with send_image_as_user."
+    },
+    {
+      "name": "upload_file",
+      "description": "Upload a file to Feishu. Returns file_key for use with send_file_as_user."
+    },
+    {
+      "name": "upload_bitable_attachment",
+      "description": "Upload a file as a Bitable attachment (drive/v1/medias/upload_all with parent_type=bitable_image or bitable_file). Returns file_token suitable for writing into a Bitable Attachment-type field via batc"
+    },
+    {
+      "name": "list_wiki_spaces",
+      "description": "List all accessible Wiki spaces."
+    },
+    {
+      "name": "search_wiki",
+      "description": "Search Wiki nodes by keyword."
+    },
+    {
+      "name": "list_wiki_nodes",
+      "description": "List nodes in a Wiki space."
+    },
+    {
+      "name": "get_wiki_node",
+      "description": "Resolve a Wiki node token to its underlying object (docx / bitable / sheet / mindnote / file). Returns obj_type + obj_token + space_id so you can read/write the real resource via the usual docx / bita"
+    },
+    {
+      "name": "create_wiki_node",
+      "description": "Create a new Wiki node inside a space. obj_type picks the underlying resource (doc/sheet/bitable/mindnote/file/docx/slides). UAT-first so the resource is owned by the user."
+    },
+    {
+      "name": "update_wiki_node",
+      "description": "Rename a Wiki node (only `title` is updatable via the wiki API; the underlying resource content is edited via docx/bitable/sheet tools)."
+    },
+    {
+      "name": "move_wiki_node",
+      "description": "Move a Wiki node to a different parent (within the same space) or to a different space. Pass at least one of target_parent_token / target_space_id."
+    },
+    {
+      "name": "copy_wiki_node",
+      "description": "Deep-copy a Wiki node into a different location (and optionally a different space). Underlying resource is duplicated."
+    },
+    {
+      "name": "delete_wiki_node",
+      "description": "Delete a Wiki node. Calls `DELETE /open-apis/wiki/v2/spaces/{space_id}/nodes/{node_token}`. The Feishu SDK does not type this endpoint, so the call goes through raw REST (UAT-first; bot fallback uses "
+    }
   ],
   "installations": {
     "claude-code": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "feishu-user-plugin"]
+      "args": [
+        "-y",
+        "feishu-user-plugin"
+      ]
     }
   },
   "environment_variables": [

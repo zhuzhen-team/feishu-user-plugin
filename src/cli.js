@@ -67,6 +67,9 @@ Setup options:
   --app-secret <s>    App Secret (non-interactive mode)
   --cookie <c>        Cookie string (optional)
   --client <target>   Config target: claude (default), codex, or both
+  --pointer-only      Write only FEISHU_PLUGIN_PROFILE=default to harness env.
+                      Real creds live in ~/.feishu-user-plugin/credentials.json
+                      (run "migrate --confirm" first if not yet migrated).
 
 Quick Start (Claude Code):
   1. npx feishu-user-plugin setup

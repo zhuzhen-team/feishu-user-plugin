@@ -26,6 +26,9 @@ jobs:
           fi
           echo "Version verified: v$PKG_VERSION"
 
+      - name: Verify CHANGELOG has section for this version
+        run: node scripts/check-changelog.js
+
       - run: npm install
       - run: npm publish
         env:

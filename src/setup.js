@@ -21,6 +21,7 @@ function parseArgs() {
     else if (argv[i] === '--app-secret' && argv[i + 1]) args.appSecret = argv[++i];
     else if (argv[i] === '--cookie' && argv[i + 1]) args.cookie = argv[++i];
     else if (argv[i] === '--client' && argv[i + 1]) args.client = argv[++i];
+    else if (argv[i] === '--pointer-only') args.pointerOnly = true;
   }
   return args;
 }
@@ -150,6 +151,19 @@ async function main() {
   }
   if (!client) client = 'claude';
 
+  // If credentials.json exists, recommend pointer-only — the env block in
+  // harness configs becomes redundant (and divergent on UAT refresh).
+  const { readCanonical } = require('./auth/credentials');
+  const hasCanonical = !!readCanonical();
+  let pointerOnly = !!cliArgs.pointerOnly;
+  if (hasCanonical && !pointerOnly && !nonInteractive) {
+    console.log('\n--- Pointer-only mode ---');
+    console.log('Detected ~/.feishu-user-plugin/credentials.json. You can write only');
+    console.log('FEISHU_PLUGIN_PROFILE=default to the harness env (recommended for clean configs).');
+    const ans = (await ask('Use pointer-only mode? (y/N): ')).trim().toLowerCase();
+    pointerOnly = (ans === 'y' || ans === 'yes');
+  }
+
   // Write config
   console.log('\n--- Writing Config ---');
 
@@ -161,9 +175,10 @@ async function main() {
     LARK_USER_REFRESH_TOKEN: hasUAT ? (existingRT || '') : '',
   };
 
-  const result = writeNewConfig(env, undefined, undefined, client);
+  const result = writeNewConfig(env, undefined, undefined, client, { pointerOnly });
   if (result.configPath) console.log(`Written to ${result.configPath} (Claude Code)`);
   if (result.codexConfigPath) console.log(`Written to ${result.codexConfigPath} (Codex)`);
+  if (pointerOnly) console.log('Mode: pointer-only (env block contains only FEISHU_PLUGIN_PROFILE)');
 
   // Summary
   console.log('\n' + '='.repeat(60));

@@ -150,17 +150,11 @@ If a feature genuinely doesn't fit any domain (e.g. WebSocket event subscription
 
 Every refactor commit must run `npm run smoke` and exit 0. If a commit intentionally adds/removes/renames tools or changes a schema, run `npm run smoke:baseline` to update `tests/baseline/*.json` in the same commit, with a clear "schema delta" subject line.
 
-## Phase B Deferrals (residual cleanup, low priority)
+## Phase B Deferrals (resolved in v1.3.8)
 
-The following extracts are still deferred — they are pure code-motion and
-don't change behaviour, so they were postponed to keep the credentials
-migration PR small:
+The Phase B deferrals (UAT + cookie helper extracts) shipped in v1.3.8:
 
-- `src/auth/uat.js` — extracting UAT refresh + cross-process file lock from
-  `clients/official/base.js`. The methods already write through
-  `auth/credentials.js`, so the extract is just file motion.
-- `src/auth/cookie.js` — extracting the heartbeat scheduler from
-  `clients/user.js`. Same status — delegating call already in place.
-- `src/config/{discovery,persistence,setup}.js` — splitting `config.js`
-  by responsibility. Lower priority since `config.js` is now mostly a
-  legacy fallback target rather than a primary surface.
+- `src/auth/uat.js` — UAT lifecycle (refresh, lock, persist) extracted from `clients/official/base.js`. Methods on the client are now 1-line delegates.
+- `src/auth/cookie.js` — heartbeat scheduler extracted from `clients/user.js`. Same delegation pattern.
+
+The optional `src/config/{discovery,persistence,setup}.js` split was not done because `config.js` is now mostly a legacy fallback target — splitting low-traffic legacy code adds churn without payoff. Revisit if config.js grows.
