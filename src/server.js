@@ -68,7 +68,13 @@ let officialClient = null;
 // The "current" profile this in-memory MCP server is pinned to. Initialised
 // from the persisted active profile (credentials.json) at boot, but in-process
 // switches may diverge from the persisted active until the next server restart.
-let currentProfile = credentials.getActiveProfileName();
+//
+// Profile selection precedence (v1.3.8 E.1):
+//   1. process.env.FEISHU_PLUGIN_PROFILE — harness pointer
+//   2. credentials.json::active — single-file persisted active
+//   3. 'default' — legacy zero-config path
+let currentProfile = process.env.FEISHU_PLUGIN_PROFILE
+  || credentials.getActiveProfileName();
 
 function profileEnv(name) {
   return credentials.getActiveProfileEnv(name);
@@ -200,6 +206,16 @@ async function main() {
 
   // Startup diagnostics — use the resolved active-profile env so users on
   // credentials.json (where process.env may not have LARK_*) get accurate flags.
+  // If FEISHU_PLUGIN_PROFILE was set, validate the name exists. If not, fail
+  // loud — silently falling back to "default" would mask a typo'd harness env.
+  if (process.env.FEISHU_PLUGIN_PROFILE) {
+    const known = credentials.listProfileNames();
+    if (!known.includes(currentProfile)) {
+      console.error(`[feishu-user-plugin] FATAL: FEISHU_PLUGIN_PROFILE="${currentProfile}" not found. Known: ${known.join(', ')}.`);
+      console.error('[feishu-user-plugin] Fix: edit harness env block, or add the profile to ~/.feishu-user-plugin/credentials.json.');
+      process.exit(2);
+    }
+  }
   let activeEnv = {};
   try { activeEnv = profileEnv(currentProfile); } catch (_) { /* unknown profile is reported below */ }
   const hasCanonical = !!credentials.readCanonical();
@@ -212,6 +228,11 @@ async function main() {
   if (!hasCookie) console.error('[feishu-user-plugin] WARNING: LARK_COOKIE not set — user identity tools (send_to_user, etc.) will fail');
   if (!hasApp) console.error('[feishu-user-plugin] WARNING: LARK_APP_ID/SECRET not set — official API tools (read_messages, docs, etc.) will fail');
   if (!hasUAT) console.error('[feishu-user-plugin] WARNING: LARK_USER_ACCESS_TOKEN not set — P2P chat reading (read_p2p_messages) will fail');
+  // Warn when both credentials.json AND legacy env vars exist — they may
+  // diverge silently after a UAT refresh (we always write credentials.json).
+  if (hasCanonical && (process.env.LARK_COOKIE || process.env.LARK_APP_ID || process.env.LARK_USER_ACCESS_TOKEN)) {
+    console.error('[feishu-user-plugin] NOTE: credentials.json AND legacy LARK_* env vars are both set. Plugin reads credentials.json; the env vars are ignored. To clean up: remove the LARK_* keys from your harness config, leaving FEISHU_PLUGIN_PROFILE only.');
+  }
 
   // Validate APP_ID/SECRET against Feishu before serving any tool calls.
   // Catches the "Claude filled in a wrong/stale APP_ID during install" failure
