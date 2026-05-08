@@ -10,9 +10,12 @@
  */
 
 const readline = require('readline');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { findMcpConfig, writeNewConfig } = require('./config');
 
-// Parse CLI args: --app-id, --app-secret, --cookie, --client
+// Parse CLI args: --app-id, --app-secret, --cookie, --client, --force, --profile
 function parseArgs() {
   const args = {};
   const argv = process.argv.slice(2);
@@ -21,7 +24,9 @@ function parseArgs() {
     else if (argv[i] === '--app-secret' && argv[i + 1]) args.appSecret = argv[++i];
     else if (argv[i] === '--cookie' && argv[i + 1]) args.cookie = argv[++i];
     else if (argv[i] === '--client' && argv[i + 1]) args.client = argv[++i];
-    else if (argv[i] === '--pointer-only') args.pointerOnly = true;
+    else if (argv[i] === '--pointer-only') args.pointerOnly = true; // kept for backward compat; now implicit default
+    else if (argv[i] === '--force') args.force = true;
+    else if (argv[i] === '--profile' && argv[i + 1]) args.profile = argv[++i];
   }
   return args;
 }
@@ -151,34 +156,86 @@ async function main() {
   }
   if (!client) client = 'claude';
 
-  // If credentials.json exists, recommend pointer-only — the env block in
-  // harness configs becomes redundant (and divergent on UAT refresh).
-  const { readCanonical } = require('./auth/credentials');
-  const hasCanonical = !!readCanonical();
-  let pointerOnly = !!cliArgs.pointerOnly;
-  if (hasCanonical && !pointerOnly && !nonInteractive) {
-    console.log('\n--- Pointer-only mode ---');
-    console.log('Detected ~/.feishu-user-plugin/credentials.json. You can write only');
-    console.log('FEISHU_PLUGIN_PROFILE=default to the harness env (recommended for clean configs).');
-    const ans = (await ask('Use pointer-only mode? (y/N): ')).trim().toLowerCase();
-    pointerOnly = (ans === 'y' || ans === 'yes');
+  // --- 4-state SSOT matrix (v1.3.9 A.3) ---
+  // Determines how credentials.json is created/updated based on current state.
+  //
+  //   State 1 (fresh):        credentials.json absent, no harness LARK_* env → create fresh
+  //   State 2 (auto-migrate): credentials.json absent, harness LARK_* env exists → migrate
+  //   State 3 (preserve):     credentials.json present, no --app-id → touch nothing in file
+  //   State 4 (update):       credentials.json present, --app-id given → update/add profile
+  const credentials = require('./auth/credentials');
+  const credsPath = path.join(os.homedir(), '.feishu-user-plugin', 'credentials.json');
+  const credsExist = !!credentials.readCanonical();
+  const targetProfile = cliArgs.profile || 'default';
+  const harnessHasLark = !!(existingEnv.LARK_APP_ID || existingEnv.LARK_COOKIE || existingEnv.LARK_USER_ACCESS_TOKEN);
+
+  let mode;
+  if (!credsExist && !harnessHasLark) mode = 'fresh';
+  else if (!credsExist && harnessHasLark) mode = 'auto-migrate';
+  else if (credsExist && !cliArgs.appId) mode = 'preserve';
+  else mode = 'update';
+  console.log(`\nSetup mode: ${mode}`);
+
+  if (mode === 'fresh' || mode === 'update') {
+    // Gather profile values — only include keys that have real values.
+    const profileValues = {};
+    if (appId) profileValues.LARK_APP_ID = appId;
+    if (appSecret) profileValues.LARK_APP_SECRET = appSecret;
+    if (cookie && cookie !== 'SETUP_NEEDED') profileValues.LARK_COOKIE = cookie;
+    else if (existingEnv.LARK_COOKIE && existingEnv.LARK_COOKIE !== 'SETUP_NEEDED') profileValues.LARK_COOKIE = existingEnv.LARK_COOKIE;
+    if (existingEnv.LARK_USER_ACCESS_TOKEN && existingEnv.LARK_USER_ACCESS_TOKEN !== 'SETUP_NEEDED') profileValues.LARK_USER_ACCESS_TOKEN = existingEnv.LARK_USER_ACCESS_TOKEN;
+    if (existingEnv.LARK_USER_REFRESH_TOKEN) profileValues.LARK_USER_REFRESH_TOKEN = existingEnv.LARK_USER_REFRESH_TOKEN;
+
+    if (mode === 'fresh') {
+      fs.mkdirSync(path.dirname(credsPath), { recursive: true, mode: 0o700 });
+      const data = { version: 1, active: targetProfile, profiles: { [targetProfile]: profileValues }, profileHints: {} };
+      fs.writeFileSync(credsPath, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
+      console.log(`Created ${credsPath} with profile "${targetProfile}"`);
+    } else {
+      // mode === 'update'
+      const canonical = credentials.readCanonical();
+      const profileExists = !!(canonical && canonical.profiles[targetProfile]);
+      if (profileExists && targetProfile === 'default' && !cliArgs.force && !cliArgs.profile) {
+        console.error(`Profile "default" already exists. Pass --force to overwrite, or --profile <name> to create a new profile.`);
+        rl.close();
+        process.exit(1);
+      }
+      if (profileExists && cliArgs.profile && !cliArgs.force) {
+        console.error(`Profile "${targetProfile}" already exists. Pass --force to overwrite, or pick a different --profile name.`);
+        rl.close();
+        process.exit(1);
+      }
+      canonical.profiles[targetProfile] = { ...(canonical.profiles[targetProfile] || {}), ...profileValues };
+      fs.writeFileSync(credsPath, JSON.stringify(canonical, null, 2) + '\n', { mode: 0o600 });
+      console.log(`Updated profile "${targetProfile}" in ${credsPath}`);
+      if (cliArgs.force) console.warn(`  warning: overwrote existing profile credentials with --force`);
+    }
+  } else if (mode === 'auto-migrate') {
+    // Run migrate to consolidate harness env → credentials.json, then optionally
+    // override the default profile with any explicitly provided --app-id.
+    const result = credentials.migrate({ dryRun: false });
+    if (!result.ok) {
+      console.error('Auto-migrate failed; aborting setup.');
+      rl.close();
+      process.exit(1);
+    }
+    if (cliArgs.appId) {
+      credentials.persistProfileUpdate('default', { LARK_APP_ID: appId, LARK_APP_SECRET: appSecret });
+      console.log('Updated default profile with new app credentials.');
+    }
   }
+  // mode === 'preserve': credentials.json is unchanged; we only update the harness pointer.
 
-  // Write config
+  // --- Write harness config ---
+  // Always write pointer-only env to harness configs (v1.3.9 SSOT).
+  // The harness env block only needs FEISHU_PLUGIN_PROFILE; all real creds
+  // live in credentials.json.
   console.log('\n--- Writing Config ---');
-
-  const env = {
-    LARK_COOKIE: cookie,
-    LARK_APP_ID: appId,
-    LARK_APP_SECRET: appSecret,
-    LARK_USER_ACCESS_TOKEN: hasUAT ? existingUAT : 'SETUP_NEEDED',
-    LARK_USER_REFRESH_TOKEN: hasUAT ? (existingRT || '') : '',
-  };
-
-  const result = writeNewConfig(env, undefined, undefined, client, { pointerOnly });
+  const pointerEnv = { FEISHU_PLUGIN_PROFILE: targetProfile };
+  const result = writeNewConfig(pointerEnv, undefined, undefined, client, { pointerOnly: true });
   if (result.configPath) console.log(`Written to ${result.configPath} (Claude Code)`);
   if (result.codexConfigPath) console.log(`Written to ${result.codexConfigPath} (Codex)`);
-  if (pointerOnly) console.log('Mode: pointer-only (env block contains only FEISHU_PLUGIN_PROFILE)');
+  console.log(`Mode: pointer-only (env block contains only FEISHU_PLUGIN_PROFILE=${targetProfile})`);
 
   // Summary
   console.log('\n' + '='.repeat(60));
