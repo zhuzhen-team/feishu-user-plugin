@@ -1,0 +1,21 @@
+title: feishu-user-plugin
+description: 让 Claude Code / Codex 接管你的飞书工作流 — 84 工具 · 3 层鉴权 · 以你本人身份发消息
+theme: jekyll-theme-cayman
+lang: zh-CN
+plugins:
+  - jekyll-seo-tag
+# Internal dev docs in this directory are already public on GitHub but should
+# not show up as standalone Pages — they dilute the SEO signal and confuse
+# first-time visitors who land on /docs/. Only the Chinese + English landing
+# pages should render.
+exclude:
+  - COOKIE-PROTOBUF-CAPTURES.md
+  - CREDENTIALS-FORMAT.md
+  - REFACTOR-NOTES.md
+  - TESTING-METHODOLOGY.md
+  - superpowers/
+defaults:
+  - scope:
+      path: ""
+    values:
+      lang: zh-CN
