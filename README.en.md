@@ -1,0 +1,608 @@
+# feishu-user-plugin
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-green.svg)](https://nodejs.org)
+[![MCP](https://img.shields.io/badge/MCP-Compatible-purple.svg)](https://modelcontextprotocol.io)
+[![Tools](https://img.shields.io/badge/Tools-84-orange.svg)](#tools)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+**All-in-one Feishu/Lark MCP Server -- 84 tools, 9 skills, 3 auth layers for messaging, docs, bitable, calendar, tasks, drive, OKR, and more.**
+
+The only MCP server that lets you send messages as your **personal identity** (not a bot), while also integrating the full official Feishu API. Works with Claude Code, Cursor, Windsurf, OpenClaw, and any MCP-compatible client.
+
+## Highlights
+
+- **Send as yourself** -- Messages show your real name, not a bot. Supports text, rich text, images, files, stickers, and audio.
+- **Read everything** -- Group chats via bot API, P2P (direct messages) via OAuth UAT.
+- **Full Feishu suite** -- Docs, Bitable, Wiki, Drive, Calendar, Tasks, Contacts -- all in one plugin.
+- **3 auth layers** -- Cookie-based user identity, app credentials (Official API), and OAuth UAT (P2P reading).
+- **Group management** -- Create groups, add/remove members, pin messages, emoji reactions.
+- **Document editing** -- Not just read/create, but insert/update/delete content blocks.
+- **Calendar & Tasks** -- Create events, check free/busy, manage tasks.
+- **9 slash commands** for Claude Code -- `/send`, `/reply`, `/search`, `/digest`, `/doc`, `/table`, `/wiki`, `/drive`, `/status`
+- **Auto session management** -- Cookie heartbeat every 4h, UAT auto-refresh with token rotation.
+- **Real-time events** (v1.3.9) -- Machine-level WS: one owner process writes to `~/.feishu-user-plugin/events.jsonl`, all harnesses drain from a shared cursor — every event delivered exactly once across all MCP processes. `manage_ws_status` to diagnose/control. WS auto-starts on boot.
+- **Multi-platform** -- Claude Code, Cursor, Windsurf, VS Code, OpenClaw.
+
+## Why This Exists
+
+Feishu's official API has a hard limitation: **there is no `send_as_user` scope**. Even with `user_access_token` (OAuth), messages still show `sender_type: "app"`.
+
+This project combines three auth layers into one plugin:
+
+```
+User Identity (cookie):     You -> Protobuf -> Feishu (messages appear as YOU)
+Official API  (app token):  You -> REST API -> Feishu (docs, tables, wiki, drive)
+User OAuth    (UAT):        You -> REST API -> Feishu (read P2P chats, list all chats)
+```
+
+**One plugin. Everything Feishu. No other MCP needed.**
+
+## Quick Start
+
+### Option 1: npx (recommended)
+
+```bash
+npx feishu-user-plugin
+```
+
+No installation needed. The package runs directly via npx.
+
+### Option 2: Clone and run locally
+
+```bash
+git clone https://github.com/EthanQC/feishu-user-plugin.git
+cd feishu-user-plugin
+npm install
+npm start
+```
+
+## Create Your Feishu App
+
+To use the Official API tools (docs, tables, wiki, drive, bot messaging), you need to create a Feishu app:
+
+### Step 1: Create the App
+
+1. Go to [Feishu Open Platform](https://open.feishu.cn/app) and log in
+2. Click **Create Custom App** (创建自建应用) -- you must choose **Custom App** (自建应用), NOT marketplace/third-party types
+3. Fill in the app name and description, then create it
+
+### Step 2: Enable Bot Capability
+
+1. In your app settings, go to **Add Capabilities** (添加应用能力)
+2. Enable **Bot** (机器人)
+
+### Step 3: Add Permissions (Scopes)
+
+Go to **Permissions & Scopes** (权限管理) and add the following scopes:
+
+| Scope | Purpose |
+|-------|---------|
+| `im:message` | Send messages as bot |
+| `im:message:readonly` | Read message history |
+| `im:chat:readonly` | List and read chats |
+| `docx:document` | Read and create documents |
+| `docx:document:readonly` | Read documents |
+| `bitable:record` | Read and write Bitable records |
+| `wiki:wiki:readonly` | Read wiki spaces and nodes |
+| `drive:drive:readonly` | List Drive files and folders |
+| `contact:user.base:readonly` | Look up users by email/mobile |
+
+> Add more scopes as needed depending on which tools you use.
+
+### Step 4: Get App Credentials
+
+1. Go to **Credentials & Basic Info** (凭证与基础信息)
+2. Copy the **App ID** (`cli_xxxxxxxxxxxx`) and **App Secret**
+3. Set them as `LARK_APP_ID` and `LARK_APP_SECRET` in your environment
+
+### Step 5: Publish and Approve
+
+1. **Create a version** and submit it for review (创建版本)
+2. Have your organization admin approve the app (管理员审核)
+3. After approval, the app is live
+
+### Step 6: Add Bot to Group Chats
+
+Add your bot to the group chats where you want it to read messages. The bot can only access chats it has been added to.
+
+## Environment Variables
+
+| Variable | Required For | Description |
+|----------|-------------|-------------|
+| `LARK_COOKIE` | User identity tools | Feishu web session cookie string. Needed for `send_to_user`, `send_to_group`, `search_contacts`, etc. |
+| `LARK_APP_ID` | Official API tools | App ID from Feishu Open Platform. Needed for `read_messages`, docs, tables, wiki, drive. |
+| `LARK_APP_SECRET` | Official API tools | App Secret from Feishu Open Platform. Used together with `LARK_APP_ID`. |
+| `LARK_USER_ACCESS_TOKEN` | P2P chat reading | OAuth user token. Needed for `read_p2p_messages` and `list_user_chats`. Obtained via `node src/oauth.js`. |
+| `LARK_USER_REFRESH_TOKEN` | UAT auto-refresh | Refresh token for automatic UAT renewal. Obtained together with UAT via OAuth flow. |
+
+All five variables are required for full functionality. Configure all of them during setup.
+
+## How to Get Your Cookie
+
+**Option A: Automated via Playwright MCP (recommended, zero manual copying)**
+
+First, install Playwright MCP if you don't have it:
+```bash
+npx @anthropic-ai/claude-code mcp add playwright -- npx @anthropic-ai/mcp-server-playwright
+```
+
+Then just tell Claude Code: **"Help me set up my Feishu cookie"**
+
+Claude Code will automatically:
+1. Open feishu.cn in a browser via Playwright
+2. Show you the QR code — scan it with Feishu mobile app
+3. Extract the full cookie (including HttpOnly) via `context.cookies()`
+4. Write it to your `.mcp.json` LARK_COOKIE field
+5. Prompt you to restart Claude Code
+
+**Option B: Manual (via Network tab)**
+
+1. Open [feishu.cn/messenger](https://www.feishu.cn/messenger/) in your browser and log in
+2. Open DevTools (`F12` or `Cmd+Option+I`)
+3. Go to the **Network** tab → check **Disable cache** → press `Cmd+R` to reload
+4. Click the first request in the list (usually the page itself)
+5. In the right panel, find **Request Headers** → **Cookie:** → right-click → **Copy value**
+6. Set it as `LARK_COOKIE` in your environment
+
+> Do NOT use `document.cookie` in the Console or copy from Application → Cookies tab — they miss HttpOnly cookies (`session`, `sl_session`) required for auth.
+
+> The server automatically refreshes the session via heartbeat every 4 hours. The `sl_session` cookie has a 12-hour max-age.
+
+## Set Up OAuth (Required for P2P Chat Reading)
+
+To enable `read_p2p_messages` and `list_user_chats`:
+
+1. Your Feishu app must be a **Custom App** (自建应用), NOT marketplace/third-party
+2. Add scopes: `im:message`, `im:message:readonly`, `im:chat:readonly`
+3. In your app's **Security Settings** (安全设置), add the OAuth redirect URI: `http://127.0.0.1:9997/callback`
+4. **Important**: Make sure "对外共享" (external sharing) is **disabled** in your app version settings — enabling it marks the app as b2c/b2b type, which blocks P2P chat access
+5. Run the authorization flow:
+
+```bash
+# If you cloned the repo:
+node src/oauth.js
+
+# If you installed via npx:
+cd $(npm root -g)/feishu-user-plugin && node src/oauth.js
+# Or clone the repo just for the OAuth step, then use npx for daily use
+```
+
+A browser window will open for OAuth consent. The token is saved to `.env` automatically and auto-refreshes at runtime. Add both `LARK_USER_ACCESS_TOKEN` and `LARK_USER_REFRESH_TOKEN` from `.env` to your MCP config's `env` section.
+
+## MCP Client Configuration
+
+### Claude Code
+
+Add to your project's `.mcp.json` (or `~/.claude/.mcp.json` for global):
+
+**Using npx:**
+
+```json
+{
+  "mcpServers": {
+    "feishu": {
+      "command": "npx",
+      "args": ["-y", "feishu-user-plugin"],
+      "env": {
+        "LARK_COOKIE": "your-cookie-string",
+        "LARK_APP_ID": "cli_xxxxxxxxxxxx",
+        "LARK_APP_SECRET": "your-app-secret",
+        "LARK_USER_ACCESS_TOKEN": "your-uat",
+        "LARK_USER_REFRESH_TOKEN": "your-refresh-token"
+      }
+    }
+  }
+}
+```
+
+**Using a local clone:**
+
+```json
+{
+  "mcpServers": {
+    "feishu": {
+      "command": "node",
+      "args": ["/absolute/path/to/feishu-user-plugin/src/index.js"],
+      "env": {
+        "LARK_COOKIE": "your-cookie-string",
+        "LARK_APP_ID": "cli_xxxxxxxxxxxx",
+        "LARK_APP_SECRET": "your-app-secret",
+        "LARK_USER_ACCESS_TOKEN": "your-uat",
+        "LARK_USER_REFRESH_TOKEN": "your-refresh-token"
+      }
+    }
+  }
+}
+```
+
+Then just say things like:
+- "Send a message to Alice saying the meeting is at 3pm"
+- "What did the engineering group chat about today?"
+- "Search for docs about MCP"
+
+### Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "feishu": {
+      "command": "npx",
+      "args": ["-y", "feishu-user-plugin"],
+      "env": {
+        "LARK_COOKIE": "your-cookie-string",
+        "LARK_APP_ID": "cli_xxxxxxxxxxxx",
+        "LARK_APP_SECRET": "your-app-secret",
+        "LARK_USER_ACCESS_TOKEN": "your-uat",
+        "LARK_USER_REFRESH_TOKEN": "your-refresh-token"
+      }
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to `.cursor/mcp.json` in your project:
+
+```json
+{
+  "mcpServers": {
+    "feishu": {
+      "command": "npx",
+      "args": ["-y", "feishu-user-plugin"],
+      "env": {
+        "LARK_COOKIE": "your-cookie-string",
+        "LARK_APP_ID": "cli_xxxxxxxxxxxx",
+        "LARK_APP_SECRET": "your-app-secret",
+        "LARK_USER_ACCESS_TOKEN": "your-uat",
+        "LARK_USER_REFRESH_TOKEN": "your-refresh-token"
+      }
+    }
+  }
+}
+```
+
+### VS Code (Copilot)
+
+Add to `.vscode/mcp.json` in your project:
+
+```json
+{
+  "servers": {
+    "feishu": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "feishu-user-plugin"],
+      "env": {
+        "LARK_COOKIE": "your-cookie-string",
+        "LARK_APP_ID": "cli_xxxxxxxxxxxx",
+        "LARK_APP_SECRET": "your-app-secret",
+        "LARK_USER_ACCESS_TOKEN": "your-uat",
+        "LARK_USER_REFRESH_TOKEN": "your-refresh-token"
+      }
+    }
+  }
+}
+```
+
+### OpenClaw
+
+Add to `~/.openclaw/openclaw.json` (note: key path is `mcp.servers`, not `mcpServers`):
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "feishu-user-plugin": {
+        "command": "npx",
+        "args": ["-y", "feishu-user-plugin"],
+        "env": {
+          "LARK_COOKIE": "your-cookie-string",
+          "LARK_APP_ID": "cli_xxxxxxxxxxxx",
+          "LARK_APP_SECRET": "your-app-secret",
+          "LARK_USER_ACCESS_TOKEN": "your-uat",
+          "LARK_USER_REFRESH_TOKEN": "your-refresh-token"
+        }
+      }
+    }
+  }
+}
+```
+
+Or via CLI: `openclaw mcp set feishu-user-plugin '{"command":"npx","args":["-y","feishu-user-plugin"],"env":{...}}'`
+
+> OpenClaw's built-in Feishu channel handles receiving messages (bot identity). This plugin adds user identity messaging + docs/bitable/calendar/tasks.
+
+### Windsurf
+
+Add to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "feishu": {
+      "command": "npx",
+      "args": ["-y", "feishu-user-plugin"],
+      "env": {
+        "LARK_COOKIE": "your-cookie-string",
+        "LARK_APP_ID": "cli_xxxxxxxxxxxx",
+        "LARK_APP_SECRET": "your-app-secret",
+        "LARK_USER_ACCESS_TOKEN": "your-uat",
+        "LARK_USER_REFRESH_TOKEN": "your-refresh-token"
+      }
+    }
+  }
+}
+```
+
+## Tools (80 total)
+
+### User Identity -- Messaging (10 tools, cookie auth)
+
+| Tool | Description |
+|------|-------------|
+| `send_to_user` | Search user by name + send text -- one step |
+| `send_to_group` | Search group by name + send text -- one step |
+| `send_as_user` | Send text to any chat by ID, supports reply threading |
+| `send_image_as_user` | Send image (requires `image_key` from `upload_image`) |
+| `send_file_as_user` | Send file (requires `file_key` from `upload_file`) |
+| `send_post_as_user` | Send rich text with title + formatted paragraphs |
+| `batch_send` | Fan-out send to multiple targets in one call (text / image / file / post). v1.3.6 |
+| `send_card_as_user` | Send a Feishu interactive card via bot identity (Official API). User-identity card sending is server-side disabled at the Feishu cookie auth tier — confirmed in v1.3.9. |
+
+### User Identity -- Contacts & Info (5 tools, cookie auth)
+
+| Tool | Description |
+|------|-------------|
+| `search_contacts` | Search users, bots, or group chats by name |
+| `create_p2p_chat` | Create/get P2P (direct message) chat |
+| `get_chat_info` | Group details (supports both oc_xxx and numeric ID) |
+| `get_user_info` | User display name lookup by user ID |
+| `get_login_status` | Check cookie, app credentials, and UAT status |
+
+### User OAuth UAT -- P2P Chat Reading (2 tools)
+
+| Tool | Description |
+|------|-------------|
+| `read_p2p_messages` | Read P2P (direct message) history |
+| `list_user_chats` | List group chats the user is in |
+
+### Official API -- IM (17 tools)
+
+| Tool | Description |
+|------|-------------|
+| `list_chats` | List all chats the bot has joined |
+| `read_messages` | Read message history (accepts chat name, oc_xxx, or numeric ID) |
+| `send_message_as_bot` | Send message as bot to any chat |
+| `reply_message` | Reply to a specific message (as bot) |
+| `forward_message` | Forward a message to another chat |
+| `delete_message` | Recall/delete a bot message |
+| `update_message` | Edit a sent bot message |
+| `add_reaction` | Add emoji reaction to a message |
+| `delete_reaction` | Remove emoji reaction |
+| `pin_message` | Pin a message in chat |
+| `unpin_message` | Unpin a message |
+| `create_group` | Create a new group chat |
+| `update_group` | Update group name/description |
+| `list_members` | List group members |
+| `add_members` | Add users to a group |
+| `remove_members` | Remove users from a group |
+| `upload_image` / `upload_file` | Upload image/file, returns key for sending |
+| `download_message_resource` | v1.3.7 (C2.4): download a message-attached image or file. Args: `message_id`, `key`, `kind=image|file`, `save_path?`. **Required save_path when bytes > 2 MiB** (Anthropic 5 MB inline cap). Replaces v1.3.6 download_image (message mode) + download_file. |
+| `download_doc_image` | v1.3.7 (C2.4): download an image embedded in a docx (image_token + optional doc_token). Same 2 MiB cap. Replaces v1.3.6 download_image (docx mode). |
+
+### Wiki, OKR, and Calendar (v1.3.4)
+
+| Tool | Description |
+|------|-------------|
+| `get_wiki_node` | Resolve a Wiki node token to its underlying obj_type + obj_token + space_id |
+| `list_user_okrs` | List a user's OKRs (requires open_id; filter by period_ids) |
+| `get_okrs` | Batch-fetch full OKR details (objectives, key results, progress, alignments) |
+| `list_okr_periods` | List OKR periods (quarters / years) |
+| `list_calendars` | List the current user's calendars (primary + shared + subscribed) |
+| `list_calendar_events` | List events in a calendar within a time range |
+| `get_calendar_event` | Full event details (attendees, location, meeting link, attachments) |
+
+All docx / bitable tools' `document_id` / `app_token` parameter also accepts a Wiki node token or a full Feishu URL — the plugin resolves it transparently.
+
+### Official API -- Documents (5 tools)
+
+| Tool | Description |
+|------|-------------|
+| `search_docs` | Search documents by keyword |
+| `read_doc` | Read raw text content |
+| `get_doc_blocks` | Get structured block tree |
+| `create_doc` | Create a new document |
+| `manage_doc_block` | Insert / update / delete blocks (`action=create|update|delete`). Supports generic `children`, image (`image_path`/`image_token`), and file (`file_path`/`file_token`) shortcuts. v1.3.7 consolidates the v1.3.6 trio create_doc_block / update_doc_block / delete_doc_blocks. |
+
+### Official API -- Bitable (6 tools, v1.3.7 consolidation)
+
+| Tool | Actions | Description |
+|------|---------|-------------|
+| `manage_bitable_app` | create / copy / get_meta | App-level operations (v1.3.7 consolidates create_bitable / copy_bitable / get_bitable_meta) |
+| `manage_bitable_table` | list / create / update / delete | Table CRUD (rename via update) |
+| `manage_bitable_field` | list / create / update / delete | Field (column) management. `type` required for both create AND update. |
+| `manage_bitable_view` | list / create / delete | Views (grid, kanban, gallery, form, gantt, calendar) |
+| `manage_bitable_record` | search / get / create / update / delete | Record CRUD. create/update/delete accept arrays — single record or up to 500/call. |
+| `upload_bitable_attachment` | — | Upload a file into a Bitable Attachment-type field. Returns `file_token` to write into the field as `[{file_token}]`. v1.3.6 |
+
+### Official API -- Calendar (8 tools, write tools v1.3.7)
+
+| Tool | Description |
+|------|-------------|
+| `list_calendars` | List accessible calendars |
+| `list_calendar_events` | List events in a calendar |
+| `get_calendar_event` | Full event details |
+| `create_calendar_event` | Create an event (v1.3.7). Requires `calendar:calendar.event:write`. |
+| `update_calendar_event` | Patch event fields (v1.3.7) |
+| `delete_calendar_event` | Delete an event, optionally dissolve its meeting chat (v1.3.7) |
+| `respond_calendar_event` | RSVP as accept / decline / tentative (v1.3.7) |
+| `get_freebusy` | Freebusy lookup for `user_ids` in a time range (v1.3.7) |
+
+### Official API -- Tasks v2 (7 tools, v1.3.7 new domain)
+
+Identifier is `task_guid` (not v1's numeric `task_id`). Requires `task:task` scope.
+
+| Tool | Description |
+|------|-------------|
+| `list_tasks` | List the current user's tasks (filter by completed / type) |
+| `get_task` | Full task detail |
+| `create_task` | Create a task (summary required; due/members optional) |
+| `update_task` | Patch fields. **`update_fields` is required** — Feishu only updates the listed keys. |
+| `complete_task` | Mark complete (or uncomplete with `completed=false`) |
+| `delete_task` | Permanent delete |
+| `manage_task_members` | `action=add|remove`, members `[{id, role:"assignee"|"follower"}]` |
+
+### Official API -- Drive (4 tools)
+
+| Tool | Description |
+|------|-------------|
+| `list_files` | List files in a folder |
+| `create_folder` | Create a new folder |
+| `manage_drive_file` | Copy / move / delete a Drive file (`action=copy|move|delete`, `type` required). v1.3.7 consolidates v1.3.6 copy_file / move_file / delete_file. |
+| `upload_drive_file` | Upload a local file into a Drive folder (`drive/v1/files/upload_all`). Optional `wiki_space_id` attaches the upload as a Wiki node atomically. v1.3.6 |
+
+### Official API -- Wiki (8 tools)
+
+| Tool | Description |
+|------|-------------|
+| `list_wiki_spaces` / `search_wiki` / `list_wiki_nodes` / `get_wiki_node` | Wiki spaces, search, browse + resolve a wiki node to underlying obj_token |
+| `create_wiki_node` | Create a new wiki node (doc/sheet/bitable/mindnote/file/docx/slides) inside a space |
+| `update_wiki_node` | Rename a wiki node (title only — content edits via docx/bitable tools) |
+| `move_wiki_node` | Move a wiki node to a different parent or different space |
+| `copy_wiki_node` | Deep-copy a wiki node to a different location (optionally to a different space) |
+
+### Plugin -- Profiles (3 tools, v1.3.6 + v1.3.8)
+
+| Tool | Description |
+|------|-------------|
+| `list_profiles` | List available identity profiles (default + extras from `LARK_PROFILES_JSON`) and the active one |
+| `switch_profile` | Hot-swap active profile; cached client instances rebuild against new credentials |
+| `manage_profile_hints` | Inspect/set/clear the resourceKey → profile cache used by the v1.3.8 auto-switch middleware |
+
+### Multi-profile auto-switch (v1.3.8)
+
+When `~/.feishu-user-plugin/credentials.json` has more than one profile, the plugin auto-switches between them on **read** paths when the active profile gets a permission-denied error. The winning profile is cached per resource so subsequent calls go straight to the right account.
+
+**Whitelist** -- only `read_*`, `list_*`, `get_*`, `search_*`, `download_*` (and the read-action variants of `manage_bitable_*`) get auto-retry. Writes never auto-switch -- they fail loud so you don't accidentally create resources under the wrong account.
+
+**Triggers** -- error codes 91403, 1254301, 1254000, 99991672, HTTP 403, plus message patterns `access_denied / permission_denied / docx_no_permission / no permission / forbidden`.
+
+**Per-call override** -- pass `via_profile: "<name>"` in any tool call to pin to that profile (no auto-switch). Pass `via_profile: "auto"` to opt **into** auto-switch on a write call (escape hatch -- be careful).
+
+**Cache management** -- `manage_profile_hints(action="list" | "set" | "clear", resource_key?, profile?)` lets you inspect or edit the cache.
+
+Single-profile users (the vast majority): zero behaviour change -- the router short-circuits and `manage_profile_hints` is a no-op.
+
+## Claude Code Slash Commands (9 skills)
+
+This plugin includes 9 built-in skills in `skills/feishu-user-plugin/`:
+
+| Skill | Usage | Description |
+|-------|-------|-------------|
+| `/send` | `/send Alice: meeting at 3pm` | Send message as yourself |
+| `/reply` | `/reply engineering-chat` | Read recent messages and reply |
+| `/digest` | `/digest engineering-chat 7` | Summarize recent chat messages |
+| `/search` | `/search engineering` | Search contacts and groups |
+| `/doc` | `/doc search MCP` | Search, read, or create documents |
+| `/table` | `/table query appXxx` | Query or create Bitable records |
+| `/wiki` | `/wiki search protocol` | Search and browse wiki |
+| `/drive` | `/drive list folderToken` | List files or create folders in Drive |
+| `/status` | `/status` | Check login and auth status |
+
+Skills are automatically available when the plugin is installed.
+
+## Architecture
+
+```
+                               Cookie + Proto   ┌──────────────────────────────────────┐
+                             ────────────────── >│  internal-api-lark-api.feishu.cn     │
+┌──────────────┐                                 │  /im/gateway/ (Protobuf over HTTP)   │
+│  MCP Client  │                                 └──────────────────────────────────────┘
+│  (Claude,    │  App Token (REST) ┌──────────────────────────────────────┐
+│   Cursor,    │ ────────────────->│  open.feishu.cn/open-apis/           │
+│   VS Code)   │                   │  (Official REST API)                 │
+│              │                   └──────────────────────────────────────┘
+│              │  User OAuth (REST)┌──────────────────────────────────────┐
+│              │ ────────────────->│  open.feishu.cn/open-apis/           │
+└──────────────┘                   │  (UAT -- P2P chat reading)           │
+                                   └──────────────────────────────────────┘
+```
+
+## Session & Token Lifecycle
+
+| Auth Layer | Token | Lifetime | Refresh |
+|------------|-------|----------|---------|
+| Cookie | `sl_session` | 12h max-age | Auto-refreshed every 4h via heartbeat |
+| App Token | `tenant_access_token` | 2h | Auto-managed by SDK |
+| User OAuth | `user_access_token` | ~2h | Auto-refreshed via `refresh_token`, saved to MCP config |
+
+When the cookie expires (after ~12-24h without heartbeat), re-login at feishu.cn and update `LARK_COOKIE`. Use `get_login_status` to check health proactively.
+
+If UAT refresh fails with `invalid_grant`, re-run `npx feishu-user-plugin oauth` and restart Claude Code / Codex. v1.3.5+ also re-reads the persisted MCP config before refreshing, so duplicate MCP processes can adopt a token already rotated by another process instead of retrying a stale refresh token.
+
+## Project Structure
+
+```
+feishu-user-plugin/
+├── .claude-plugin/
+│   └── plugin.json          # Plugin metadata
+├── skills/
+│   └── feishu-user-plugin/
+│       ├── SKILL.md         # Main skill definition (trigger, tools, auth)
+│       └── references/      # 8 skill reference docs + CLAUDE.md
+├── src/
+│   ├── index.js             # MCP server entry point (78 tools)
+│   ├── client.js            # User identity client (Protobuf gateway)
+│   ├── official.js          # Official API client (REST, UAT)
+│   ├── utils.js             # ID generators, cookie parser
+│   ├── oauth.js             # OAuth flow for user_access_token
+│   ├── test-send.js         # Quick CLI test
+│   └── test-all.js          # Full test suite
+├── proto/
+│   └── lark.proto           # Protobuf message definitions
+├── .mcp.json.example        # MCP server config template
+├── server.json              # MCP Registry manifest
+├── .env.example             # Configuration template
+└── package.json
+```
+
+## Limitations
+
+- Cookie-based auth requires periodic refresh (auto-heartbeat extends to ~12h; manual re-login needed after that)
+- Depends on Feishu's internal Protobuf protocol -- may break if Feishu updates their web client
+- Image/file/audio sending requires pre-uploaded keys (upload via Official API or external bridge)
+- No real-time message receiving (WebSocket push not yet implemented)
+- May violate Feishu's Terms of Service -- use at your own risk
+
+## Contributing
+
+Issues and PRs welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and submission guidelines.
+
+If Feishu updates their protocol and something breaks, please [open an issue](https://github.com/EthanQC/feishu-user-plugin/issues/new?template=bug_report.md) with the error details.
+
+### Automated sync hooks
+
+This repo uses husky to enforce several invariants on every commit:
+
+- **CLAUDE.md sync** — staging `CLAUDE.md` automatically regenerates `AGENTS.md` (identical body, different first line) and `skills/feishu-user-plugin/references/CLAUDE.md` (verbatim copy). Both are re-staged in the same commit.
+- **Version triangle** — if `package.json`, `.claude-plugin/plugin.json`, or `skills/feishu-user-plugin/SKILL.md` are staged, all three `version` fields must agree or the commit is rejected.
+- **Tool-count badge** — if `src/server.js` or any file under `src/tools/` is staged, the `N tools` badge in `README.md` must match the actual `TOOLS.length` exported by `src/server.js`.
+- **Smoke test** — any change under `src/` triggers `npm run smoke` to catch schema regressions before commit.
+
+CI (`.github/workflows/validate.yml`) runs the same checks on every PR to `main`, so bypassing the local hook still gets caught.
+
+On the maintainer's machine, a post-merge hook (`scripts/sync-team-skills.sh`) auto-opens a sync PR in the `~/team-skills` repo after every merge to main. The hook silently skips if `~/team-skills` is absent.
+
+## License
+
+[MIT](LICENSE)
+
+## Acknowledgments
+
+- [cv-cat/LarkAgentX](https://github.com/cv-cat/LarkAgentX) -- Original Feishu protocol reverse-engineering (Python)
+- [cv-cat/OpenFeiShuApis](https://github.com/cv-cat/OpenFeiShuApis) -- Underlying API research
+- [Model Context Protocol](https://modelcontextprotocol.io) -- The MCP standard
