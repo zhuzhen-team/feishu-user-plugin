@@ -8,7 +8,11 @@
 
 **All-in-one Feishu/Lark MCP Server -- 84 tools, 9 skills, 3 auth layers for messaging, docs, bitable, calendar, tasks, drive, OKR, and more.**
 
+> [中文 README](README.md) is the primary version. This English README mirrors it.
+
 The only MCP server that lets you send messages as your **personal identity** (not a bot), while also integrating the full official Feishu API. Works with Claude Code, Cursor, Windsurf, OpenClaw, and any MCP-compatible client.
+
+![Claude Code calling send_to_user — send Feishu messages as your real user, not a bot](docs/demo-send-as-user.png)
 
 ## Highlights
 
