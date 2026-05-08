@@ -304,6 +304,26 @@ function buildCtx() {
       try { credentials.setActiveProfile(n); } catch (_) {}
     },
     resolveDocId,
+    getWsServer: () => wsServer,
+    requestClaim: async ({ force = false } = {}) => {
+      const claim = events.owner.tryClaim(FEISHU_HOME, { info: { role: 'ws_owner' }, force });
+      if (claim.isOwner) {
+        ownerHandle = claim;
+        await _claimAndStart();
+        return { ok: true, became_owner: true };
+      }
+      return { ok: false, reason: 'lock_active_no_force', owner_pid: claim.ownerInfo?.pid };
+    },
+    requestReconfigure: async () => {
+      const before = wsServer?.getStatus() || {};
+      await _maybeReconfigure();
+      const after = wsServer?.getStatus() || {};
+      return {
+        prev_subscriptions: before.subscribed_events || [],
+        next_subscriptions: after.subscribed_events || [],
+        no_change: JSON.stringify(before.subscribed_events) === JSON.stringify(after.subscribed_events) && before.wsProfile === after.wsProfile,
+      };
+    },
   };
 }
 
