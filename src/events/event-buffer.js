@@ -1,9 +1,12 @@
-// src/events/event-buffer.js — in-memory FIFO buffer for WS events.
+// src/events/event-buffer.js — in-memory FIFO buffer.
 //
-// Single-consumer model: tools/events.js pulls events with `drain()`, which
-// removes them from the buffer. If multiple agents read concurrently they'll
-// see partial sets — explicitly NOT designed to fan out the same event to N
-// consumers, since the MCP server already serializes tool calls.
+// v1.3.9: This is now the **disk-full fallback** only. Normal flow writes
+// to events.jsonl via src/events/event-log.js. The owner falls back to this
+// buffer when fs.appendFileSync fails (ENOSPC etc); get_new_events does NOT
+// read from this buffer in the owner-arbitrated path. Pre-v1.3.8 behaviour
+// is preserved when no logPath is configured.
+//
+// (rest of file unchanged)
 //
 // What this owns:
 //   - _events: ordered list of events (oldest first)

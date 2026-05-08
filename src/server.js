@@ -13,6 +13,8 @@
 //   - Config discovery / persistence: src/config/*.
 
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const { CallToolRequestSchema, ListToolsRequestSchema, ListPromptsRequestSchema, GetPromptRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
@@ -65,9 +67,28 @@ const HANDLERS = Object.fromEntries(TOOL_MODULES.flatMap((m) => Object.entries(m
 // When credentials.json exists, switching also persists the active field so
 // cross-process MCP servers see the same active profile after restart.
 
+const events = require('./events');
+
+const FEISHU_HOME = path.join(os.homedir(), '.feishu-user-plugin');
+const EVENTS_LOG_PATH = path.join(FEISHU_HOME, 'events.jsonl');
+
 let userClient = null;
 let officialClient = null;
 let wsServer = null;
+let ownerHandle = null;       // returned by tryClaim when isOwner
+let ownerHeartbeatTimer = null;
+let nonOwnerPollTimer = null;
+let _ownerStartCallbacks = [];
+
+function _onBecomeOwner(cb) { _ownerStartCallbacks.push(cb); }
+
+function _stopHeartbeat() {
+  if (ownerHeartbeatTimer) { clearInterval(ownerHeartbeatTimer); ownerHeartbeatTimer = null; }
+}
+function _stopNonOwnerPoll() {
+  if (nonOwnerPollTimer) { clearInterval(nonOwnerPollTimer); nonOwnerPollTimer = null; }
+}
+
 function getEventBuffer() {
   return wsServer ? wsServer.buffer : null;
 }
@@ -75,12 +96,19 @@ function getEventBuffer() {
 // from the persisted active profile (credentials.json) at boot, but in-process
 // switches may diverge from the persisted active until the next server restart.
 //
-// Profile selection precedence (v1.3.8 E.1):
-//   1. process.env.FEISHU_PLUGIN_PROFILE — harness pointer
-//   2. credentials.json::active — single-file persisted active
+// Profile selection precedence (v1.3.9 A.2 — SSOT):
+//   1. credentials.json::active — single-file persisted active (canonical SSOT)
+//   2. process.env.FEISHU_PLUGIN_PROFILE — harness pointer (bootstrap-only, when
+//      credentials.json does not exist)
 //   3. 'default' — legacy zero-config path
-let currentProfile = process.env.FEISHU_PLUGIN_PROFILE
-  || credentials.getActiveProfileName();
+// Note: FEISHU_PLUGIN_PROFILE in the harness env is now a bootstrap pointer only.
+// Once credentials.json exists, its `active` field is authoritative; cross-process
+// sync propagates active-profile changes without a server restart.
+let currentProfile = credentials.getActiveProfileName();
+if (!credentials.readCanonical() && process.env.FEISHU_PLUGIN_PROFILE) {
+  // Bootstrap-only: legacy env users without canonical credentials file.
+  currentProfile = process.env.FEISHU_PLUGIN_PROFILE;
+}
 
 function profileEnv(name) {
   return credentials.getActiveProfileEnv(name);
@@ -134,6 +162,157 @@ function loadUATFromEnv(client, env) {
   client._uatExpires = expires || client._decodeTokenExpiry(token);
 }
 
+// --- Owner control loop (v1.3.9 A.1) ---
+
+async function _claimAndStart() {
+  const claim = events.owner.tryClaim(FEISHU_HOME, { info: { role: 'ws_owner' } });
+  if (!claim.isOwner) {
+    // Become non-owner: poll lock health every 30s, attempt takeover when stale.
+    if (!nonOwnerPollTimer) {
+      nonOwnerPollTimer = setInterval(() => {
+        const info = events.owner.readOwnerInfo(FEISHU_HOME);
+        if (!info.exists || !info.alive) {
+          _claimAndStart().catch((e) => console.error(`[feishu-user-plugin] takeover attempt failed: ${e.message}`));
+        }
+      }, events.owner.TAKEOVER_POLL_INTERVAL_MS);
+      nonOwnerPollTimer.unref?.();
+    }
+    return;
+  }
+
+  ownerHandle = claim;
+  _stopNonOwnerPoll();
+  // Repair tail before WS starts pushing events
+  try { events.log.repairTail(EVENTS_LOG_PATH); } catch (_) {}
+
+  // Start WS with current active profile and its events list.
+  const profileName = currentProfile;
+  let activeEnv;
+  try { activeEnv = profileEnv(profileName); } catch (_) { return; }
+  if (!activeEnv.LARK_APP_ID || !activeEnv.LARK_APP_SECRET) return;
+
+  const eventsList = _getProfileEventsList(profileName);
+  wsServer = events.createWSServer({
+    appId: activeEnv.LARK_APP_ID,
+    appSecret: activeEnv.LARK_APP_SECRET,
+    registrations: eventsList,
+    logPath: EVENTS_LOG_PATH,
+    initialProfile: profileName,
+  });
+  wsServer.start().catch((e) => console.error(`[feishu-user-plugin] WS start error: ${e.message}`));
+
+  // Heartbeat + check active changes every 15s.
+  let lastCredMtime = _credMtime();
+  ownerHeartbeatTimer = setInterval(() => {
+    if (ownerHandle) ownerHandle.heartbeat();
+    const m = _credMtime();
+    if (m !== null && m !== lastCredMtime) {
+      lastCredMtime = m;
+      _maybeReconfigure().catch((e) => console.error(`[feishu-user-plugin] reconfigure failed: ${e.message}`));
+    }
+    // Defer-rotate check
+    try {
+      const snap = events.cursor.readSnapshot(FEISHU_HOME);
+      const SOFT_CAP = 10 * 1024 * 1024;
+      const HARD_CAP = 20 * 1024 * 1024;
+      const rot = events.log.maybeRotate(EVENTS_LOG_PATH, snap.cursor.offset, SOFT_CAP);
+      if (rot.rotated) {
+        events.cursor.resetCursorTo(FEISHU_HOME, 0);
+      } else if (snap.fileSize > HARD_CAP) {
+        events.log.forceRotate(EVENTS_LOG_PATH, snap.fileSize);
+        events.cursor.resetCursorTo(FEISHU_HOME, 0);
+      }
+      // Also clean up old .dropped files daily-ish (every heartbeat is cheap)
+      events.log.cleanupDropped(EVENTS_LOG_PATH, 7);
+    } catch (e) {
+      console.error(`[feishu-user-plugin] rotation check failed: ${e.message}`);
+    }
+  }, events.owner.HEARTBEAT_INTERVAL_MS);
+  ownerHeartbeatTimer.unref?.();
+
+  for (const cb of _ownerStartCallbacks) {
+    try { cb(); } catch (_) {}
+  }
+}
+
+function _credMtime() {
+  try {
+    const p = path.join(FEISHU_HOME, 'credentials.json');
+    return fs.statSync(p).mtimeMs;
+  } catch (_) { return null; }
+}
+
+// Cross-process active-profile sync (v1.3.9 A.2).
+// Each tool call: stat credentials.json; if mtime changed AND active differs
+// from in-memory currentProfile, do an in-process setActiveProfile().
+// _credMtimeBaseline starts null — first call sets the baseline without syncing.
+let _credMtimeBaseline = null;
+
+function _syncActiveProfileFromDisk() {
+  const m = _credMtime();
+  if (m === null) return; // no credentials.json — nothing to sync
+  if (_credMtimeBaseline === null) { _credMtimeBaseline = m; return; }
+  if (m === _credMtimeBaseline) return; // unchanged
+  _credMtimeBaseline = m;
+  let newActive;
+  try { newActive = credentials.getActiveProfileName(); } catch (_) { return; }
+  if (newActive === currentProfile) return;
+  console.error(`[feishu-user-plugin] active profile changed on disk: ${currentProfile} → ${newActive}`);
+  // Use the same setActiveProfile flow that switch_profile uses, except don't
+  // re-write credentials.json (which it already reflects the change).
+  try {
+    credentials.getActiveProfileEnv(newActive); // validate profile exists
+    currentProfile = newActive;
+    userClient = null;
+    officialClient = null;
+    // resolver.js has a wiki-node resolution cache; clear it on profile switch
+    // so wiki nodes belonging to the previous app-id don't cross-contaminate.
+    require('./resolver').clearCache();
+  } catch (e) {
+    console.error(`[feishu-user-plugin] sync to "${newActive}" failed: ${e.message}; staying on "${currentProfile}"`);
+  }
+}
+
+async function _maybeReconfigure() {
+  if (!ownerHandle || !wsServer) return;
+  const newActive = credentials.getActiveProfileName();
+  const newEvents = _getProfileEventsList(newActive);
+  const status = wsServer.getStatus();
+  const sameProfile = status.wsProfile === newActive;
+  const sameEvents = JSON.stringify(status.subscribed_events) === JSON.stringify(newEvents);
+  if (sameProfile && sameEvents) return;
+
+  console.error(`[feishu-user-plugin] WS reconfigure: profile ${status.wsProfile}→${newActive}, events ${status.subscribed_events.length}→${newEvents.length}`);
+
+  // Tear down + rebuild because registrations are fixed at construction.
+  await wsServer.stop();
+  let activeEnv;
+  try { activeEnv = profileEnv(newActive); } catch (_) { return; }
+  if (!activeEnv.LARK_APP_ID || !activeEnv.LARK_APP_SECRET) return;
+  wsServer = events.createWSServer({
+    appId: activeEnv.LARK_APP_ID,
+    appSecret: activeEnv.LARK_APP_SECRET,
+    registrations: newEvents,
+    logPath: EVENTS_LOG_PATH,
+    initialProfile: newActive,
+  });
+  await wsServer.start();
+}
+
+function _getProfileEventsList(profileName) {
+  const canonical = credentials.readCanonical();
+  if (canonical && canonical.profiles[profileName]?.events) {
+    return canonical.profiles[profileName].events.slice();
+  }
+  // Bootstrap: env override
+  const env = process.env.FEISHU_PLUGIN_EXTRA_EVENTS;
+  if (env) {
+    const list = env.split(',').map(s => s.trim()).filter(Boolean);
+    if (list.length) return ['im.message.receive_v1', ...list];
+  }
+  return ['im.message.receive_v1'];
+}
+
 // Resolver helper: turn document_id / app_token / wiki node / Feishu URL into
 // a native token. No-op for already-native inputs. See src/resolver.js.
 async function resolveDocId(input) {
@@ -158,11 +337,36 @@ function buildCtx() {
       currentProfile = n;
       userClient = null;
       officialClient = null;
+      // Clear resolver cache so wiki-node lookups don't carry over from the old profile.
+      require('./resolver').clearCache();
       // Persist the active-field flip when credentials.json exists so peer MCP
       // servers see the new active profile on next read. Tolerated when no file.
       try { credentials.setActiveProfile(n); } catch (_) {}
+      // Re-baseline mtime so _syncActiveProfileFromDisk doesn't immediately
+      // trigger a redundant sync on the next tool call after we just wrote.
+      _credMtimeBaseline = _credMtime();
     },
     resolveDocId,
+    getWsServer: () => wsServer,
+    requestClaim: async ({ force = false } = {}) => {
+      const claim = events.owner.tryClaim(FEISHU_HOME, { info: { role: 'ws_owner' }, force });
+      if (claim.isOwner) {
+        ownerHandle = claim;
+        await _claimAndStart();
+        return { ok: true, became_owner: true };
+      }
+      return { ok: false, reason: 'lock_active_no_force', owner_pid: claim.ownerInfo?.pid };
+    },
+    requestReconfigure: async () => {
+      const before = wsServer?.getStatus() || {};
+      await _maybeReconfigure();
+      const after = wsServer?.getStatus() || {};
+      return {
+        prev_subscriptions: before.subscribed_events || [],
+        next_subscriptions: after.subscribed_events || [],
+        no_change: JSON.stringify(before.subscribed_events) === JSON.stringify(after.subscribed_events) && before.wsProfile === after.wsProfile,
+      };
+    },
   };
 }
 
@@ -176,6 +380,9 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  // Cross-process active-profile sync (v1.3.9 A.2): if another MCP process
+  // wrote a new `active` field to credentials.json, pick it up before dispatch.
+  _syncActiveProfileFromDisk();
   const { name, arguments: args } = request.params;
   const handler = HANDLERS[name];
   if (!handler) {
@@ -211,8 +418,18 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
   console.error('[feishu-user-plugin] Unhandled rejection:', reason);
 });
-process.on('SIGTERM', () => { try { wsServer?.stop(); } catch {} process.exit(0); });
-process.on('SIGINT',  () => { try { wsServer?.stop(); } catch {} process.exit(0); });
+process.on('SIGTERM', () => {
+  _stopHeartbeat(); _stopNonOwnerPoll();
+  try { wsServer?.stop(); } catch {}
+  try { ownerHandle?.release(); } catch {}
+  process.exit(0);
+});
+process.on('SIGINT', () => {
+  _stopHeartbeat(); _stopNonOwnerPoll();
+  try { wsServer?.stop(); } catch {}
+  try { ownerHandle?.release(); } catch {}
+  process.exit(0);
+});
 
 // --- main ---
 
@@ -222,9 +439,11 @@ async function main() {
 
   // Startup diagnostics — use the resolved active-profile env so users on
   // credentials.json (where process.env may not have LARK_*) get accurate flags.
-  // If FEISHU_PLUGIN_PROFILE was set, validate the name exists. If not, fail
-  // loud — silently falling back to "default" would mask a typo'd harness env.
-  if (process.env.FEISHU_PLUGIN_PROFILE) {
+  // Bootstrap-only validation: when credentials.json doesn't exist and
+  // FEISHU_PLUGIN_PROFILE is set, validate the name against known legacy profiles.
+  // If credentials.json exists, FEISHU_PLUGIN_PROFILE is ignored — the file's
+  // `active` field is the SSOT and cross-process sync keeps it up to date.
+  if (!credentials.readCanonical() && process.env.FEISHU_PLUGIN_PROFILE) {
     const known = credentials.listProfileNames();
     if (!known.includes(currentProfile)) {
       console.error(`[feishu-user-plugin] FATAL: FEISHU_PLUGIN_PROFILE="${currentProfile}" not found. Known: ${known.join(', ')}.`);
@@ -275,24 +494,15 @@ async function main() {
     }
   }
 
-  // --- Real-time events (v1.3.8 C.3) ---
-  // Boot WS only when APP_ID/SECRET are valid. WS uses app credentials
-  // (not UAT), so cookie-only setups don't get realtime.
+  // --- Real-time events (v1.3.9 — owner-arbitrated) ---
   if (hasApp) {
-    try {
-      const { createWSServer } = require('./events');
-      wsServer = createWSServer({
-        appId: activeEnv.LARK_APP_ID,
-        appSecret: activeEnv.LARK_APP_SECRET,
-        registrations: ['im.message.receive_v1'],
-      });
-      // Start asynchronously — don't block MCP serving on WS handshake.
-      wsServer.start().catch((e) => {
-        console.error(`[feishu-user-plugin] WS deferred start error: ${e.message}`);
-      });
-    } catch (e) {
-      console.error(`[feishu-user-plugin] WS init failed: ${e.message}. Continuing without realtime.`);
-    }
+    _claimAndStart().catch((e) => {
+      console.error(`[feishu-user-plugin] owner claim failed: ${e.message}; will retry every 30s`);
+      if (!nonOwnerPollTimer) {
+        nonOwnerPollTimer = setInterval(_claimAndStart, events.owner.TAKEOVER_POLL_INTERVAL_MS);
+        nonOwnerPollTimer.unref?.();
+      }
+    });
   } else {
     console.error('[feishu-user-plugin] WS not started — APP_ID/SECRET missing. Realtime events (get_new_events) will return empty.');
   }

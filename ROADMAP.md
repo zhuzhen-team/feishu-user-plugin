@@ -2,46 +2,10 @@
 
 > 本文件只记**未来**计划。已发布版本的逐项变更见 [CHANGELOG.md](./CHANGELOG.md)。
 
-## v1.3.9 — 机器级 SSOT 完整化 + cookie protobuf 阶段一 + 小项收尾
+## v1.3.9 — cookie protobuf 阶段一 + 小项收尾
 
-> **🔵 Brainstorm 已完成（2026-05-07）**——3 specs + 3 plans 已写完并 commit。
-> **新会话开始执行时先读** `docs/superpowers/v1.3.9-execution-status.md`（实施顺序、设计决策冻结点、不要重做的事）。
-> Specs: `docs/superpowers/specs/2026-05-07-v1.3.9-{machine-ssot,cookie-protobuf-phase2,small-items}.md`
-> Plans: `docs/superpowers/plans/2026-05-07-v1.3.9-{machine-ssot,cookie-protobuf-phase2,small-items}.md`
-
-### A. 机器级 SSOT 完整化（v1.3.9 主线）
-
-v1.3.7/v1.3.8 已经把 cookie / UAT / app credentials / profileHints 收敛到 `~/.feishu-user-plugin/credentials.json`，这一版把剩下两个分散点也收敛 + 让"安装即机器级"成为默认路径：
-
-- [ ] **A.1 WebSocket 机器级（单 owner + 共享 event log + 单一 drain 游标）**
-
-  - 路径：`~/.feishu-user-plugin/ws-owner.lock`（O_CREAT|O_EXCL，谁拿到谁是 WS owner）+ `~/.feishu-user-plugin/events.jsonl`（append-only event log）+ `~/.feishu-user-plugin/events.cursor`（**单一全局 drain 位置**）
-  - MCP boot 试拿 `ws-owner.lock`：拿到→启 `WSClient` 把 event 序列化追加到 `events.jsonl`；拿不到→不开 WS，定时 stat `events.jsonl` 看新数据
-  - `get_new_events` 工具：**每台机器只一份 cursor** —— 任何 harness 调一次就推进游标，drain 后其它 harness 看不到这条。同一台机器上的 N 个 harness 等同一个消费者
-  - cursor 读+写用单独 lock 保护，避免并发 drain 看到同一行
-  - owner 死了 / 锁过期 → 下一个 MCP 进程自动接管，event log 不丢
-  - events.jsonl 大小封顶（10 MB or N 天），rotate 成 events.jsonl.old
-  - 同时把 v1.3.8 那条"multiple MCP processes get duplicate events" 的限制从 CLAUDE.md / Troubleshooting 删掉
-  - 顺手实现 **manage_ws_status(action=info|reconnect)** —— 暴露 owner pid、`getReconnectInfo()`、buffer stats、注册的事件类型；reconnect 主动断开重连
-
-- [ ] **A.2 Active profile 跨进程同步**
-
-  - dispatcher 入口 stat `credentials.json`：mtime 变化时重新读 `active`，跟当前 in-memory `currentProfile` 不同就触发 `setActiveProfile`（invalidate cached `userClient` / `officialClient`）
-  - 成本：每次 tool call 多一次 `stat`（~10μs on macOS），可接受
-  - 效果：Claude Code 里调 `switch_profile alt` 后，Codex 下一次 tool call 自动跟上
-
-- [ ] **A.3 setup CLI 非交互模式自动机器级**
-
-  - 现状：`npx feishu-user-plugin setup --app-id X --app-secret Y` 在 `nonInteractive=true` 时跳过了 pointer-only 询问，每个 harness 仍写一份 LARK_*
-  - 修法：
-    - 检测到 `credentials.json` 已存在 → non-interactive 默认 `--pointer-only`
-    - 首次安装（没 credentials.json）→ setup 内部直接跑一次 `migrate` 写 credentials.json，harness env 只放 `FEISHU_PLUGIN_PROFILE=default`
-  - 安装 prompt 文字不动，只让 setup CLI 自己变聪明 —— 新装用户 zero-config 走 SSOT；老用户重跑 setup 也自动收敛
-
-- [ ] **A.4 实时事件类型扩展**（顺手做，不强制）
-
-  - `createWSServer` 的 `registrations` 已经参数化，加一组：`approval.instance` / `calendar.calendar.event.changed_v4` / 文档评论事件（待查 SDK 是否暴露）
-  - 默认仍只 enable `im.message.receive_v1`，新事件由 env / config flag 控制（避免老用户突然多收一堆没消费的事件）
+> Specs: `docs/superpowers/specs/2026-05-07-v1.3.9-{cookie-protobuf-phase2,small-items}.md`
+> Plans: `docs/superpowers/plans/2026-05-07-v1.3.9-{cookie-protobuf-phase2,small-items}.md`
 
 ### B. Cookie wire format 反向工程 — 阶段一
 

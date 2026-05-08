@@ -144,8 +144,18 @@ async function resolveToken(input, official) {
   return r.obj_token;
 }
 
+/**
+ * Clear the wiki-node resolution cache. Called by the profile-sync hook in
+ * server.js when the active profile changes, so that wiki nodes belonging to
+ * the previous profile's app credentials don't poison lookups for the new one.
+ */
+function clearCache() {
+  _cache.clear();
+}
+
 module.exports = {
   parseFeishuInput,
   resolveToObj,
   resolveToken,
+  clearCache,
 };
