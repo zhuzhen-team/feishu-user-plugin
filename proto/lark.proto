@@ -123,8 +123,18 @@ message Content {
   optional string text = 1;
   optional string imageKey = 2;
   optional string title = 3;
+  // Image metadata fields (v1.3.9 — reverse-engineered via brute-force probe;
+  // see scripts/explore-image-minimize.js). Required for IMAGE messages on the
+  // cookie-protobuf path: imageKey + thumbnailKey(10) is the minimum the
+  // gateway accepts. width(4) / height(5) / mimeType(8) / fileSize(9) are
+  // optional but commonly present in the real wire format.
+  optional int32 imageWidth = 4;
+  optional int32 imageHeight = 5;
   optional string fileKey = 6;
   optional string audioKey = 7;
+  optional string mimeType = 8;
+  optional int64 fileSize = 9;
+  optional string thumbnailKey = 10;
   optional string fileName = 11;
   optional RichText richText = 14;
   optional string stickerSetId = 24;

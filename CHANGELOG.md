@@ -16,6 +16,12 @@ D 系列首项 ship：新增 `read_doc_markdown` 工具，用 `feishu-docx` 把 
 - **per-profile events 字段 (A.4)**：`credentials.json::profiles[*].events` 可选数组，缺省 `["im.message.receive_v1"]`；支持 `approval.instance.created_v4` / `calendar.calendar.event.changed_v4` 等。编辑后调 `manage_ws_status(action=reconfig)` 立即生效，不需重启。`FEISHU_PLUGIN_EXTRA_EVENTS` env 仅在首次 bootstrap 时写入，不覆盖已有字段。
 - **`read_doc_markdown(document_id)` (D)**：返回 markdown 字符串而非结构化 JSON，省 ~60% token；依赖 `feishu-docx@^0.7.0`，后处理器 `_normaliseEmbeds` 位于 `src/tools/docs.js`。嵌入图片 / 文件以 `feishu://image_token/<TOKEN>` / `feishu://file_token/<TOKEN>` 占位符形式保留，配合 `download_doc_image` 取二进制内容。`document_id` 同样接受原生 token / wiki node token / 飞书 URL，分辨率逻辑与其它 doc 工具相同。
 
+### Fixed
+- **`send_image_as_user` 不再报 HTTP 400 (B.1)**：v1.3.9 通过暴力探测 cookie protobuf gateway 拿到 IMAGE 最小有效字段集 — `Content.imageKey` (字段 2) + `Content.thumbnailKey` (字段 10) 即可发送成功；宽 / 高 / mime / size 全部可选。`proto/lark.proto` 加了 `imageWidth=4 / imageHeight=5 / mimeType=8 / fileSize=9 / thumbnailKey=10` 五个字段；`sendImage()` 默认 thumbnailKey = imageKey（飞书在缩略图未单独上传时接受同 key）。`scripts/explore-image-minimize.js` 留作未来字段验证起点。
+
+### Deferred to v1.3.10
+- **`send_card_as_user(via="user")` (B.4)** — v1.3.9 brute-force 失败：cmd=5 type=14 (CARD) 路径任何 Content 字段 / wire type 都触发同一句 `richText and card type need for card message`，验证发生在 Content parsing 之前。Cookie auth 层服务端可能完全禁用了用户身份发卡片，或需要不同 cmd。`via="bot"` (默认) 仍走 Official API 工作。下版本通过 mitmproxy 抓 Feishu Desktop 流量推进。
+
 ### Test
 - **`switch_profile` 多 profile e2e (F.1)**：验证原子 credentials.json 更新 + 进程内 cache 失效。位于 `src/test-switch-profile.js`，CI-friendly（dummy 凭证不联网）。
 

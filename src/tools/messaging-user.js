@@ -115,12 +115,17 @@ const schemas = [
   },
   {
     name: 'send_image_as_user',
-    description: '[User Identity] Send an image as the logged-in user. Requires image_key (upload via Official API first).',
+    description: '[User Identity, v1.3.9] Send an image as the logged-in user (NOT bot). Requires image_key from a prior upload_image call. Cookie-protobuf wire format requires both imageKey + thumbnailKey — when no separate thumbnail is provided, plugin defaults thumbnailKey to imageKey (Feishu accepts this for messenger-uploaded images). Width/height/mime/size are optional metadata; Feishu auto-derives display sizing on its side.',
     inputSchema: {
       type: 'object',
       properties: {
         chat_id: { type: 'string', description: 'Target chat ID. Numeric preferred; oc_xxx is auto-resolved (v1.3.7 C1.4).' },
         image_key: { type: 'string', description: 'Image key from upload (img_v2_xxx or img_v3_xxx)' },
+        thumbnail_key: { type: 'string', description: 'Optional separate thumbnail image key. Defaults to image_key when omitted.' },
+        width: { type: 'number', description: 'Optional image width in pixels.' },
+        height: { type: 'number', description: 'Optional image height in pixels.' },
+        mime: { type: 'string', description: 'Optional MIME type (e.g. "image/png").' },
+        size: { type: 'number', description: 'Optional file size in bytes.' },
         root_id: { type: 'string', description: 'Thread root message ID (optional)' },
       },
       required: ['chat_id', 'image_key'],
@@ -264,7 +269,14 @@ const handlers = {
   async send_image_as_user(args, ctx) {
     const c = await ctx.getUserClient();
     const chatId = await _resolveCookieChatId(args.chat_id, ctx);
-    const r = await c.sendImage(chatId, args.image_key, { rootId: args.root_id });
+    const r = await c.sendImage(chatId, args.image_key, {
+      rootId: args.root_id,
+      thumbnailKey: args.thumbnail_key,
+      width: args.width,
+      height: args.height,
+      mime: args.mime,
+      size: args.size,
+    });
     return sendResult(r, `Image sent to ${args.chat_id}`);
   },
   async send_file_as_user(args, ctx) {

@@ -185,18 +185,6 @@ class LarkUserClient {
     if (parentId) req.parentId = parentId;
     const { packet, ok } = await this._gateway(5, 'PutMessageRequest', req, '5.7.0');
     if (!ok) {
-      // The cookie protobuf gateway returns HTTP 400 when our wire format is
-      // missing required fields. Verified for IMAGE (v1.3.7 testing): the
-      // simple {imageKey} content payload is rejected — Feishu Web encodes
-      // images with extra metadata (image dimensions, mime type, etc.) that
-      // we don't have in proto/lark.proto. v1.3.8 shipped the capture/decode
-      // tooling (scripts/decode-feishu-protobuf.js + capture-feishu-protobuf.js
-      // + docs/COOKIE-PROTOBUF-CAPTURES.md). Actual reverse-engineering moved
-      // to v1.3.9. Surface a clear error routing the user to
-      // send_message_as_bot, which works.
-      if (type === MsgType.IMAGE) {
-        throw new Error('send_image_as_user: Feishu cookie protobuf gateway rejected the IMAGE wire format (HTTP 400). User-identity image sends are not yet supported — wire format reverse-engineering is deferred to v1.3.9 (v1.3.8 shipped the capture/decode tooling at scripts/decode-feishu-protobuf.js). Workaround: use send_message_as_bot(chat_id, msg_type="image", payload={image_key:"..."}).');
-      }
       throw new Error(`_sendMsg: cookie protobuf gateway returned non-2xx for type=${type}. The wire format likely doesn't match what Feishu expects.`);
     }
     return { success: true, status: packet.status };
@@ -268,9 +256,23 @@ class LarkUserClient {
   }
 
   // --- Send Image ---
+  // v1.3.9: cookie protobuf path now works. Gateway requires Content.imageKey
+  // (field 2) + Content.thumbnailKey (field 10). Width/height/mime/size are
+  // optional but accepted. We default thumbnailKey to imageKey when caller
+  // doesn't supply one — Feishu accepts that for already-thumbnail-sized
+  // uploads. See proto/lark.proto Content + scripts/explore-image-minimize.js.
 
   async sendImage(chatId, imageKey, opts = {}) {
-    return this._sendMsg(MsgType.IMAGE, chatId, { imageKey }, opts);
+    if (!imageKey) throw new Error('sendImage: imageKey required');
+    const content = {
+      imageKey,
+      thumbnailKey: opts.thumbnailKey || imageKey,
+    };
+    if (opts.width != null) content.imageWidth = opts.width;
+    if (opts.height != null) content.imageHeight = opts.height;
+    if (opts.mime) content.mimeType = opts.mime;
+    if (opts.size != null) content.fileSize = opts.size;
+    return this._sendMsg(MsgType.IMAGE, chatId, content, opts);
   }
 
   // --- Send File ---
