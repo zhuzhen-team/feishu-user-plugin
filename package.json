@@ -58,6 +58,7 @@
     "@larksuiteoapi/node-sdk": "^1.59.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "dotenv": "^16.4.7",
+    "feishu-docx": "^0.7.0",
     "protobufjs": "^7.4.0"
   },
   "devDependencies": {

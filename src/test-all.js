@@ -321,4 +321,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+main().catch(console.error).finally(() => {
+  // Fixture-based unit test — runs regardless of credential availability
+  require('./test-read-doc-markdown').run();
+});
