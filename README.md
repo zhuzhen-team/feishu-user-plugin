@@ -13,6 +13,8 @@
 >
 > **84 tools · 3 auth layers · 9 MCP prompts · MIT licensed · Node ≥18**
 
+![Claude Code 调用 send_to_user，以你本人身份发飞书消息](docs/demo-send-as-user.png)
+
 ---
 
 ## ⚠️ 使用边界与合规声明
