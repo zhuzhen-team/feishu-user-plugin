@@ -4,6 +4,7 @@ theme: jekyll-theme-cayman
 lang: zh-CN
 plugins:
   - jekyll-seo-tag
+  - jekyll-sitemap
 # Internal dev docs in this directory are already public on GitHub but should
 # not show up as standalone Pages — they dilute the SEO signal and confuse
 # first-time visitors who land on /docs/. Only the Chinese + English landing

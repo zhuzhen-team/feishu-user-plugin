@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ethanqc.github.io/feishu-user-plugin/sitemap.xml
