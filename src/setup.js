@@ -27,6 +27,7 @@ function parseArgs() {
     else if (argv[i] === '--pointer-only') args.pointerOnly = true; // kept for backward compat; now implicit default
     else if (argv[i] === '--force') args.force = true;
     else if (argv[i] === '--profile' && argv[i + 1]) args.profile = argv[++i];
+    else if (argv[i] === '--activate') args.activate = true;
   }
   return args;
 }
@@ -206,8 +207,19 @@ async function main() {
         process.exit(1);
       }
       canonical.profiles[targetProfile] = { ...(canonical.profiles[targetProfile] || {}), ...profileValues };
+      // v1.3.9 fix: only flip credentials.json::active when --activate is given.
+      // Without --activate, adding/updating a non-active profile leaves the
+      // current active alone (least-surprise: "I added work2, default is still
+      // active, I'll switch when I want via MCP switch_profile").
+      if (cliArgs.activate || (cliArgs.force && targetProfile === canonical.active)) {
+        canonical.active = targetProfile;
+      }
       fs.writeFileSync(credsPath, JSON.stringify(canonical, null, 2) + '\n', { mode: 0o600 });
       console.log(`Updated profile "${targetProfile}" in ${credsPath}`);
+      if (cliArgs.activate) console.log(`  → active profile flipped to "${targetProfile}"`);
+      else if (canonical.active !== targetProfile) {
+        console.log(`  → active profile unchanged ("${canonical.active}"). Pass --activate to flip, or use switch_profile MCP tool at runtime.`);
+      }
       if (cliArgs.force) console.warn(`  warning: overwrote existing profile credentials with --force`);
     }
   } else if (mode === 'auto-migrate') {
@@ -231,7 +243,12 @@ async function main() {
   // The harness env block only needs FEISHU_PLUGIN_PROFILE; all real creds
   // live in credentials.json.
   console.log('\n--- Writing Config ---');
-  const pointerEnv = { FEISHU_PLUGIN_PROFILE: targetProfile };
+  // v1.3.9 fix: harness env pointer should reflect what credentials.json::active
+  // will end up as, not blindly the targetProfile (which would mislead users
+  // who added a non-active profile via --profile alt without --activate).
+  const finalCanonical = credentials.readCanonical();
+  const harnessActive = finalCanonical?.active || targetProfile;
+  const pointerEnv = { FEISHU_PLUGIN_PROFILE: harnessActive };
   const result = writeNewConfig(pointerEnv, undefined, undefined, client, { pointerOnly: true });
   if (result.configPath) console.log(`Written to ${result.configPath} (Claude Code)`);
   if (result.codexConfigPath) console.log(`Written to ${result.codexConfigPath} (Codex)`);

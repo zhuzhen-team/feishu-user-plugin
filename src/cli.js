@@ -69,7 +69,19 @@ Setup options:
   --client <target>   Config target: claude (default), codex, or both
   --force             Overwrite existing default profile in credentials.json
   --profile <name>    Create or update a named profile (replaces LARK_PROFILES_JSON
-                      for new setups)
+                      for new setups). Without --activate, leaves the active
+                      profile unchanged so adding work2 doesn't yank you off default.
+  --activate          When used with --profile, also flip credentials.json::active
+                      to the named profile.
+
+OAuth options (v1.3.9):
+  npx feishu-user-plugin oauth --profile <name>
+                      Get UAT for a specific profile. Default = currently active.
+
+Keepalive options (v1.3.9):
+  npx feishu-user-plugin keepalive --all
+                      Refresh cookie + UAT for ALL profiles in credentials.json.
+                      Default (no flag) = active profile only (back-compat).
 
 Quick Start (Claude Code):
   1. npx feishu-user-plugin setup
@@ -81,9 +93,16 @@ Quick Start (Codex):
   2. Follow the prompts to configure credentials
   3. Restart Codex
 
+Multi-account (v1.3.9):
+  1. npx feishu-user-plugin setup --app-id X1 --app-secret S1 --cookie C1
+  2. npx feishu-user-plugin oauth                          # default profile UAT
+  3. npx feishu-user-plugin setup --profile work2 --app-id X2 --app-secret S2 --cookie C2
+  4. npx feishu-user-plugin oauth --profile work2          # work2 profile UAT
+  5. In Claude Code: switch_profile(name="work2") MCP tool to flip live
+
 Auto-renewal (optional):
   Add to crontab to keep tokens alive even when Claude Code is closed:
-  crontab -e → add: 0 */4 * * * npx feishu-user-plugin keepalive >> /tmp/feishu-keepalive.log 2>&1
+  crontab -e → add: 0 */4 * * * npx feishu-user-plugin keepalive --all >> /tmp/feishu-keepalive.log 2>&1
 `);
 }
 
@@ -97,53 +116,75 @@ function migrate() {
 async function keepalive() {
   const { LarkUserClient } = require('./clients/user');
   const { LarkOfficialClient } = require('./clients/official');
-  const { readCredentials, persistToConfig } = require('./auth/credentials');
+  const cred = require('./auth/credentials');
 
-  const creds = readCredentials();
-  if (!creds.LARK_COOKIE && !creds.LARK_APP_ID) {
-    console.error('[keepalive] No credentials found. Run: npx feishu-user-plugin setup');
-    process.exit(1);
-  }
-  let ok = true;
+  // v1.3.9: --all flag iterates every profile in credentials.json,
+  // refreshing cookie + UAT for each. Default behavior (no flag) refreshes
+  // only the active profile (back-compat with v1.3.6+ cron usage).
+  const all = process.argv.includes('--all');
+  const targetProfiles = all ? cred.listProfileNames() : [cred.getActiveProfileName() || 'default'];
 
-  // 1. Refresh Cookie
-  const cookie = creds.LARK_COOKIE;
-  if (cookie && cookie !== 'SETUP_NEEDED') {
-    try {
-      const client = new LarkUserClient(cookie);
-      await client.init();
-      // init() calls _getCsrfToken which refreshes sl_session
-      persistToConfig({ LARK_COOKIE: client.cookieStr });
-      console.log(`[keepalive] Cookie refreshed (user: ${client.userName})`);
-    } catch (e) {
-      console.error(`[keepalive] Cookie refresh FAILED: ${e.message}`);
-      ok = false;
+  let totalOk = true;
+  for (const profileName of targetProfiles) {
+    let env;
+    try { env = cred.getActiveProfileEnv(profileName); }
+    catch (e) {
+      console.error(`[keepalive][${profileName}] cannot read profile: ${e.message}`);
+      totalOk = false;
+      continue;
     }
-  }
-
-  // 2. Refresh UAT
-  const appId = creds.LARK_APP_ID;
-  const appSecret = creds.LARK_APP_SECRET;
-  const uat = creds.LARK_USER_ACCESS_TOKEN;
-  const rt = creds.LARK_USER_REFRESH_TOKEN;
-  if (appId && appSecret && uat && uat !== 'SETUP_NEEDED' && rt) {
-    try {
-      const official = new LarkOfficialClient(appId, appSecret);
-      official._uat = uat;
-      official._uatRefresh = rt;
-      official._uatExpires = 0; // force refresh
-      await official._refreshUAT(); // refreshes + persists automatically
-      console.log('[keepalive] UAT refreshed');
-    } catch (e) {
-      console.error(`[keepalive] UAT refresh FAILED: ${e.message}`);
-      ok = false;
+    if (!env.LARK_COOKIE && !env.LARK_APP_ID) {
+      console.error(`[keepalive][${profileName}] no credentials. Run: npx feishu-user-plugin setup --profile ${profileName} ...`);
+      totalOk = false;
+      continue;
     }
+    let ok = true;
+
+    // 1. Refresh Cookie
+    if (env.LARK_COOKIE && env.LARK_COOKIE !== 'SETUP_NEEDED') {
+      try {
+        const client = new LarkUserClient(env.LARK_COOKIE);
+        await client.init();
+        cred.persistProfileUpdate(profileName, { LARK_COOKIE: client.cookieStr });
+        console.log(`[keepalive][${profileName}] cookie refreshed (user: ${client.userName})`);
+      } catch (e) {
+        console.error(`[keepalive][${profileName}] cookie refresh FAILED: ${e.message}`);
+        ok = false;
+      }
+    }
+
+    // 2. Refresh UAT (also writes to the same profile via auth/uat.js → persistToConfig
+    //    which goes through the active profile path. For --all we need to switch
+    //    active temporarily so the write lands on the right profile.)
+    if (env.LARK_APP_ID && env.LARK_APP_SECRET && env.LARK_USER_ACCESS_TOKEN && env.LARK_USER_ACCESS_TOKEN !== 'SETUP_NEEDED' && env.LARK_USER_REFRESH_TOKEN) {
+      const prevActive = cred.getActiveProfileName();
+      const needSwitch = all && prevActive !== profileName;
+      try {
+        if (needSwitch) cred.setActiveProfile(profileName);
+        // Set process.env so LarkOfficialClient.loadUAT() picks the right tokens
+        process.env.LARK_USER_ACCESS_TOKEN = env.LARK_USER_ACCESS_TOKEN;
+        process.env.LARK_USER_REFRESH_TOKEN = env.LARK_USER_REFRESH_TOKEN;
+        const official = new LarkOfficialClient(env.LARK_APP_ID, env.LARK_APP_SECRET);
+        official._uat = env.LARK_USER_ACCESS_TOKEN;
+        official._uatRefresh = env.LARK_USER_REFRESH_TOKEN;
+        official._uatExpires = 0; // force refresh
+        await official._refreshUAT();
+        console.log(`[keepalive][${profileName}] UAT refreshed`);
+      } catch (e) {
+        console.error(`[keepalive][${profileName}] UAT refresh FAILED: ${e.message}`);
+        ok = false;
+      } finally {
+        if (needSwitch) {
+          try { cred.setActiveProfile(prevActive); } catch (_) {}
+        }
+      }
+    }
+    if (!ok) totalOk = false;
   }
 
-  if (ok) {
-    console.log('[keepalive] All tokens refreshed successfully');
-  }
-  process.exit(ok ? 0 : 1);
+  if (totalOk) console.log(`[keepalive] all profiles refreshed (${targetProfiles.length} profile${targetProfiles.length === 1 ? '' : 's'})`);
+  else console.error(`[keepalive] one or more profiles failed`);
+  process.exit(totalOk ? 0 : 1);
 }
 
 async function checkStatus() {
