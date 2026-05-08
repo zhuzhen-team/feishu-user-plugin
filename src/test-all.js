@@ -329,4 +329,5 @@ main().catch(console.error).finally(() => {
     process.exitCode = 1;
   });
   require('./test-events-lockfile').run();
+  require('./test-events-log').run();
 });
