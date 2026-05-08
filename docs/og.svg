@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Noto Sans CJK SC, sans-serif">
+  <!-- Background -->
+  <rect width="1200" height="630" fill="#0d1117"/>
+
+  <!-- Subtle radial accent -->
+  <defs>
+    <radialGradient id="accent" cx="0.85" cy="0.15" r="0.7">
+      <stop offset="0%" stop-color="#ff8c00" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#0d1117" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#accent)"/>
+
+  <!-- Top: project handle (monospace) -->
+  <text x="80" y="115" font-family="SF Mono, Menlo, Consolas, monospace" font-size="34" fill="#7c8590" font-weight="500" letter-spacing="0.5">feishu-user-plugin</text>
+
+  <!-- Hero: Chinese title (massive, white bold) -->
+  <text x="80" y="265" font-size="108" fill="#ffffff" font-weight="700" letter-spacing="0">飞书 MCP 服务器</text>
+
+  <!-- Subtitle: feature tagline (medium, orange accent) -->
+  <text x="80" y="370" font-size="44" fill="#ff8c00" font-weight="600">84 工具 · 3 层鉴权 · 以你身份发消息</text>
+
+  <!-- Compatibility row (medium, light gray) -->
+  <text x="80" y="510" font-family="SF Pro Display, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="32" fill="#c9d1d9" font-weight="500">Claude Code  ·  Codex  ·  Cursor  ·  Windsurf</text>
+
+  <!-- Bottom URL (small mono) -->
+  <text x="80" y="575" font-family="SF Mono, Menlo, Consolas, monospace" font-size="22" fill="#6e7681">github.com/EthanQC/feishu-user-plugin  ·  npm i feishu-user-plugin  ·  MIT</text>
+
+  <!-- Right-side decorative element: vertical accent bar -->
+  <rect x="1150" y="80" width="6" height="470" fill="#ff8c00" opacity="0.6"/>
+</svg>

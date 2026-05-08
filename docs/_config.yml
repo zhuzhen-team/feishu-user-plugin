@@ -19,3 +19,12 @@ defaults:
       path: ""
     values:
       lang: zh-CN
+      image: /feishu-user-plugin/og.png
+
+# jekyll-seo-tag picks `image` up and emits og:image / twitter:image meta tags.
+# baseurl + image path is rooted at the Pages site root; for github.io project
+# pages that's /<repo>/og.png.
+url: https://ethanqc.github.io
+baseurl: /feishu-user-plugin
+twitter:
+  card: summary_large_image
