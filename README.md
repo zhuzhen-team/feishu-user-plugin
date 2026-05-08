@@ -351,7 +351,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 | `send_file_as_user` | Send file (requires `file_key` from `upload_file`) |
 | `send_post_as_user` | Send rich text with title + formatted paragraphs |
 | `batch_send` | Fan-out send to multiple targets in one call (text / image / file / post). v1.3.6 |
-| `send_card_as_user` | Send a Feishu interactive card. v1.3.6 default routes through bot identity; user-identity is reserved for v1.3.7. |
+| `send_card_as_user` | Send a Feishu interactive card via bot identity (Official API). User-identity card sending is server-side disabled at the Feishu cookie auth tier — confirmed in v1.3.9. |
 
 ### User Identity -- Contacts & Info (5 tools, cookie auth)
 

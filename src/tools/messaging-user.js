@@ -1,10 +1,12 @@
 // src/tools/messaging-user.js — User-identity (cookie-based) messaging plus
-// batch_send fan-out and the v1.3.6 bot-default send_card_as_user.
+// batch_send fan-out. send_card_as_user lives here (historical naming) but
+// always routes through bot — user-identity card sending is server-side
+// disabled in Feishu at the cookie auth tier.
 //
-// All send_*_as_user handlers route through ctx.getUserClient() (cookie identity).
-// batch_send mixes user + bot identities per target. send_card_as_user currently
-// delegates to bot via ctx.getOfficialClient() — the "as_user" suffix is reserved
-// for v1.3.7's reverse-engineered cookie path; default flips when that lands.
+// All send_*_as_user handlers route through ctx.getUserClient() (cookie identity)
+// EXCEPT send_card_as_user which delegates to bot via ctx.getOfficialClient().
+// The "as_user" suffix on the card tool is historical — v1.3.9 confirmed the
+// cookie protobuf path for CARD is server-side disabled, brute-force exhausted.
 
 const { text, sendResult, json } = require('./_registry');
 
@@ -165,13 +167,12 @@ const schemas = [
   },
   {
     name: 'send_card_as_user',
-    description: '[v1.3.6+: bot-routed default] Send an interactive card to a chat. **Identity defaults to BOT** because user-identity card sending requires reverse-engineering the Feishu web protobuf (deferred to v1.3.9; v1.3.8 shipped the capture/decode tooling). The tool name keeps the "as_user" suffix so callers don\'t have to migrate when v1.3.9 lands; once user-identity is implemented the default flips. Pass `card` as a JSON object (Feishu card schema). To force bot explicitly set via="bot".',
+    description: '[v1.3.9+: bot-only] Send an interactive Feishu card to a chat via bot identity (Official API). User-identity cookie protobuf path is server-side disabled at the auth tier — confirmed by exhaustive brute-force in v1.3.9, see scripts/explore-card-protobuf.js. The "as_user" suffix is historical naming kept for backward compat; the tool always routes through bot. Pass `card` as a JSON object (Feishu card schema, see https://open.feishu.cn/cardkit).',
     inputSchema: {
       type: 'object',
       properties: {
         chat_id: { type: 'string', description: 'Target chat_id (oc_xxx) or open_id' },
         card: { description: 'Feishu card JSON. See https://open.feishu.cn/cardkit for the schema; build cards visually then paste the resulting JSON here.' },
-        via: { type: 'string', enum: ['bot', 'user'], description: 'Identity to send as. Default "bot". "user" returns an explicit not-yet-implemented error in v1.3.6.' },
       },
       required: ['chat_id', 'card'],
     },
@@ -292,12 +293,8 @@ const handlers = {
     return sendResult(r, `Post sent to ${args.chat_id}`);
   },
   async send_card_as_user(args, ctx) {
-    const via = args.via || 'bot';
-    if (via === 'user') {
-      return text('send_card_as_user via="user" is not implemented in v1.3.6 — user-identity card sending requires reverse-engineering the Feishu web protobuf and is scheduled for v1.3.7. Use via="bot" (default) for now.');
-    }
     const r = await ctx.getOfficialClient().sendMessageAsBot(args.chat_id, 'interactive', args.card);
-    return text(`Card sent (${via}): ${r.messageId}`);
+    return text(`Card sent (bot): ${r.messageId}`);
   },
 };
 

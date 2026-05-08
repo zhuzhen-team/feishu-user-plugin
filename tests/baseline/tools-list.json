@@ -1932,7 +1932,7 @@
   },
   {
     "name": "send_card_as_user",
-    "description": "[v1.3.6+: bot-routed default] Send an interactive card to a chat. **Identity defaults to BOT** because user-identity card sending requires reverse-engineering the Feishu web protobuf (deferred to v1.3.9; v1.3.8 shipped the capture/decode tooling). The tool name keeps the \"as_user\" suffix so callers don't have to migrate when v1.3.9 lands; once user-identity is implemented the default flips. Pass `card` as a JSON object (Feishu card schema). To force bot explicitly set via=\"bot\".",
+    "description": "[v1.3.9+: bot-only] Send an interactive Feishu card to a chat via bot identity (Official API). User-identity cookie protobuf path is server-side disabled at the auth tier — confirmed by exhaustive brute-force in v1.3.9, see scripts/explore-card-protobuf.js. The \"as_user\" suffix is historical naming kept for backward compat; the tool always routes through bot. Pass `card` as a JSON object (Feishu card schema, see https://open.feishu.cn/cardkit).",
     "inputSchema": {
       "properties": {
         "card": {
@@ -1940,14 +1940,6 @@
         },
         "chat_id": {
           "description": "Target chat_id (oc_xxx) or open_id",
-          "type": "string"
-        },
-        "via": {
-          "description": "Identity to send as. Default \"bot\". \"user\" returns an explicit not-yet-implemented error in v1.3.6.",
-          "enum": [
-            "bot",
-            "user"
-          ],
           "type": "string"
         }
       },
