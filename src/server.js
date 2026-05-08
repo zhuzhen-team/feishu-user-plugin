@@ -96,12 +96,19 @@ function getEventBuffer() {
 // from the persisted active profile (credentials.json) at boot, but in-process
 // switches may diverge from the persisted active until the next server restart.
 //
-// Profile selection precedence (v1.3.8 E.1):
-//   1. process.env.FEISHU_PLUGIN_PROFILE — harness pointer
-//   2. credentials.json::active — single-file persisted active
+// Profile selection precedence (v1.3.9 A.2 — SSOT):
+//   1. credentials.json::active — single-file persisted active (canonical SSOT)
+//   2. process.env.FEISHU_PLUGIN_PROFILE — harness pointer (bootstrap-only, when
+//      credentials.json does not exist)
 //   3. 'default' — legacy zero-config path
-let currentProfile = process.env.FEISHU_PLUGIN_PROFILE
-  || credentials.getActiveProfileName();
+// Note: FEISHU_PLUGIN_PROFILE in the harness env is now a bootstrap pointer only.
+// Once credentials.json exists, its `active` field is authoritative; cross-process
+// sync propagates active-profile changes without a server restart.
+let currentProfile = credentials.getActiveProfileName();
+if (!credentials.readCanonical() && process.env.FEISHU_PLUGIN_PROFILE) {
+  // Bootstrap-only: legacy env users without canonical credentials file.
+  currentProfile = process.env.FEISHU_PLUGIN_PROFILE;
+}
 
 function profileEnv(name) {
   return credentials.getActiveProfileEnv(name);
@@ -235,6 +242,37 @@ function _credMtime() {
   } catch (_) { return null; }
 }
 
+// Cross-process active-profile sync (v1.3.9 A.2).
+// Each tool call: stat credentials.json; if mtime changed AND active differs
+// from in-memory currentProfile, do an in-process setActiveProfile().
+// _credMtimeBaseline starts null — first call sets the baseline without syncing.
+let _credMtimeBaseline = null;
+
+function _syncActiveProfileFromDisk() {
+  const m = _credMtime();
+  if (m === null) return; // no credentials.json — nothing to sync
+  if (_credMtimeBaseline === null) { _credMtimeBaseline = m; return; }
+  if (m === _credMtimeBaseline) return; // unchanged
+  _credMtimeBaseline = m;
+  let newActive;
+  try { newActive = credentials.getActiveProfileName(); } catch (_) { return; }
+  if (newActive === currentProfile) return;
+  console.error(`[feishu-user-plugin] active profile changed on disk: ${currentProfile} → ${newActive}`);
+  // Use the same setActiveProfile flow that switch_profile uses, except don't
+  // re-write credentials.json (which it already reflects the change).
+  try {
+    credentials.getActiveProfileEnv(newActive); // validate profile exists
+    currentProfile = newActive;
+    userClient = null;
+    officialClient = null;
+    // resolver.js has a wiki-node resolution cache; clear it on profile switch
+    // so wiki nodes belonging to the previous app-id don't cross-contaminate.
+    require('./resolver').clearCache();
+  } catch (e) {
+    console.error(`[feishu-user-plugin] sync to "${newActive}" failed: ${e.message}; staying on "${currentProfile}"`);
+  }
+}
+
 async function _maybeReconfigure() {
   if (!ownerHandle || !wsServer) return;
   const newActive = credentials.getActiveProfileName();
@@ -299,9 +337,14 @@ function buildCtx() {
       currentProfile = n;
       userClient = null;
       officialClient = null;
+      // Clear resolver cache so wiki-node lookups don't carry over from the old profile.
+      require('./resolver').clearCache();
       // Persist the active-field flip when credentials.json exists so peer MCP
       // servers see the new active profile on next read. Tolerated when no file.
       try { credentials.setActiveProfile(n); } catch (_) {}
+      // Re-baseline mtime so _syncActiveProfileFromDisk doesn't immediately
+      // trigger a redundant sync on the next tool call after we just wrote.
+      _credMtimeBaseline = _credMtime();
     },
     resolveDocId,
     getWsServer: () => wsServer,
@@ -337,6 +380,9 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  // Cross-process active-profile sync (v1.3.9 A.2): if another MCP process
+  // wrote a new `active` field to credentials.json, pick it up before dispatch.
+  _syncActiveProfileFromDisk();
   const { name, arguments: args } = request.params;
   const handler = HANDLERS[name];
   if (!handler) {
@@ -393,9 +439,11 @@ async function main() {
 
   // Startup diagnostics — use the resolved active-profile env so users on
   // credentials.json (where process.env may not have LARK_*) get accurate flags.
-  // If FEISHU_PLUGIN_PROFILE was set, validate the name exists. If not, fail
-  // loud — silently falling back to "default" would mask a typo'd harness env.
-  if (process.env.FEISHU_PLUGIN_PROFILE) {
+  // Bootstrap-only validation: when credentials.json doesn't exist and
+  // FEISHU_PLUGIN_PROFILE is set, validate the name against known legacy profiles.
+  // If credentials.json exists, FEISHU_PLUGIN_PROFILE is ignored — the file's
+  // `active` field is the SSOT and cross-process sync keeps it up to date.
+  if (!credentials.readCanonical() && process.env.FEISHU_PLUGIN_PROFILE) {
     const known = credentials.listProfileNames();
     if (!known.includes(currentProfile)) {
       console.error(`[feishu-user-plugin] FATAL: FEISHU_PLUGIN_PROFILE="${currentProfile}" not found. Known: ${known.join(', ')}.`);
