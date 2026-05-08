@@ -328,4 +328,5 @@ main().catch(console.error).finally(() => {
     console.error('switch-profile-e2e: FAIL', e);
     process.exitCode = 1;
   });
+  require('./test-events-lockfile').run();
 });
