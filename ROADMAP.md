@@ -4,6 +4,11 @@
 
 ## v1.3.9 — 机器级 SSOT 完整化 + cookie protobuf 阶段一 + 小项收尾
 
+> **🔵 Brainstorm 已完成（2026-05-07）**——3 specs + 3 plans 已写完并 commit。
+> **新会话开始执行时先读** `docs/superpowers/v1.3.9-execution-status.md`（实施顺序、设计决策冻结点、不要重做的事）。
+> Specs: `docs/superpowers/specs/2026-05-07-v1.3.9-{machine-ssot,cookie-protobuf-phase2,small-items}.md`
+> Plans: `docs/superpowers/plans/2026-05-07-v1.3.9-{machine-ssot,cookie-protobuf-phase2,small-items}.md`
+
 ### A. 机器级 SSOT 完整化（v1.3.9 主线）
 
 v1.3.7/v1.3.8 已经把 cookie / UAT / app credentials / profileHints 收敛到 `~/.feishu-user-plugin/credentials.json`，这一版把剩下两个分散点也收敛 + 让"安装即机器级"成为默认路径：
