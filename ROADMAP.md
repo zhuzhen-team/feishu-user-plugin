@@ -2,26 +2,18 @@
 
 > 本文件只记**未来**计划。已发布版本的逐项变更见 [CHANGELOG.md](./CHANGELOG.md)。
 
-## v1.3.9 — cookie protobuf 阶段一 + 小项收尾
+## v1.3.10 待办
 
-> Specs: `docs/superpowers/specs/2026-05-07-v1.3.9-{cookie-protobuf-phase2,small-items}.md`
-> Plans: `docs/superpowers/plans/2026-05-07-v1.3.9-{cookie-protobuf-phase2,small-items}.md`
+### B.4 `send_card_as_user` 真·用户身份（v1.3.9 brute-force 失败，推后）
 
-### B. Cookie wire format 反向工程 — 阶段一
+v1.3.9 通过实测确认：cookie protobuf gateway 的 `cmd=5 type=14 (CARD)` 路径**完全无法穿透**——任何 Content 字段号 / 任何 wire type / 任何字段组合，服务端都回 "richText and card type need for card message"。验证发生在 Content parsing 之前，与 PutMessageRequest 的字段也无关。结论：要么 CARD 走完全不同的 cmd（不是 5），要么 cookie auth 层服务端禁用了用户身份发卡片。
 
-v1.3.8 已 ship 工具链：
+下一步**不**继续 brute-force。需要的反向工程动作：
+- 静态分析飞书 web 客户端 webpack bundle，定位 CARD 相关的 cmd / 请求构造函数
+- 在 Feishu Desktop 上挂 mitmproxy 抓桌面端用户身份发卡片的真实流量
+- 跟进 LarkAgentX / 类似项目是否解出 CARD 路径
 
-- `scripts/decode-feishu-protobuf.js` — 按 `proto/lark.proto` 解码 + 报告未知字段（带 round-trip 自测）
-- `scripts/capture-feishu-protobuf.js` — 每种类型的抓包 recipe + 批量 DECODE 命令
-- `docs/COOKIE-PROTOBUF-CAPTURES.md` — 流程文档 + 每类占位
-- 全套实施 plan 在 `docs/superpowers/plans/2026-05-05-v1.3.8-cookie-protobuf.md`
-
-v1.3.9 抓包目标（兑现 v1.3.7/v1.3.8 历史承诺）：
-
-- [ ] **B.1 `send_image_as_user`** — Playwright 录飞书 web 客户端发图时的 protobuf payload，对照补全 IMAGE 元数据（宽高 / MIME / 缩略图 / 原图大小）。**完成后必须更新 `src/clients/user.js::_sendMsg` 的 IMAGE 错误兜底**（把"deferred to v1.3.9"措辞清掉）
-- [ ] **B.4 `send_card_as_user` 真·用户身份** — 录卡片 protobuf，实现 type=14。**实现完成后必须删除 v1.3.6 的 bot-default 兜底**
-
-抓包步骤详见 `docs/COOKIE-PROTOBUF-CAPTURES.md`。
+`scripts/explore-card-protobuf.js` 留在仓库作为 brute-force 起点；下次会话直接基于 mitmproxy 流量在 Content 里加新字段。
 
 ## v1.3.9 ⇢ v1.3.10 过渡专项 — Growth / 推广 / 影响力
 
