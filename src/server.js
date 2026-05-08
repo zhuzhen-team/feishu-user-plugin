@@ -13,6 +13,8 @@
 //   - Config discovery / persistence: src/config/*.
 
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const { CallToolRequestSchema, ListToolsRequestSchema, ListPromptsRequestSchema, GetPromptRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
@@ -65,9 +67,28 @@ const HANDLERS = Object.fromEntries(TOOL_MODULES.flatMap((m) => Object.entries(m
 // When credentials.json exists, switching also persists the active field so
 // cross-process MCP servers see the same active profile after restart.
 
+const events = require('./events');
+
+const FEISHU_HOME = path.join(os.homedir(), '.feishu-user-plugin');
+const EVENTS_LOG_PATH = path.join(FEISHU_HOME, 'events.jsonl');
+
 let userClient = null;
 let officialClient = null;
 let wsServer = null;
+let ownerHandle = null;       // returned by tryClaim when isOwner
+let ownerHeartbeatTimer = null;
+let nonOwnerPollTimer = null;
+let _ownerStartCallbacks = [];
+
+function _onBecomeOwner(cb) { _ownerStartCallbacks.push(cb); }
+
+function _stopHeartbeat() {
+  if (ownerHeartbeatTimer) { clearInterval(ownerHeartbeatTimer); ownerHeartbeatTimer = null; }
+}
+function _stopNonOwnerPoll() {
+  if (nonOwnerPollTimer) { clearInterval(nonOwnerPollTimer); nonOwnerPollTimer = null; }
+}
+
 function getEventBuffer() {
   return wsServer ? wsServer.buffer : null;
 }
@@ -132,6 +153,126 @@ function loadUATFromEnv(client, env) {
   client._uat = token;
   client._uatRefresh = refresh || null;
   client._uatExpires = expires || client._decodeTokenExpiry(token);
+}
+
+// --- Owner control loop (v1.3.9 A.1) ---
+
+async function _claimAndStart() {
+  const claim = events.owner.tryClaim(FEISHU_HOME, { info: { role: 'ws_owner' } });
+  if (!claim.isOwner) {
+    // Become non-owner: poll lock health every 30s, attempt takeover when stale.
+    if (!nonOwnerPollTimer) {
+      nonOwnerPollTimer = setInterval(() => {
+        const info = events.owner.readOwnerInfo(FEISHU_HOME);
+        if (!info.exists || !info.alive) {
+          _claimAndStart().catch((e) => console.error(`[feishu-user-plugin] takeover attempt failed: ${e.message}`));
+        }
+      }, events.owner.TAKEOVER_POLL_INTERVAL_MS);
+      nonOwnerPollTimer.unref?.();
+    }
+    return;
+  }
+
+  ownerHandle = claim;
+  _stopNonOwnerPoll();
+  // Repair tail before WS starts pushing events
+  try { events.log.repairTail(EVENTS_LOG_PATH); } catch (_) {}
+
+  // Start WS with current active profile and its events list.
+  const profileName = currentProfile;
+  let activeEnv;
+  try { activeEnv = profileEnv(profileName); } catch (_) { return; }
+  if (!activeEnv.LARK_APP_ID || !activeEnv.LARK_APP_SECRET) return;
+
+  const eventsList = _getProfileEventsList(profileName);
+  wsServer = events.createWSServer({
+    appId: activeEnv.LARK_APP_ID,
+    appSecret: activeEnv.LARK_APP_SECRET,
+    registrations: eventsList,
+    logPath: EVENTS_LOG_PATH,
+    initialProfile: profileName,
+  });
+  wsServer.start().catch((e) => console.error(`[feishu-user-plugin] WS start error: ${e.message}`));
+
+  // Heartbeat + check active changes every 15s.
+  let lastCredMtime = _credMtime();
+  ownerHeartbeatTimer = setInterval(() => {
+    if (ownerHandle) ownerHandle.heartbeat();
+    const m = _credMtime();
+    if (m !== null && m !== lastCredMtime) {
+      lastCredMtime = m;
+      _maybeReconfigure().catch((e) => console.error(`[feishu-user-plugin] reconfigure failed: ${e.message}`));
+    }
+    // Defer-rotate check
+    try {
+      const snap = events.cursor.readSnapshot(FEISHU_HOME);
+      const SOFT_CAP = 10 * 1024 * 1024;
+      const HARD_CAP = 20 * 1024 * 1024;
+      const rot = events.log.maybeRotate(EVENTS_LOG_PATH, snap.cursor.offset, SOFT_CAP);
+      if (rot.rotated) {
+        events.cursor.resetCursorTo(FEISHU_HOME, 0);
+      } else if (snap.fileSize > HARD_CAP) {
+        events.log.forceRotate(EVENTS_LOG_PATH, snap.fileSize);
+        events.cursor.resetCursorTo(FEISHU_HOME, 0);
+      }
+      // Also clean up old .dropped files daily-ish (every heartbeat is cheap)
+      events.log.cleanupDropped(EVENTS_LOG_PATH, 7);
+    } catch (e) {
+      console.error(`[feishu-user-plugin] rotation check failed: ${e.message}`);
+    }
+  }, events.owner.HEARTBEAT_INTERVAL_MS);
+  ownerHeartbeatTimer.unref?.();
+
+  for (const cb of _ownerStartCallbacks) {
+    try { cb(); } catch (_) {}
+  }
+}
+
+function _credMtime() {
+  try {
+    const p = path.join(FEISHU_HOME, 'credentials.json');
+    return fs.statSync(p).mtimeMs;
+  } catch (_) { return null; }
+}
+
+async function _maybeReconfigure() {
+  if (!ownerHandle || !wsServer) return;
+  const newActive = credentials.getActiveProfileName();
+  const newEvents = _getProfileEventsList(newActive);
+  const status = wsServer.getStatus();
+  const sameProfile = status.wsProfile === newActive;
+  const sameEvents = JSON.stringify(status.subscribed_events) === JSON.stringify(newEvents);
+  if (sameProfile && sameEvents) return;
+
+  console.error(`[feishu-user-plugin] WS reconfigure: profile ${status.wsProfile}→${newActive}, events ${status.subscribed_events.length}→${newEvents.length}`);
+
+  // Tear down + rebuild because registrations are fixed at construction.
+  await wsServer.stop();
+  let activeEnv;
+  try { activeEnv = profileEnv(newActive); } catch (_) { return; }
+  if (!activeEnv.LARK_APP_ID || !activeEnv.LARK_APP_SECRET) return;
+  wsServer = events.createWSServer({
+    appId: activeEnv.LARK_APP_ID,
+    appSecret: activeEnv.LARK_APP_SECRET,
+    registrations: newEvents,
+    logPath: EVENTS_LOG_PATH,
+    initialProfile: newActive,
+  });
+  await wsServer.start();
+}
+
+function _getProfileEventsList(profileName) {
+  const canonical = credentials.readCanonical();
+  if (canonical && canonical.profiles[profileName]?.events) {
+    return canonical.profiles[profileName].events.slice();
+  }
+  // Bootstrap: env override
+  const env = process.env.FEISHU_PLUGIN_EXTRA_EVENTS;
+  if (env) {
+    const list = env.split(',').map(s => s.trim()).filter(Boolean);
+    if (list.length) return ['im.message.receive_v1', ...list];
+  }
+  return ['im.message.receive_v1'];
 }
 
 // Resolver helper: turn document_id / app_token / wiki node / Feishu URL into
@@ -211,8 +352,18 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
   console.error('[feishu-user-plugin] Unhandled rejection:', reason);
 });
-process.on('SIGTERM', () => { try { wsServer?.stop(); } catch {} process.exit(0); });
-process.on('SIGINT',  () => { try { wsServer?.stop(); } catch {} process.exit(0); });
+process.on('SIGTERM', () => {
+  _stopHeartbeat(); _stopNonOwnerPoll();
+  try { wsServer?.stop(); } catch {}
+  try { ownerHandle?.release(); } catch {}
+  process.exit(0);
+});
+process.on('SIGINT', () => {
+  _stopHeartbeat(); _stopNonOwnerPoll();
+  try { wsServer?.stop(); } catch {}
+  try { ownerHandle?.release(); } catch {}
+  process.exit(0);
+});
 
 // --- main ---
 
@@ -275,24 +426,15 @@ async function main() {
     }
   }
 
-  // --- Real-time events (v1.3.8 C.3) ---
-  // Boot WS only when APP_ID/SECRET are valid. WS uses app credentials
-  // (not UAT), so cookie-only setups don't get realtime.
+  // --- Real-time events (v1.3.9 — owner-arbitrated) ---
   if (hasApp) {
-    try {
-      const { createWSServer } = require('./events');
-      wsServer = createWSServer({
-        appId: activeEnv.LARK_APP_ID,
-        appSecret: activeEnv.LARK_APP_SECRET,
-        registrations: ['im.message.receive_v1'],
-      });
-      // Start asynchronously — don't block MCP serving on WS handshake.
-      wsServer.start().catch((e) => {
-        console.error(`[feishu-user-plugin] WS deferred start error: ${e.message}`);
-      });
-    } catch (e) {
-      console.error(`[feishu-user-plugin] WS init failed: ${e.message}. Continuing without realtime.`);
-    }
+    _claimAndStart().catch((e) => {
+      console.error(`[feishu-user-plugin] owner claim failed: ${e.message}; will retry every 30s`);
+      if (!nonOwnerPollTimer) {
+        nonOwnerPollTimer = setInterval(_claimAndStart, events.owner.TAKEOVER_POLL_INTERVAL_MS);
+        nonOwnerPollTimer.unref?.();
+      }
+    });
   } else {
     console.error('[feishu-user-plugin] WS not started — APP_ID/SECRET missing. Realtime events (get_new_events) will return empty.');
   }
