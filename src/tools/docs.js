@@ -235,16 +235,12 @@ function _normaliseEmbeds(md) {
   //    Convert to: ![](feishu://image_token/TOKEN)
   md = md.replace(/<img\s+src="([^"]+)"[^>]*\/?>/g, '![](feishu://image_token/$1)');
   // 8. File embed normalization.
-  //    feishu-docx parseFile (verified from dist/markdown_renderer.js) emits the file token
-  //    directly as the markdown link URL, e.g. [document.pdf](boxcnAbCdEfGhIj)
-  //    Feishu Drive file tokens always start with "box" (e.g. boxcnXXX, boxXXX).
-  //    This prefix excludes wiki/docx/bitable/sheet mention links that share the
-  //    [name](token) syntax but use wikcn/wikm/wikn/docx/doccn/bascn/sheet prefixes.
+  //    feishu-docx parseFile (verified from dist/markdown_renderer.js) emits the
+  //    file token directly as the markdown link URL: [document.pdf](boxcnAbCdEfGhIj)
+  //    Feishu Drive file tokens always start with "box" — anchoring on that
+  //    prefix excludes wiki/docx/bitable/sheet mention links that share the
+  //    [name](token) syntax (wikcn/wikm/wikn/docx/doccn/bascn/sheet prefixes).
   //    Convert to: [name](feishu://file_token/TOKEN)
-  // Convert [name](BARE_BOX_TOKEN) → [name](feishu://file_token/BARE_BOX_TOKEN)
-  // (parseFile in feishu-docx emits the file token directly; Feishu Drive file
-  // tokens always start with "box" — this prefix excludes wiki/docx/bitable
-  // mentions that share the [name](token) syntax but are not file downloads.)
   md = md.replace(/\[([^\]]+)\]\((box[a-zA-Z0-9_-]{8,})\)/g, '[$1](feishu://file_token/$2)');
   return md;
 }
