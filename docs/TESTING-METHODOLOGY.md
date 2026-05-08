@@ -166,6 +166,32 @@ After every release tag, exercise:
 Anything failing → check `~/.feishu-user-plugin/credentials.json`, then
 re-run `npx feishu-user-plugin status` to diagnose.
 
+## switch_profile e2e (v1.3.9 F.1)
+
+`src/test-switch-profile.js` validates that `switch_profile` correctly:
+
+1. Atomically updates `~/.feishu-user-plugin/credentials.json::active`.
+2. Invalidates the cached `userClient` / `officialClient` in the current process.
+3. Rebuilds clients with the new profile's credentials on next access.
+
+**The test temporarily modifies `~/.feishu-user-plugin/credentials.json`** — backup is
+automatic (restored in `try/finally`), but if the test crashes mid-run a
+`cred-backup-<ts>.json` will remain in `/tmp/`.
+
+**Before running:** stop any running MCP processes (`pkill -f feishu-user-plugin`) to
+avoid them reacting to credential mutations via the v1.3.9 A.2 cross-process sync
+mechanism.
+
+CI runs this test with no real Feishu credentials needed — uses dummy values (an `alt`
+profile with `LARK_APP_ID=cli_test_alt_xxxxxxxx`) that never hit the network.
+
+```bash
+node src/test-switch-profile.js
+# Expected stdout: switch-profile-e2e: PASS
+# Expected stderr: backup + restore notes
+# After run: ~/.feishu-user-plugin/credentials.json identical to before
+```
+
 ## See also
 
 - `docs/CREDENTIALS-FORMAT.md` — credentials.json schema.

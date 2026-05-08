@@ -11,6 +11,9 @@ D 系列首项 ship：新增 `read_doc_markdown` 工具，用 `feishu-docx` 把 
 ### Added
 - **`read_doc_markdown(document_id)` (D)**：返回 markdown 字符串而非结构化 JSON，省 ~60% token；依赖 `feishu-docx@^0.7.0`，后处理器 `_normaliseEmbeds` 位于 `src/tools/docs.js`。嵌入图片 / 文件以 `feishu://image_token/<TOKEN>` / `feishu://file_token/<TOKEN>` 占位符形式保留，配合 `download_doc_image` 取二进制内容。`document_id` 同样接受原生 token / wiki node token / 飞书 URL，分辨率逻辑与其它 doc 工具相同。
 
+### Test
+- **`switch_profile` 多 profile e2e (F.1)**：验证原子 credentials.json 更新 + 进程内 cache 失效。位于 `src/test-switch-profile.js`，CI-friendly（dummy 凭证不联网）。
+
 ### Test scenarios
 - 调用 `read_doc_markdown(<docx_token>)`，确认返回 markdown 字符串而非 JSON；HTML 标签如 `<b>` `<em>` 已被转成 `**` `*` 等价物
 - 包含 mention 链接 `[doc](wikcnXXX)` 的文档应保留原样，不被错判为 file token 占位符

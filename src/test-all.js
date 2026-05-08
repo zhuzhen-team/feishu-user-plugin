@@ -324,4 +324,8 @@ async function main() {
 main().catch(console.error).finally(() => {
   // Fixture-based unit test — runs regardless of credential availability
   require('./test-read-doc-markdown').run();
+  require('./test-switch-profile').run().catch(e => {
+    console.error('switch-profile-e2e: FAIL', e);
+    process.exitCode = 1;
+  });
 });

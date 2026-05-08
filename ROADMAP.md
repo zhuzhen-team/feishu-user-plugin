@@ -59,10 +59,6 @@ v1.3.9 抓包目标（兑现 v1.3.7/v1.3.8 历史承诺）：
 
 抓包步骤详见 `docs/COOKIE-PROTOBUF-CAPTURES.md`。
 
-### F. 测试残留
-
-- [ ] **`switch_profile` 多 profile 实测 e2e**：v1.3.8 之前 Plan-2-blocked，现 Plan 2 已 ship。tests/ 里写一个用 mock 第二 profile 的 e2e（临时改 `~/.feishu-user-plugin/credentials.json` 加 dummy alt）跑 setActiveProfile → cached client 失效 → 下次 tool call 重建 → cookie/UAT 命中新 profile
-
 ## v1.3.9 ⇢ v1.3.10 过渡专项 — Growth / 推广 / 影响力
 
 > v1.3.9 ship 后**立刻**执行，不再往后推。完成后展开成 `docs/superpowers/specs/2026-MM-DD-growth-launch.md` 单独 spec。
