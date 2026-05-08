@@ -49,6 +49,7 @@
     ".env.example",
     "CHANGELOG.md",
     "README.md",
+    "README.en.md",
     "LICENSE"
   ],
   "engines": {
