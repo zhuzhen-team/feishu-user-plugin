@@ -68,17 +68,23 @@ function maybeSave(savePath, base64) {
 const handlers = {
   async get_login_status(_args, ctx) {
     const parts = [];
+    parts.push(`Active profile: ${ctx.getActiveProfile()}  (available: ${ctx.listProfiles().join(', ')})`);
     try {
       const c = await ctx.getUserClient();
       const status = await c.checkSession();
       parts.push(`Cookie: ${status.valid ? 'Active' : 'Expired'} (${status.userName || status.userId || 'unknown'})`);
       parts.push(`  ${status.message}`);
     } catch (e) { parts.push(`Cookie: ${e.message}`); }
-    const hasApp = !!(process.env.LARK_APP_ID && process.env.LARK_APP_SECRET);
+    // v1.3.9: read APP creds via ctx (profile-aware), not process.env directly,
+    // so SSOT users (env pointer-only) don't see false "Not set" reports.
+    let official, hasApp = false;
+    try {
+      official = ctx.getOfficialClient();
+      hasApp = !!(official.appId && official.appSecret);
+    } catch (_) {}
     if (!hasApp) {
       parts.push(`App credentials: Not set`);
     } else {
-      const official = ctx.getOfficialClient();
       const probe = await official.verifyApp();
       if (probe.valid) {
         const nameBit = probe.appName ? ` "${probe.appName}"` : '';
@@ -87,7 +93,8 @@ const handlers = {
         parts.push(`App credentials: INVALID — app_id=${probe.appId} rejected by Feishu (${probe.error})`);
         parts.push(`  → Likely wrong/stale APP_ID. Re-run the install prompt from team-skills/plugins/feishu-user-plugin/README.md to get the correct credentials.`);
       }
-      if (official.hasUAT) {
+      // official.hasUAT (when available)
+      if (official && official.hasUAT) {
         try {
           await official.listChatsAsUser({ pageSize: 1 });
           parts.push('User access token: Valid (P2P/group UAT reading enabled)');

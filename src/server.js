@@ -340,8 +340,17 @@ function buildCtx() {
       // Clear resolver cache so wiki-node lookups don't carry over from the old profile.
       require('./resolver').clearCache();
       // Persist the active-field flip when credentials.json exists so peer MCP
-      // servers see the new active profile on next read. Tolerated when no file.
-      try { credentials.setActiveProfile(n); } catch (_) {}
+      // servers see the new active profile on next read. The credentials module
+      // throws if credentials.json doesn't exist OR if `n` isn't in profiles[];
+      // the first is benign (legacy mode), the second is a real bug — log it
+      // either way at warn level instead of swallowing silently.
+      try { credentials.setActiveProfile(n); }
+      catch (e) {
+        const cred = credentials.readCanonical();
+        if (cred) {
+          console.error(`[feishu-user-plugin] WARN: setActiveProfile("${n}") failed to persist to credentials.json: ${e.message}. In-memory currentProfile updated anyway, but other MCP processes won't see the switch.`);
+        }
+      }
       // Re-baseline mtime so _syncActiveProfileFromDisk doesn't immediately
       // trigger a redundant sync on the next tool call after we just wrote.
       _credMtimeBaseline = _credMtime();

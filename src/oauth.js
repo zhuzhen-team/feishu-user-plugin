@@ -14,9 +14,44 @@
 
 const http = require('http');
 const { execSync } = require('child_process');
-const { readCredentials, persistToConfig } = require('./config');
+const credentialsModule = require('./auth/credentials');
+const legacyConfig = require('./config');
 
-const creds = readCredentials();
+// v1.3.9: profile-aware. Accepts `--profile <name>` (defaults to credentials.json::active);
+// reads APP_ID/SECRET from that profile, persists UAT back to that profile.
+// When credentials.json doesn't exist, falls back to legacy harness env path
+// (which is what v1.3.6 → v1.3.8 did).
+function _parseTargetProfile() {
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--profile' && argv[i + 1]) return argv[++i];
+  }
+  return null;
+}
+
+const TARGET_PROFILE = _parseTargetProfile();
+const _hasCanonical = !!credentialsModule.readCanonical();
+let creds;
+let profileLabel;
+if (_hasCanonical) {
+  const targetName = TARGET_PROFILE || credentialsModule.getActiveProfileName();
+  try {
+    creds = credentialsModule.getActiveProfileEnv(targetName);
+    profileLabel = `credentials.json::profiles[${targetName}]`;
+  } catch (e) {
+    console.error(`OAuth target profile error: ${e.message}`);
+    console.error(`Available: ${credentialsModule.listProfileNames().join(', ')}`);
+    process.exit(1);
+  }
+  if (TARGET_PROFILE) console.log(`OAuth target profile: ${TARGET_PROFILE}`);
+} else {
+  if (TARGET_PROFILE) {
+    console.error(`--profile flag given but credentials.json doesn't exist. Run \`npx feishu-user-plugin migrate --confirm\` first, or remove --profile to use legacy env path.`);
+    process.exit(1);
+  }
+  creds = legacyConfig.readCredentials();
+  profileLabel = 'harness env (legacy)';
+}
 const APP_ID = creds.LARK_APP_ID;
 const APP_SECRET = creds.LARK_APP_SECRET;
 const PORT = 9997;
@@ -118,12 +153,18 @@ function saveToken(tokenData) {
     LARK_UAT_EXPIRES: String(Math.floor(Date.now() / 1000 + (typeof tokenData.expires_in === 'number' && tokenData.expires_in > 0 ? tokenData.expires_in : 7200))),
   };
 
-  const ok = persistToConfig(updates);
+  let ok = false;
+  if (_hasCanonical) {
+    const targetName = TARGET_PROFILE || credentialsModule.getActiveProfileName();
+    ok = credentialsModule.persistProfileUpdate(targetName, updates);
+    if (ok) console.log(`Tokens written to ${profileLabel}`);
+  } else {
+    ok = legacyConfig.persistToConfig(updates);
+    if (ok) console.log(`Tokens written to ${profileLabel}`);
+  }
   if (!ok) {
-    console.error('WARNING: Tokens could not be saved to config. Copy them manually:');
-    for (const [k, v] of Object.entries(updates)) {
-      console.error(`  ${k}=${v}`);
-    }
+    console.error('WARNING: Tokens could not be saved. Copy them manually:');
+    for (const [k, v] of Object.entries(updates)) console.error(`  ${k}=${v}`);
   }
 }
 

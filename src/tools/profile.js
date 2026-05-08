@@ -1,24 +1,29 @@
-// src/tools/profile.js — multi-account profile management (v1.3.6).
+// src/tools/profile.js — multi-account profile management.
 //
-// LARK_PROFILES_JSON env var registers extra credential sets; this module
-// exposes them via list_profiles + switch_profile so callers can hot-swap
-// between accounts/tenants without restarting the MCP server.
+// v1.3.9 SSOT: profiles live in ~/.feishu-user-plugin/credentials.json under
+// `profiles[]`. Switching writes `active` field; cross-process MCP picks it up
+// via dispatcher mtime hook (~10μs/call) within ms.
+//
+// Legacy LARK_PROFILES_JSON env still works as a back-compat fallback when
+// credentials.json doesn't exist. New profiles should be added via
+// `npx feishu-user-plugin setup --profile <name> --app-id ... --app-secret ... --cookie ...`,
+// then optionally `npx feishu-user-plugin oauth --profile <name>` for UAT.
 
 const { text, json } = require('./_registry');
 
 const schemas = [
   {
     name: 'list_profiles',
-    description: '[Plugin] List all available identity profiles (sets of LARK_COOKIE/APP_ID/APP_SECRET/UAT). The "default" profile uses the top-level env vars; additional profiles come from LARK_PROFILES_JSON. Marks the currently active profile.',
+    description: '[Plugin] List all available identity profiles (each profile has its own LARK_COOKIE / APP_ID / APP_SECRET / UAT). v1.3.9 SSOT: profiles live in ~/.feishu-user-plugin/credentials.json::profiles. Legacy fallback: LARK_PROFILES_JSON env var. Marks the currently active profile.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'switch_profile',
-    description: '[Plugin] Switch the active identity profile. Subsequent tool calls use the new profile\'s credentials. Cached client instances are reset so the next call rebuilds against the new creds.',
+    description: '[Plugin v1.3.9] Switch the active identity profile. Atomically writes credentials.json::active; cached clients in this process are invalidated; cross-process MCPs (Codex / another Claude Code) auto-sync via dispatcher mtime check on next tool call (~10μs). To add a new profile, run `npx feishu-user-plugin setup --profile <name> --app-id ... --app-secret ... --cookie ...` then `npx feishu-user-plugin oauth --profile <name>` for UAT.',
     inputSchema: {
       type: 'object',
       properties: {
-        name: { type: 'string', description: 'Profile name. "default" for top-level env vars; any key from LARK_PROFILES_JSON otherwise.' },
+        name: { type: 'string', description: 'Profile name. Use "default" for the primary profile; other names come from credentials.json or LARK_PROFILES_JSON.' },
       },
       required: ['name'],
     },

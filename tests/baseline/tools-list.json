@@ -1009,7 +1009,7 @@
   },
   {
     "name": "list_profiles",
-    "description": "[Plugin] List all available identity profiles (sets of LARK_COOKIE/APP_ID/APP_SECRET/UAT). The \"default\" profile uses the top-level env vars; additional profiles come from LARK_PROFILES_JSON. Marks the currently active profile.",
+    "description": "[Plugin] List all available identity profiles (each profile has its own LARK_COOKIE / APP_ID / APP_SECRET / UAT). v1.3.9 SSOT: profiles live in ~/.feishu-user-plugin/credentials.json::profiles. Legacy fallback: LARK_PROFILES_JSON env var. Marks the currently active profile.",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -2177,11 +2177,11 @@
   },
   {
     "name": "switch_profile",
-    "description": "[Plugin] Switch the active identity profile. Subsequent tool calls use the new profile's credentials. Cached client instances are reset so the next call rebuilds against the new creds.",
+    "description": "[Plugin v1.3.9] Switch the active identity profile. Atomically writes credentials.json::active; cached clients in this process are invalidated; cross-process MCPs (Codex / another Claude Code) auto-sync via dispatcher mtime check on next tool call (~10μs). To add a new profile, run `npx feishu-user-plugin setup --profile <name> --app-id ... --app-secret ... --cookie ...` then `npx feishu-user-plugin oauth --profile <name>` for UAT.",
     "inputSchema": {
       "properties": {
         "name": {
-          "description": "Profile name. \"default\" for top-level env vars; any key from LARK_PROFILES_JSON otherwise.",
+          "description": "Profile name. Use \"default\" for the primary profile; other names come from credentials.json or LARK_PROFILES_JSON.",
           "type": "string"
         }
       },
