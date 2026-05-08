@@ -177,6 +177,9 @@ const handlers = {
     }
 
     const blocks = result.items || result;
+    if (!blocks || !blocks.length) {
+      return text('read_doc_markdown: document has no blocks (empty or unpublished draft). Try read_doc for plain text.');
+    }
     const pageBlock = blocks.find(b => b.block_type === 1);
     const documentId = pageBlock ? pageBlock.block_id : blocks[0].block_id;
 
@@ -211,6 +214,9 @@ function _normaliseEmbeds(md) {
   //      <p>content...</p>
   //      </div>
   //    Strip the outer div + emoji div; prefix each non-empty inner line with "> ".
+  //    Note: nested callouts will partially leak as raw HTML — feishu-docx encloses
+  //    the inner block in its own div, and our non-greedy match may close on the
+  //    first </div>. Acceptable for v1.3.9; revisit if real docs exhibit this.
   md = md.replace(
     /<div class="callout[^"]*">\s*<div class=['"]callout-emoji['"][^<]*<\/div>\s*([\s\S]*?)\s*<\/div>/g,
     (match, inner) => {
@@ -218,8 +224,10 @@ function _normaliseEmbeds(md) {
       return stripped.split('\n').map(l => l.trim() ? '> ' + l : '').join('\n');
     },
   );
-  // 6. Decode common HTML entities (&lt; &gt; &amp; appear in doc body text)
-  md = md.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  // 6. Decode common HTML entities (&lt; &gt; &amp; appear in doc body text).
+  //    &amp; must be decoded first so that double-encoded sequences like &amp;lt;
+  //    are fully resolved (otherwise &amp; → & yields &lt; which stays escaped).
+  md = md.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
   // 7. Image URL normalization.
   //    feishu-docx parseImage (verified from dist/markdown_renderer.js) emits an HTML <img> tag
   //    with the image token as src, e.g. <img src="img_v3_02k0XXX"/> or
@@ -228,12 +236,16 @@ function _normaliseEmbeds(md) {
   md = md.replace(/<img\s+src="([^"]+)"[^>]*\/?>/g, '![](feishu://image_token/$1)');
   // 8. File embed normalization.
   //    feishu-docx parseFile (verified from dist/markdown_renderer.js) emits the file token
-  //    directly as the markdown link URL, e.g. [document.pdf](boxcnXXX)
-  //    Heuristic: match [name](URL) where URL is a pure alphanumeric/underscore/dash string of
-  //    length ≥10 (Feishu tokens are always longer; excludes real URLs which contain : / . etc.,
-  //    anchors which contain #, and short fragments).
+  //    directly as the markdown link URL, e.g. [document.pdf](boxcnAbCdEfGhIj)
+  //    Feishu Drive file tokens always start with "box" (e.g. boxcnXXX, boxXXX).
+  //    This prefix excludes wiki/docx/bitable/sheet mention links that share the
+  //    [name](token) syntax but use wikcn/wikm/wikn/docx/doccn/bascn/sheet prefixes.
   //    Convert to: [name](feishu://file_token/TOKEN)
-  md = md.replace(/\[([^\]]+)\]\(([a-zA-Z0-9_-]{10,})\)/g, '[$1](feishu://file_token/$2)');
+  // Convert [name](BARE_BOX_TOKEN) → [name](feishu://file_token/BARE_BOX_TOKEN)
+  // (parseFile in feishu-docx emits the file token directly; Feishu Drive file
+  // tokens always start with "box" — this prefix excludes wiki/docx/bitable
+  // mentions that share the [name](token) syntax but are not file downloads.)
+  md = md.replace(/\[([^\]]+)\]\((box[a-zA-Z0-9_-]{8,})\)/g, '[$1](feishu://file_token/$2)');
   return md;
 }
 
