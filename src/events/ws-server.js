@@ -1,61 +1,103 @@
-// src/events/ws-server.js — Feishu WebSocket subscription wrapper.
-//
-// Owns the WSClient + EventDispatcher pair. The MCP main() in server.js calls
-// startWS() at boot if APP_ID + APP_SECRET are configured; failures are
-// logged-and-tolerated (MCP keeps serving tool calls without realtime).
+// src/events/ws-server.js — rewritten for v1.3.9 owner-arbitrated mode.
 //
 // What this owns:
-//   - createWSServer(opts) → { buffer, start(), stop() } factory
-//   - Default event registrations (im.message.receive_v1)
-//   - Reconnect via SDK's built-in handling (WSClient does this internally)
+//   - createWSServer(opts) — factory for WS client + event dispatcher.
+//   - v1.3.9: In owner mode (logPath provided), events go to events.jsonl
+//     directly instead of the in-memory buffer.
+//   - Tracks wsState / wsProfile so downstream can filter dropped events.
 //
 // What it does NOT own:
-//   - The buffer's persistence — it's in-memory only.
-//   - Multi-profile fan-out — single WS per process, per active profile.
+//   - Owner-lock acquisition (src/events/owner.js).
+//   - Cursor protocol (src/events/cursor.js).
+
+'use strict';
 
 const lark = require('@larksuiteoapi/node-sdk');
 const { EventBuffer, DEFAULT_CAP } = require('./event-buffer');
 const { stderrLogger } = require('../logger');
+const { appendEvent } = require('./event-log');
 
-// Wrap an SDK event handler so the payload always lands in the buffer with
-// a stable shape. The SDK passes the raw event payload — we add metadata
-// for downstream filtering / display.
-function _bufferEventHandler(buffer, eventType) {
+// Build the handler that writes a normalised event row.
+// In v1.3.9 owner mode, we write to events.jsonl directly with a profile tag.
+// In legacy mode (no logPath given) we fall back to the in-memory buffer.
+function _eventRowHandler({ buffer, eventType, getProfile, getWsState, logPath }) {
   return async (data) => {
+    const wsState = getWsState();
+    if (wsState !== 'connected') {
+      // Drop events received during 'switching' / 'disconnected' — we don't
+      // know which profile they belong to.
+      return;
+    }
     const event = {
+      event_id: data?.event_id || data?.header?.event_id || 'evt_' + Math.random().toString(36).slice(2),
+      ts: Date.now(),
+      profile: getProfile(),
       event_type: eventType,
-      event_id: data?.event_id || data?.header?.event_id || null,
-      _received_at: Math.floor(Date.now() / 1000),
       header: data?.header || null,
       event: data?.event || data,
     };
-    buffer.push(event);
+    if (logPath) {
+      try {
+        appendEvent(logPath, event);
+      } catch (e) {
+        // Disk-full or similar — fall back to in-memory buffer.
+        console.error(`[feishu-user-plugin] events.jsonl append failed: ${e.message}; falling back to in-memory buffer`);
+        buffer.push(event);
+      }
+    } else {
+      buffer.push(event);
+    }
   };
 }
 
-function createWSServer({ appId, appSecret, bufferCap = DEFAULT_CAP, registrations = ['im.message.receive_v1'] } = {}) {
+function createWSServer({
+  appId, appSecret,
+  bufferCap = DEFAULT_CAP,
+  registrations = ['im.message.receive_v1'],
+  logPath = null,                 // NEW: when set, events go to events.jsonl
+  initialProfile = 'default',     // NEW: profile name to tag events with
+} = {}) {
   if (!appId || !appSecret) throw new Error('createWSServer: appId + appSecret required');
 
   const buffer = new EventBuffer({ cap: bufferCap });
   let wsClient = null;
   let started = false;
   let stopped = false;
+  let wsProfile = initialProfile;
+  let wsState = 'disconnected';   // disconnected | connected | switching
+  let lastReconnectAt = null;
+  let reconnectAttempts = 0;
 
   const dispatcher = new lark.EventDispatcher({
     logger: stderrLogger,
     loggerLevel: lark.LoggerLevel.warn,
   });
 
-  // Register handlers for each requested event type.
   const handlers = {};
   for (const t of registrations) {
-    handlers[t] = _bufferEventHandler(buffer, t);
+    handlers[t] = _eventRowHandler({
+      buffer, eventType: t,
+      getProfile: () => wsProfile,
+      getWsState: () => wsState,
+      logPath,
+    });
   }
-  dispatcher.register(handlers);
+  try {
+    dispatcher.register(handlers);
+  } catch (e) {
+    console.error(`[feishu-user-plugin] WS event registration failed: ${e.message}; falling back to im.message.receive_v1 only`);
+    dispatcher.register({
+      'im.message.receive_v1': _eventRowHandler({
+        buffer, eventType: 'im.message.receive_v1',
+        getProfile: () => wsProfile, getWsState: () => wsState, logPath,
+      }),
+    });
+  }
 
   async function start() {
     if (started) return;
     started = true;
+    wsState = 'switching';
     wsClient = new lark.WSClient({
       appId, appSecret,
       logger: stderrLogger,
@@ -63,24 +105,52 @@ function createWSServer({ appId, appSecret, bufferCap = DEFAULT_CAP, registratio
     });
     try {
       await wsClient.start({ eventDispatcher: dispatcher });
-      console.error(`[feishu-user-plugin] WS connected — listening for: ${registrations.join(', ')}`);
+      wsState = 'connected';
+      lastReconnectAt = Date.now();
+      console.error(`[feishu-user-plugin] WS connected (profile=${wsProfile}) — listening for: ${registrations.join(', ')}`);
     } catch (e) {
+      wsState = 'disconnected';
+      reconnectAttempts++;
       console.error(`[feishu-user-plugin] WS start failed: ${e.message}. Continuing without realtime events.`);
       started = false;
       wsClient = null;
     }
   }
 
-  function stop() {
+  async function stop() {
     if (stopped) return;
     stopped = true;
+    wsState = 'disconnected';
     if (wsClient) {
-      try { wsClient.close(); } catch (e) { console.error(`[feishu-user-plugin] WS close error: ${e.message}`); }
+      try { wsClient.close(); } catch (_) {}
       wsClient = null;
     }
   }
 
-  return { buffer, start, stop, get isRunning() { return started && !stopped; } };
+  // For switching: stop, then start with a new profile/registrations.
+  // The registrations list is currently fixed at construction; full switching
+  // requires re-creating the WSClient. This helper just stops + nulls so the
+  // caller can construct a new server.
+  async function reconfigureProfile(newProfile) {
+    wsState = 'switching';
+    wsProfile = 'switching';   // tag-irrelevant during transition
+    await stop();
+    started = false; stopped = false;
+    wsProfile = newProfile;
+    await start();
+  }
+
+  function getStatus() {
+    return {
+      state: wsState,
+      wsProfile,
+      subscribed_events: registrations.slice(),
+      lastReconnectAt,
+      reconnectAttempts,
+    };
+  }
+
+  return { buffer, start, stop, reconfigureProfile, getStatus, get isRunning() { return started && !stopped; } };
 }
 
 module.exports = { createWSServer };
