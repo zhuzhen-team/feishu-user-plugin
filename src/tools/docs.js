@@ -220,14 +220,20 @@ function _normaliseEmbeds(md) {
   );
   // 6. Decode common HTML entities (&lt; &gt; &amp; appear in doc body text)
   md = md.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-  // 7. Image URL normalization (UNVERIFIED — fixture has no image blocks; regex is best-effort).
-  //    feishu-docx likely emits: ![alt](/image/TOKEN) or ![alt](image/TOKEN)
-  //    Normalize to:            ![alt](feishu://image_token/TOKEN)
-  md = md.replace(/!\[([^\]]*)\]\(\/?image\/([a-zA-Z0-9_-]+)\)/g, '![$1](feishu://image_token/$2)');
-  // 8. File embed normalization (UNVERIFIED — no file blocks in fixture).
-  //    feishu-docx likely emits: [name](/file/TOKEN) or [name](file/TOKEN)
-  //    Normalize to:             [name](feishu://file_token/TOKEN)
-  md = md.replace(/\[([^\]]*)\]\(\/?file\/([a-zA-Z0-9_-]+)\)/g, '[$1](feishu://file_token/$2)');
+  // 7. Image URL normalization.
+  //    feishu-docx parseImage (verified from dist/markdown_renderer.js) emits an HTML <img> tag
+  //    with the image token as src, e.g. <img src="img_v3_02k0XXX"/> or
+  //    <img src="img_v3_02k0XXX" src-width="800" src-height="600" align="center"/>
+  //    Convert to: ![](feishu://image_token/TOKEN)
+  md = md.replace(/<img\s+src="([^"]+)"[^>]*\/?>/g, '![](feishu://image_token/$1)');
+  // 8. File embed normalization.
+  //    feishu-docx parseFile (verified from dist/markdown_renderer.js) emits the file token
+  //    directly as the markdown link URL, e.g. [document.pdf](boxcnXXX)
+  //    Heuristic: match [name](URL) where URL is a pure alphanumeric/underscore/dash string of
+  //    length ≥10 (Feishu tokens are always longer; excludes real URLs which contain : / . etc.,
+  //    anchors which contain #, and short fragments).
+  //    Convert to: [name](feishu://file_token/TOKEN)
+  md = md.replace(/\[([^\]]+)\]\(([a-zA-Z0-9_-]{10,})\)/g, '[$1](feishu://file_token/$2)');
   return md;
 }
 
