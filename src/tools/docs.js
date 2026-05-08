@@ -1,8 +1,8 @@
 // src/tools/docs.js — Feishu document operations.
 //
-// 5 tools (was 7 in v1.3.6): search_docs, read_doc, get_doc_blocks, create_doc,
-// and the consolidated manage_doc_block (action=create|update|delete) which
-// replaces the v1.3.6 trio create_doc_block / update_doc_block / delete_doc_blocks.
+// 6 tools (was 7 in v1.3.6): search_docs, read_doc, get_doc_blocks, create_doc,
+// manage_doc_block (action=create|update|delete, replaces the v1.3.6 trio
+// create_doc_block / update_doc_block / delete_doc_blocks), and read_doc_markdown.
 
 const { text, json } = require('./_registry');
 
@@ -71,6 +71,17 @@ const schemas = [
         update_body: { type: 'object', description: 'Generic update payload for action=update. E.g. {update_text_elements:{elements:[{text_run:{content:"new text"}}]}}.' },
       },
       required: ['action', 'document_id'],
+    },
+  },
+  {
+    name: 'read_doc_markdown',
+    description: '[Plugin v1.3.9] Read a Feishu doc as Markdown (vs get_doc_blocks JSON). Saves ~60% tokens for RAG / digest / summarisation use cases. Accepts native docx token, wiki node token, or full Feishu URL. Embedded images / files appear as feishu://image_token/<TOKEN> placeholders — call download_doc_image for the binary if needed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        document_id: { type: 'string', description: 'docx token / wiki node / full URL' },
+      },
+      required: ['document_id'],
     },
   },
 ];
@@ -153,6 +164,71 @@ const handlers = {
       }
     }
   },
+  async read_doc_markdown(args, ctx) {
+    const docId = await ctx.resolveDocId(args.document_id);
+    const result = await ctx.getOfficialClient().getDocBlocks(docId);
+
+    // Lazy-load feishu-docx (so environments without the dep don't crash on startup)
+    let MarkdownRenderer;
+    try {
+      ({ MarkdownRenderer } = require('feishu-docx'));
+    } catch (e) {
+      return text('read_doc_markdown: feishu-docx package not installed. Run: npm install feishu-docx@^0.7.0');
+    }
+
+    const blocks = result.items || result;
+    const pageBlock = blocks.find(b => b.block_type === 1);
+    const documentId = pageBlock ? pageBlock.block_id : blocks[0].block_id;
+
+    let md;
+    try {
+      const renderer = new MarkdownRenderer({ document: { document_id: documentId }, blocks });
+      md = renderer.parse();
+    } catch (e) {
+      return text(`read_doc_markdown: feishu-docx render failed — ${e.message}. Try get_doc_blocks for raw JSON fallback. (feishu-docx version may need upgrading)`);
+    }
+
+    return text(_normaliseEmbeds(md));
+  },
 };
+
+// Post-processor applied to feishu-docx output before returning to the caller.
+// Converts inline HTML tags emitted by feishu-docx to Markdown equivalents,
+// converts callout <div> wrappers to > blockquotes, decodes HTML entities, and
+// normalises embedded image/file URLs to feishu:// scheme placeholders.
+function _normaliseEmbeds(md) {
+  // 1. Inline bold: <b>...</b> → **...**
+  md = md.replace(/<b>([\s\S]*?)<\/b>/g, '**$1**');
+  // 2. Inline italic: <em>...</em> → *...*
+  md = md.replace(/<em>([\s\S]*?)<\/em>/g, '*$1*');
+  // 3. Inline strikethrough: <del>...</del> → ~~...~~
+  md = md.replace(/<del>([\s\S]*?)<\/del>/g, '~~$1~~');
+  // 4. Inline underline: <u>...</u> → strip tags, keep inner text (no native Markdown underline)
+  md = md.replace(/<u>([\s\S]*?)<\/u>/g, '$1');
+  // 5. Callout divs → > blockquote. feishu-docx emits:
+  //      <div class="callout callout-bg-N callout-border-N">
+  //      <div class='callout-emoji'>EMOJI</div>
+  //      <p>content...</p>
+  //      </div>
+  //    Strip the outer div + emoji div; prefix each non-empty inner line with "> ".
+  md = md.replace(
+    /<div class="callout[^"]*">\s*<div class=['"]callout-emoji['"][^<]*<\/div>\s*([\s\S]*?)\s*<\/div>/g,
+    (match, inner) => {
+      const stripped = inner.replace(/<\/?[^>]+>/g, '');
+      return stripped.split('\n').map(l => l.trim() ? '> ' + l : '').join('\n');
+    },
+  );
+  // 6. Decode common HTML entities (&lt; &gt; &amp; appear in doc body text)
+  md = md.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  // 7. Image URL normalization (UNVERIFIED — fixture has no image blocks; regex is best-effort).
+  //    feishu-docx likely emits: ![alt](/image/TOKEN) or ![alt](image/TOKEN)
+  //    Normalize to:            ![alt](feishu://image_token/TOKEN)
+  md = md.replace(/!\[([^\]]*)\]\(\/?image\/([a-zA-Z0-9_-]+)\)/g, '![$1](feishu://image_token/$2)');
+  // 8. File embed normalization (UNVERIFIED — no file blocks in fixture).
+  //    feishu-docx likely emits: [name](/file/TOKEN) or [name](file/TOKEN)
+  //    Normalize to:             [name](feishu://file_token/TOKEN)
+  md = md.replace(/\[([^\]]*)\]\(\/?file\/([a-zA-Z0-9_-]+)\)/g, '[$1](feishu://file_token/$2)');
+  return md;
+}
 
 module.exports = { schemas, handlers };
