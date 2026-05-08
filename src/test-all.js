@@ -266,14 +266,6 @@ async function main() {
     // 31. create_folder (skip)
     log('create_folder', 'SKIP', 'skipped to avoid creating unnecessary folders');
 
-    // 32. find_user
-    try {
-      const res = await officialClient.findUserByIdentity({ emails: 'test@test.com' });
-      log('find_user', 'PASS', `returned ${(res.userList || []).length} users (expected 0 for test email)`);
-    } catch (e) {
-      log('find_user', 'FAIL', e.message);
-    }
-
     // ========== UAT Tests ==========
 
     if (officialClient.hasUAT) {

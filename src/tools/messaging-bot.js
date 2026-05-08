@@ -1,7 +1,6 @@
 // src/tools/messaging-bot.js — Bot-identity messaging operations (send, reply,
-// forward, delete, update, pin, reactions). send_card_as_user is intentionally
-// kept inline in src/index.js until v1.3.7's user-identity card path lands; it
-// will move to src/tools/messaging-user.js together with that work.
+// forward, delete, update, pin, reactions). send_card_as_user lives in
+// messaging-user.js (historical naming) but routes through bot — see that file.
 
 const { text, json } = require('./_registry');
 

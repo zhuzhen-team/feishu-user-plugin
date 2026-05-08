@@ -4,17 +4,6 @@
 
 ## v1.3.10 待办
 
-### B.4 `send_card_as_user` 真·用户身份（v1.3.9 brute-force 失败，推后）
-
-v1.3.9 通过实测确认：cookie protobuf gateway 的 `cmd=5 type=14 (CARD)` 路径**完全无法穿透**——任何 Content 字段号 / 任何 wire type / 任何字段组合，服务端都回 "richText and card type need for card message"。验证发生在 Content parsing 之前，与 PutMessageRequest 的字段也无关。结论：要么 CARD 走完全不同的 cmd（不是 5），要么 cookie auth 层服务端禁用了用户身份发卡片。
-
-下一步**不**继续 brute-force。需要的反向工程动作：
-- 静态分析飞书 web 客户端 webpack bundle，定位 CARD 相关的 cmd / 请求构造函数
-- 在 Feishu Desktop 上挂 mitmproxy 抓桌面端用户身份发卡片的真实流量
-- 跟进 LarkAgentX / 类似项目是否解出 CARD 路径
-
-`scripts/explore-card-protobuf.js` 留在仓库作为 brute-force 起点；下次会话直接基于 mitmproxy 流量在 Content 里加新字段。
-
 ## v1.3.9 ⇢ v1.3.10 过渡专项 — Growth / 推广 / 影响力
 
 > v1.3.9 ship 后**立刻**执行，不再往后推。完成后展开成 `docs/superpowers/specs/2026-MM-DD-growth-launch.md` 单独 spec。
