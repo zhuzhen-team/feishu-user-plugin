@@ -24,6 +24,7 @@ Activate when the user mentions:
 - Feishu tables ("查飞书表格", "query Bitable")
 - Feishu wiki ("搜飞书知识库", "search wiki")
 - Login status ("飞书登录状态", "check Feishu login")
+- **Multi-account** ("加一个飞书账号", "切换到 work 账号", "add another Feishu account", "switch to my work account") — see Multi-Account Workflow below
 
 ## 9 Built-in Skills
 
@@ -97,8 +98,79 @@ Then restart Claude Code.
 3. Copy the App ID and App Secret to your `.mcp.json`
 4. Add the bot to any group chats you want to read
 
+## Multi-Account Workflow (v1.3.9+)
+
+The plugin supports multiple Feishu organization accounts via named profiles
+in `~/.feishu-user-plugin/credentials.json`. Each profile has its own
+COOKIE / APP_ID / APP_SECRET / UAT.
+
+### When the user says "add another Feishu account" / "加一个飞书账号"
+
+Drive this end-to-end via the Bash tool — DO NOT just print commands and
+ask the user to type them. Specifically:
+
+**1. Confirm what's needed**, then collect:
+- Profile name (default suggestion: `work2`, `personal`, etc.; let user pick)
+- The new account's APP_ID and APP_SECRET (user must register a Custom App
+  on https://open.feishu.cn/app for that account's tenant — the existing
+  app from the default profile WON'T work for a different tenant)
+- The new account's COOKIE — drive Playwright MCP to extract it (see
+  "Getting Your Cookie" above; note the **clear cookies first** caveat
+  to avoid stale-account contamination)
+
+**2. Run setup (no `--activate` — keep current account active so user
+isn't yanked off mid-session):**
+```bash
+npx feishu-user-plugin setup --profile <name> --app-id <X2> --app-secret <S2> --cookie <C2>
+```
+
+**3. Run OAuth for the new profile** (this opens a browser tab; user must
+click "授权" in the consent page — that part is unavoidable):
+```bash
+npx feishu-user-plugin oauth --profile <name>
+```
+After consent, UAT is written to `credentials.json::profiles[<name>]`.
+
+**4. Confirm via list_profiles MCP tool** — should now see both `default`
+and `<name>`, with `default` still active.
+
+**5. Tell the user how to switch later** — call `switch_profile(name="<name>")`
+MCP tool from Claude Code; cross-process MCP processes auto-sync within ms
+via dispatcher mtime hook.
+
+### When the user says "switch to <profile>" / "切到 work 账号"
+
+Just call `switch_profile(name="<profile>")` MCP tool. Don't run any CLI
+command. Cached clients reset; next tool call uses the new account.
+
+If the named profile doesn't exist, list_profiles first to show the user
+their actual profile names, then ask which they meant.
+
+### When the user says "show all my Feishu accounts" / "我有几个飞书账号"
+
+Call `list_profiles` MCP tool. Show the active marker.
+
+### Optional cron for keepalive (multi-profile)
+
+If the user has multiple profiles with UAT, suggest:
+```bash
+crontab -e   # add this line:
+0 */4 * * * npx feishu-user-plugin keepalive --all >> /tmp/feishu-keepalive.log 2>&1
+```
+The `--all` flag iterates every profile in credentials.json (without it,
+only the active profile gets refreshed — sufficient for single-account
+users but multi-account users will see other profiles' UATs expire).
+
 ## Known Limitations
 
 - Image/file sending requires uploading via Official API first to get keys
-- CARD message type (type=14) not yet supported
-- Cookie session valid for ~12h, auto-refreshed via built-in heartbeat (4h interval)
+  (`upload_image` → `send_image_as_user(image_key=...)`).
+- `send_card_as_user` always routes through bot identity. User-identity
+  (cookie protobuf) card sending was confirmed server-side disabled in
+  v1.3.9 (exhaustive brute-force).
+- Cookie session valid for ~12h; auto-refreshed via built-in heartbeat
+  (4h interval). UAT valid 2h, refresh_token valid 7 days; run `keepalive`
+  cron weekly to prevent refresh_token expiration.
+- "Seamless" auto-switch tied to which account is active in Feishu Desktop
+  is **not yet implemented** (designed for v1.3.10; see ROADMAP). For now,
+  call `switch_profile` MCP tool when you want to flip.
