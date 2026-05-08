@@ -327,6 +327,39 @@ function migrate({ dryRun = true } = {}) {
   return { ok: true, credentials };
 }
 
+// --- Per-profile events list (v1.3.9 A.4) ---
+//
+// Each profile may optionally declare an `events` array listing the Feishu
+// real-time event types to subscribe to. When absent the default
+// `["im.message.receive_v1"]` is used. This array is read by
+// `_getProfileEventsList` in server.js to configure the WebSocket client.
+//
+// Example credentials.json profile entry with events:
+//   "default": {
+//     "LARK_APP_ID": "...",
+//     ...,
+//     "events": ["im.message.receive_v1", "approval.instance.created_v4"]
+//   }
+
+function getProfileEvents(name) {
+  const f = _readFile();
+  const target = name || (f ? f.active : 'default');
+  if (f && f.profiles[target] && Array.isArray(f.profiles[target].events)) {
+    return f.profiles[target].events.slice();
+  }
+  return ['im.message.receive_v1'];
+}
+
+function setProfileEvents(name, eventList) {
+  if (!Array.isArray(eventList)) throw new Error('setProfileEvents: eventList must be an array');
+  const f = _readFile();
+  if (!f) throw new Error('No credentials.json — cannot set profile events.');
+  if (!f.profiles[name]) throw new Error(`Profile "${name}" not found.`);
+  f.profiles[name].events = eventList.slice();
+  _atomicWriteJson(_credentialsPath(), f);
+  return true;
+}
+
 // --- Profile hints (v1.3.8) ---
 //
 // profileHints maps resourceKey → profileName, persisted in credentials.json.
@@ -383,6 +416,9 @@ module.exports = {
   setActiveProfile,
   persistProfileUpdate,
   migrate,
+  // per-profile events list (v1.3.9 A.4)
+  getProfileEvents,
+  setProfileEvents,
   // profile hints (v1.3.8)
   getProfileHints,
   setProfileHint,

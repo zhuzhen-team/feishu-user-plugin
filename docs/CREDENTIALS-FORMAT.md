@@ -44,10 +44,12 @@ Mode `0600` (owner read/write only). The directory `~/.feishu-user-plugin/` is c
 |-------|------|---------|
 | `version` | integer | Schema version. Currently `1`. |
 | `active` | string | Name of the profile to use when no override is given. Must be a key in `profiles`. |
-| `profiles` | object | Map of `<profileName> → envBlock`. Each env block holds the same `LARK_*` keys today's MCP server reads from `process.env`. |
-| `profileHints` | object | Reserved for v1.3.9 multi-profile auto-switch. Map of `<resourceKey> → <profileName>`. v1.3.7 only initializes `{}`. |
+| `profiles` | object | Map of `<profileName> → profileBlock`. Each profile block holds the same `LARK_*` keys the MCP server reads from `process.env`, plus the optional `events` array. |
+| `profileHints` | object | Multi-profile auto-switch cache. Map of `<resourceKey> → <profileName>`. Populated automatically by the auto-switch middleware. |
 
-### Env block keys (per profile)
+### Profile block keys
+
+#### `LARK_*` env keys
 
 | Key | Required for | Notes |
 |-----|--------------|-------|
@@ -57,6 +59,31 @@ Mode `0600` (owner read/write only). The directory `~/.feishu-user-plugin/` is c
 | `LARK_USER_ACCESS_TOKEN` | P2P chat reading + UAT-first writes | OAuth access token. |
 | `LARK_USER_REFRESH_TOKEN` | UAT auto-refresh | OAuth refresh token. |
 | `LARK_UAT_EXPIRES` | UAT lifecycle | Unix epoch (seconds). Optional — decoded from token if absent. |
+
+#### `events` array (optional, v1.3.9)
+
+```json
+"events": ["im.message.receive_v1", "approval.instance.created_v4"]
+```
+
+List of Feishu real-time event types the WebSocket client subscribes to for this profile.
+
+- **Default** (when absent or empty): `["im.message.receive_v1"]`
+- Managed by `getProfileEvents(name)` / `setProfileEvents(name, list)` in `src/auth/credentials.js`.
+- The owner MCP process reads this list at WS start and on `_maybeReconfigure()` to decide whether to restart the WebSocket client.
+- Supported event types are those exposed by the Feishu WS SDK. Adding an unsupported type is a no-op for the SDK but wastes a subscription slot.
+
+Example — add approval events to the default profile:
+
+```bash
+node -e '
+const c = require("./src/auth/credentials");
+c.setProfileEvents("default", ["im.message.receive_v1", "approval.instance.created_v4"]);
+console.log(c.getProfileEvents("default"));
+'
+```
+
+After editing, either restart the MCP server or call `manage_ws_status(action=reconfig)` to apply.
 
 ## Invariants
 
