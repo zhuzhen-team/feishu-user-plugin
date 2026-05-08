@@ -6,9 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [1.3.9] - 2026-05-08
 
-D 系列首项 ship：新增 `read_doc_markdown` 工具，用 `feishu-docx` 把 docx blocks 转换为 markdown 字符串输出，替代 `get_doc_blocks` 的结构化 JSON，给 RAG / digest / 摘要类调用省 ~60% token（实测 216 KB JSON vs 90 KB markdown）。
+D 系列首项 ship：新增 `read_doc_markdown` 工具，用 `feishu-docx` 把 docx blocks 转换为 markdown 字符串输出，替代 `get_doc_blocks` 的结构化 JSON，给 RAG / digest / 摘要类调用省 ~60% token（实测 216 KB JSON vs 90 KB markdown）。A 系列主线 ship：WS 机器级 SSOT + active profile 跨进程同步 + setup CLI 4 行决策矩阵 + per-profile events 字段。工具数 83 → 84。
 
 ### Added
+- **`manage_ws_status(action=info|reconnect|claim|rotate|reconfig)` (A.1)**：5-action 工具，`info` 给 owner / WS / log / cursor / config 状态 dump；`reconnect` / `rotate` / `reconfig` 是 owner-only；`claim` 接管 stale lock，`force=true` 强夺活跃 owner。`rotate` 触发 `events.jsonl` → `events.jsonl.old` 轮转。`reconfig` 重读 `credentials.json::profiles[active].events` 并重新注册事件类型，无需重启。
+- **WS 机器级 SSOT (A.1)**：单 owner 进程持 `~/.feishu-user-plugin/ws-owner.lock`（O_CREAT|O_EXCL，30 s stale），事件写 `events.jsonl`（append-only，10 MB soft / 20 MB hard cap，超限 rotate 成 `.old`），全局共享 `events.cursor.json` 保护以 cursor-specific lock 避免并发 drain 重读。多 harness 同事件不再重复；owner 死亡 / 锁过期后下一个 MCP 进程自动接管，event log 不丢。
+- **Active profile 跨进程同步 (A.2)**：dispatcher 入口 stat `credentials.json` mtime；变化时重新读 `active`，与 in-memory `currentProfile` 不同即触发 `setActiveProfile`（invalidate `userClient` / `officialClient` 缓存）。成本 ~10μs/call（macOS stat）。`FEISHU_PLUGIN_PROFILE` env 退化为 bootstrap-only；`credentials.json::active` 为唯一跨进程权威来源。
+- **setup CLI 4 行决策矩阵 (A.3)**：非交互模式自动判断 `fresh` / `auto-migrate` / `preserve` / `update` 四种路径；新增 `--force` flag 强制重写 + `--profile <name>` 指定目标 profile。`credentials.json` 已存在时默认 `--pointer-only`；首次安装自动 migrate，harness env 只写 `FEISHU_PLUGIN_PROFILE=default`，消除多 harness token diverge。
+- **per-profile events 字段 (A.4)**：`credentials.json::profiles[*].events` 可选数组，缺省 `["im.message.receive_v1"]`；支持 `approval.instance.created_v4` / `calendar.calendar.event.changed_v4` 等。编辑后调 `manage_ws_status(action=reconfig)` 立即生效，不需重启。`FEISHU_PLUGIN_EXTRA_EVENTS` env 仅在首次 bootstrap 时写入，不覆盖已有字段。
 - **`read_doc_markdown(document_id)` (D)**：返回 markdown 字符串而非结构化 JSON，省 ~60% token；依赖 `feishu-docx@^0.7.0`，后处理器 `_normaliseEmbeds` 位于 `src/tools/docs.js`。嵌入图片 / 文件以 `feishu://image_token/<TOKEN>` / `feishu://file_token/<TOKEN>` 占位符形式保留，配合 `download_doc_image` 取二进制内容。`document_id` 同样接受原生 token / wiki node token / 飞书 URL，分辨率逻辑与其它 doc 工具相同。
 
 ### Test
@@ -17,6 +22,8 @@ D 系列首项 ship：新增 `read_doc_markdown` 工具，用 `feishu-docx` 把 
 ### Test scenarios
 - 调用 `read_doc_markdown(<docx_token>)`，确认返回 markdown 字符串而非 JSON；HTML 标签如 `<b>` `<em>` 已被转成 `**` `*` 等价物
 - 包含 mention 链接 `[doc](wikcnXXX)` 的文档应保留原样，不被错判为 file token 占位符
+- 启动 MCP 看 stderr 是否出现 `WS connected (profile=default)`；`~/.feishu-user-plugin/ws-owner.lock` 应存在
+- 多 MCP 进程同时跑 → 仅一个看 `WS connected`，其它静默 → `manage_ws_status(action=info)` 看 `is_owner` 字段
 
 ## [1.3.8] - 2026-05-05
 

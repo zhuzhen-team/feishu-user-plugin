@@ -21,7 +21,7 @@ The only MCP server that lets you send messages as your **personal identity** (n
 - **Calendar & Tasks** -- Create events, check free/busy, manage tasks.
 - **9 slash commands** for Claude Code -- `/send`, `/reply`, `/search`, `/digest`, `/doc`, `/table`, `/wiki`, `/drive`, `/status`
 - **Auto session management** -- Cookie heartbeat every 4h, UAT auto-refresh with token rotation.
-- **Real-time events** (v1.3.8) -- `get_new_events` drains an in-memory queue of incoming Feishu messages — react to replies / group activity within seconds without polling. WS connection auto-starts on boot.
+- **Real-time events** (v1.3.9) -- Machine-level WS: one owner process writes to `~/.feishu-user-plugin/events.jsonl`, all harnesses drain from a shared cursor — every event delivered exactly once across all MCP processes. `manage_ws_status` to diagnose/control. WS auto-starts on boot.
 - **Multi-platform** -- Claude Code, Cursor, Windsurf, VS Code, OpenClaw.
 
 ## Why This Exists

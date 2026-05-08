@@ -24,7 +24,7 @@ The 9 Claude Code skills are also exposed as MCP prompts (`prompts/list` + `prom
 
 Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUMENTS` convention used by Claude Code skills). `status` has no arguments.
 
-## Tool Categories (83 tools)
+## Tool Categories (84 tools)
 
 Per-tool descriptions live in each tool's MCP `inputSchema.description`. This section lists names + cross-domain caveats only.
 
@@ -112,13 +112,14 @@ Per-tool descriptions live in each tool's MCP `inputSchema.description`. This se
 - `switch_profile` invalidates cached client instances; next call rebuilds against the new profile. Multi-profile registered via `LARK_PROFILES_JSON` env or `credentials.json` profiles map.
 - `manage_profile_hints(action=list|set|clear, resource_key?, profile?)` (v1.3.8) inspects / edits the resourceKey → profile cache the auto-switch middleware uses. No-op when credentials.json doesn't exist.
 
-### Plugin — Realtime Events (1 tool, v1.3.8)
-`get_new_events`
+### Plugin — Realtime Events (2 tools, v1.3.9)
+`get_new_events` / `manage_ws_status`
 
-- WS connection started at MCP boot when APP_ID + APP_SECRET are configured. Connects to feishu.cn — Lark international not supported.
-- Buffer cap 1000 events; oldest dropped. Drain semantics: consumers see each event once.
-- Currently emits `im.message.receive_v1` only. Future: approval / calendar / docs comments behind config flag.
-- Filter by `event_type` / `event_types` / `chat_id` / `since_seconds`. `peek=true` keeps events in buffer.
+- **v1.3.9 machine-level**: a single MCP process per machine owns the WS via `~/.feishu-user-plugin/ws-owner.lock`. Events written to `~/.feishu-user-plugin/events.jsonl` (append-only, 10 MB soft / 20 MB hard cap). All harnesses read through a shared `events.cursor.json` — **every event delivered exactly once across all MCP processes**, no more duplicates.
+- WS connection started at MCP boot when APP_ID + APP_SECRET configured. Connects to feishu.cn — Lark international not supported.
+- Default subscriptions = `["im.message.receive_v1"]`. Edit `credentials.json::profiles[<active>].events` to add others (`approval.instance.created_v4`, `calendar.calendar.event.changed_v4`, etc.); call `manage_ws_status(action=reconfig)` to apply without restart.
+- `get_new_events` filter by `event_type` / `event_types` / `chat_id` / `since_seconds` / `profile`. `peek=true` keeps cursor unchanged. **Default `profile` filter = current active**.
+- `manage_ws_status(action=info|reconnect|claim|rotate|reconfig)` — diagnose / control the WS owner. `claim --force` steals an active lock; `rotate` forces events.jsonl rotation.
 
 ## Usage Patterns
 
@@ -178,6 +179,8 @@ For users with ≥2 profiles in `~/.feishu-user-plugin/credentials.json`. Read-o
 
 Override per call with `via_profile: "<name>"` to pin, or `via_profile: "auto"` to allow auto-switch on a write. Hints persist in `credentials.json::profileHints` and are inspectable via `manage_profile_hints`.
 
+v1.3.9: `FEISHU_PLUGIN_PROFILE` env is bootstrap-only — `credentials.json::active` is authoritative once the file exists. Cross-process sync via dispatcher mtime check (~10μs/call).
+
 ### Multi-profile registration
 For more profiles beyond the default, set `LARK_PROFILES_JSON` in the MCP env (or use `credentials.json` profiles map):
 ```json
@@ -191,6 +194,9 @@ For more profiles beyond the default, set `LARK_PROFILES_JSON` in the MCP env (o
 - Cookie expiry: sl_session has 12h max-age, auto-refreshed by heartbeat every 4h.
 - UAT expiry: 2h, auto-refreshed via refresh_token.
 - Refresh token expiry: 7 days. Use `keepalive` cron to prevent expiration.
+- `~/.feishu-user-plugin/ws-owner.lock`: lock file owned by the one MCP process driving the WS connection (O_CREAT|O_EXCL, 30 s stale).
+- `~/.feishu-user-plugin/events.jsonl`: append-only event log written by the WS owner; 10 MB soft / 20 MB hard cap then rotated to `events.jsonl.old`.
+- `~/.feishu-user-plugin/events.cursor.json`: global drain cursor shared across all MCP processes — advancing it marks events as consumed for all harnesses on the machine.
 
 ### Credentials store (v1.3.7+)
 Single source of truth at `~/.feishu-user-plugin/credentials.json` (mode 0600). Schema documented at `docs/CREDENTIALS-FORMAT.md`. The MCP server reads from this file when present; cookie heartbeat and UAT refresh persist back to it atomically. Multiple harnesses (Claude Code, Codex) sharing the same file see token rotations consistently — no more "Codex still has the old UAT" drift after a refresh in Claude Code.
@@ -290,6 +296,8 @@ v1.3.5+ hardening means the "6 MCP processes racing on UAT refresh and burning t
 ### Multiple / duplicate MCP server processes
 Codex + Claude Code both can respawn the server per tool session without cleanup; 6 concurrent processes isn't unusual. v1.3.5 neutralises the damage (file lock above) but stale processes still hold memory. **Manual cleanup when you notice**: `pkill -f 'feishu-user-plugin/src/index.js'`. Also: a team-skills plugin must NOT ship `.mcp.json` — if both `~/.claude.json` and team-skills register the same MCP, you get duplicates; delete `.mcp.json` from the team-skills plugin dir.
 
+v1.3.9: events are now machine-level; each event delivered exactly once across all MCP processes. Old per-process duplicates issue resolved.
+
 ### `create_*` tool warns "UAT failed, created as BOT"
 UAT is failing (expired / scope missing / race), so the plugin fell back to bot. Resource is now owned by the shared bot, tenant-readable. **Fix**: `npx feishu-user-plugin oauth`, restart, delete the bot-owned copy and recreate.
 
@@ -305,7 +313,7 @@ Expected — Feishu API only returns groups. P2P flow: `search_contacts` → `cr
   - Lark international tenant (lark.com) — not supported by Feishu's WSClient. No fix; use polling tools (`read_messages`) instead.
   - Network restriction — corporate proxy blocking outbound WSS.
 - **Bot not in the chat where the message was sent**: `im.message.receive_v1` only fires for chats the bot is a member of. Add the bot to the chat to receive events.
-- **Multiple MCP processes**: Each process has its own WS, so events are duplicated. De-dupe on `event_id` in your consumer.
+- **Multiple MCP processes**: v1.3.9: events are now machine-level; each event delivered exactly once across all MCP processes. Old per-process duplicates issue resolved.
 
 ## Architecture
 
