@@ -331,4 +331,5 @@ main().catch(console.error).finally(() => {
   require('./test-events-lockfile').run();
   require('./test-events-log').run();
   require('./test-events-cursor').run();
+  require('./test-events-owner').run();
 });
