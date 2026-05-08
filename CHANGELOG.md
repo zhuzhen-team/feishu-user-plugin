@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.9] - 2026-05-08
+
+D 系列首项 ship：新增 `read_doc_markdown` 工具，用 `feishu-docx` 把 docx blocks 转换为 markdown 字符串输出，替代 `get_doc_blocks` 的结构化 JSON，给 RAG / digest / 摘要类调用省 ~60% token（实测 216 KB JSON vs 90 KB markdown）。
+
+### Added
+- **`read_doc_markdown(document_id)` (D)**：返回 markdown 字符串而非结构化 JSON，省 ~60% token；依赖 `feishu-docx@^0.7.0`，后处理器 `_normaliseEmbeds` 位于 `src/tools/docs.js`。嵌入图片 / 文件以 `feishu://image_token/<TOKEN>` / `feishu://file_token/<TOKEN>` 占位符形式保留，配合 `download_doc_image` 取二进制内容。`document_id` 同样接受原生 token / wiki node token / 飞书 URL，分辨率逻辑与其它 doc 工具相同。
+
+### Test scenarios
+- 调用 `read_doc_markdown(<docx_token>)`，确认返回 markdown 字符串而非 JSON；HTML 标签如 `<b>` `<em>` 已被转成 `**` `*` 等价物
+- 包含 mention 链接 `[doc](wikcnXXX)` 的文档应保留原样，不被错判为 file token 占位符
+
 ## [1.3.8] - 2026-05-05
 
 本次更新主线是多 profile 自动切换和 WebSocket 实时事件两块新能力，同时把 v1.3.7 推迟的 auth 模块拆分和凭证 pointer-only 模式补齐，并加固 CI 闸门（server.json 自动重生、SKILL.md allowed-tools 与 TOOLS 1:1 校验、CHANGELOG section 校验、文档三方同步校验）。工具数 80 → 82。

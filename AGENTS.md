@@ -24,7 +24,7 @@ The 9 Claude Code skills are also exposed as MCP prompts (`prompts/list` + `prom
 
 Each prompt accepts a single `arguments` free-form string (mirroring the `$ARGUMENTS` convention used by Claude Code skills). `status` has no arguments.
 
-## Tool Categories (82 tools)
+## Tool Categories (83 tools)
 
 Per-tool descriptions live in each tool's MCP `inputSchema.description`. This section lists names + cross-domain caveats only.
 
@@ -56,9 +56,10 @@ Per-tool descriptions live in each tool's MCP `inputSchema.description`. This se
 - `manage_members` requires `member_id_type` to match the IDs you pass (`open_id` default; pass `union_id`/`user_id` explicitly to avoid 9499).
 - `download_message_resource(kind=image|file)` MUST pass `save_path` when payload > 2 MiB (Anthropic 5 MB inline cap). For `merge_forward` children use `parentMessageId`, not child id.
 
-### Official API — Docs (5 tools)
-`search_docs` / `read_doc` / `get_doc_blocks` / `create_doc` / `manage_doc_block` / `download_doc_image`
+### Official API — Docs (7 tools)
+`search_docs` / `read_doc` / `read_doc_markdown` / `get_doc_blocks` / `create_doc` / `manage_doc_block` / `download_doc_image`
 
+- `read_doc_markdown` returns a markdown string instead of structured JSON — saves ~60% tokens for RAG / digest / summarisation. Embedded images / files surface as `feishu://image_token/<TOKEN>` / `feishu://file_token/<TOKEN>` placeholders; pair with `download_doc_image` for binaries. `document_id` accepts native token / wiki node / Feishu URL same as the others.
 - `manage_doc_block(action=create)` has image (`image_path`/`image_token`) and file (`file_path`/`file_token`) shortcuts; FILE blocks (block_type=23) are auto-wrapped in VIEW container (block_type=33), plugin walks into the inner file block before `replace_file` PATCH.
 - `download_doc_image` same 2 MiB cap as `download_message_resource`.
 - All `document_id` / `app_token` accept native token / wiki node token / full Feishu URL (resolved via `getWikiNode`, 10 min cache).

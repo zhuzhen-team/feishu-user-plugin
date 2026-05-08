@@ -59,10 +59,6 @@ v1.3.9 抓包目标（兑现 v1.3.7/v1.3.8 历史承诺）：
 
 抓包步骤详见 `docs/COOKIE-PROTOBUF-CAPTURES.md`。
 
-### D. Token 优化：`read_doc_markdown` 工具
-
-- [ ] 新增 `read_doc_markdown(document_id)`：用 `feishu-docx` 把 docx blocks 转 markdown 返回。`get_doc_blocks` 对结构化场景仍保留；`read_doc_markdown` 给 RAG / digest 类用例省 2-3x token（实测 216 KB JSON vs 90 KB markdown）。需评估 `feishu-docx` 是否支持飞书最新 block types
-
 ### F. 测试残留
 
 - [ ] **`switch_profile` 多 profile 实测 e2e**：v1.3.8 之前 Plan-2-blocked，现 Plan 2 已 ship。tests/ 里写一个用 mock 第二 profile 的 e2e（临时改 `~/.feishu-user-plugin/credentials.json` 加 dummy alt）跑 setActiveProfile → cached client 失效 → 下次 tool call 重建 → cookie/UAT 命中新 profile
