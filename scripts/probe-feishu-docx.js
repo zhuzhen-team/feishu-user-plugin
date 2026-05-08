@@ -4,7 +4,7 @@
 // and emit a coverage report — what blocks appeared, what got rendered.
 //
 // Usage:
-//   node scripts/probe-feishu-docx.js <docx_token | URL>
+//   node scripts/probe-feishu-docx.js <docx_token>
 //
 // feishu-docx API shape (v0.7.0):
 //   new MarkdownRenderer({ document: { document_id }, blocks: [...] })
@@ -18,6 +18,7 @@
 'use strict';
 
 const fs   = require('fs');
+const os   = require('os');
 const path = require('path');
 
 const { LarkOfficialClient } = require('../src/clients/official');
@@ -60,7 +61,7 @@ const BLOCK_LABELS = {
 (async () => {
   const rawDocId = process.argv[2];
   if (!rawDocId) {
-    console.error('Usage: node scripts/probe-feishu-docx.js <docx_token | URL>');
+    console.error('Usage: node scripts/probe-feishu-docx.js <docx_token>');
     process.exit(2);
   }
 
@@ -71,8 +72,8 @@ const BLOCK_LABELS = {
   let env = credentials.getActiveProfileEnv();
   if (!env.LARK_APP_ID) {
     try {
-      const claudeCfg = JSON.parse(require('fs').readFileSync(
-        require('path').join(require('os').homedir(), '.claude.json'), 'utf8'));
+      const claudeCfg = JSON.parse(fs.readFileSync(
+        path.join(os.homedir(), '.claude.json'), 'utf8'));
       const srv = (claudeCfg.mcpServers || {})['feishu-user-plugin'];
       if (srv && srv.env) env = { ...srv.env };
     } catch (_) {}
@@ -82,9 +83,17 @@ const BLOCK_LABELS = {
     process.exit(1);
   }
   const c = new LarkOfficialClient(env.LARK_APP_ID, env.LARK_APP_SECRET);
-  if (env.LARK_USER_ACCESS_TOKEN) c.loadUAT(env.LARK_USER_ACCESS_TOKEN);
+  // loadUAT() reads process.env directly — propagate if we got tokens from
+  // the .claude.json fallback path, where process.env is not populated.
+  for (const k of ['LARK_USER_ACCESS_TOKEN', 'LARK_USER_REFRESH_TOKEN']) {
+    if (env[k] && !process.env[k]) process.env[k] = env[k];
+  }
+  if (env.LARK_USER_ACCESS_TOKEN) c.loadUAT();
 
   // --- Fetch blocks ---
+  // NOTE: getDocBlocks fetches up to 500 blocks (no pagination). Docs longer
+  // than that produce a truncated fixture / undercount. Out of scope for this
+  // one-shot probe.
   let blocks;
   try {
     const result = await c.getDocBlocks(rawDocId);
