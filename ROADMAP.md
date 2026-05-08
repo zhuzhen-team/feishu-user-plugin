@@ -4,6 +4,36 @@
 
 ## v1.3.10 待办
 
+### A. Lark Desktop 多账号联动 — "无感切换" 主题
+
+**用户需求（确认 2026-05-08）**：用户在 Feishu Desktop 切到账号 B → MCP 自动跟着用账号 B 凭证，不需要任何 CLI 命令、不需要 MCP 工具调用。
+
+**已经摸过的事实（v1.3.9 ship 前 spike）**：
+- macOS Lark 数据目录：`~/Library/Containers/com.bytedance.macos.feishu/Data/Library/Application Support/LarkShell/sdk_storage/`
+- 一个 `<hash>/` 子目录 = 一个登录过的账号
+- 每个 hash 下有 `cookie_store.db` —— **加密 SQLite**（非标准格式，root 有 `db-newkey-mark` 标记，看起来 Lark 自己的 keyed encryption）
+- 解密 key 大概率在 macOS Keychain，反向工程 + 维护脆弱
+
+**v1.3.10 实施方案**（不解密 cookies，用 mtime 触发）：
+
+1. **schema 扩展**：`credentials.json::profiles[*]` 加可选 `larkHash` 字段（用户人肉绑定一次：哪个 profile 对应哪个 Lark 账号目录）
+2. **setup CLI 自动检测**：第一次 setup 时扫 `sdk_storage/` 找最近 mtime 的 hash 自动绑到当前 profile；多账号场景下打印检测到的 hash 列表让用户选
+3. **MCP 监控**：owner heartbeat 每 15s `stat sdk_storage/*/cookie_store.db`，发现有 hash 的 mtime > 当前 active profile 的 larkHash mtime → 查 credentials.json 找哪个 profile 绑定了这个 hash → 自动 `setActiveProfile()` 触发跨进程同步（A.2 路径）
+4. **Cookie 仍由用户提供**：MCP 不读 Lark 加密 cookie；只用 mtime 信号决定切换。每次切换后用 credentials.json 里那个 profile 自己存的 cookie + UAT
+5. **未绑定 hash 的处理**：用户在 Lark 切到没绑过的账号 → MCP stderr 提示 "detected new Lark account hash <X>, run `setup --profile <name> --bind-hash <X>` to associate"
+
+**风险 / 边界**：
+- 用户 cookie 还是会过期（Lark Desktop 登录刷新不会自动同步过来）—— 用户需定期重抓 cookie 或用 keepalive cron
+- Linux / Windows Lark 桌面端的目录结构可能不同（v1.3.10 优先 macOS，其它平台后续）
+- Lark 升级版本可能改 sdk_storage 路径或加密格式 —— 用 try/catch + 回退手动模式
+
+**dependencies**：无（用 fs.statSync 即可）
+
+**predicted scope**：~1-1.5 天单独 PR
+
+### B. 其它 v1.3.10 主线
+（保留位置 — md→wiki 同步、search_messages、config 拆分、OpenClaw 等仍按原 plan）
+
 ## v1.3.9 ⇢ v1.3.10 过渡专项 — Growth / 推广 / 影响力
 
 > v1.3.9 ship 后**立刻**执行，不再往后推。完成后展开成 `docs/superpowers/specs/2026-MM-DD-growth-launch.md` 单独 spec。
