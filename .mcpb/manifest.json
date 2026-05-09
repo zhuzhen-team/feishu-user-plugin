@@ -1,0 +1,91 @@
+{
+  "manifest_version": "0.3",
+  "name": "feishu-user-plugin",
+  "display_name": "Feishu MCP for Claude Code & Codex",
+  "version": "1.3.10",
+  "description": "All-in-one Feishu MCP server for Claude Code & Codex — 84 tools across 3 auth layers (cookie / app / OAuth). Send as you, read groups, manage docs / bitable / wiki / drive / calendar / tasks / OKR.",
+  "long_description": "feishu-user-plugin is a local stdio MCP server that bridges Feishu / Lark and any MCP client (Claude Code, Codex, Cursor, Windsurf, OpenClaw, Claude Desktop). It exposes 84 tools across three auth layers: cookie + protobuf for sending messages as the real user (a capability not available through the official bot API), Feishu Open Platform app credentials for groups / docs / bitable / wiki / drive / calendar / tasks / OKR, and user OAuth (UAT) for P2P chat reading and user-owned resource creation.",
+  "author": {
+    "name": "EthanQC",
+    "url": "https://github.com/EthanQC"
+  },
+  "homepage": "https://ethanqc.github.io/feishu-user-plugin/",
+  "documentation": "https://github.com/EthanQC/feishu-user-plugin/blob/main/README.md",
+  "support": "https://github.com/EthanQC/feishu-user-plugin/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/EthanQC/feishu-user-plugin.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "feishu",
+    "lark",
+    "claude-code",
+    "codex",
+    "mcp",
+    "model-context-protocol",
+    "im",
+    "messaging",
+    "protobuf"
+  ],
+  "privacy_policies": [
+    "https://github.com/EthanQC/feishu-user-plugin/blob/main/PRIVACY.md"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "src/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/src/index.js"],
+      "env": {
+        "LARK_COOKIE": "${user_config.lark_cookie}",
+        "LARK_APP_ID": "${user_config.lark_app_id}",
+        "LARK_APP_SECRET": "${user_config.lark_app_secret}",
+        "LARK_USER_ACCESS_TOKEN": "${user_config.lark_user_access_token}",
+        "LARK_USER_REFRESH_TOKEN": "${user_config.lark_user_refresh_token}"
+      }
+    }
+  },
+  "user_config": {
+    "lark_cookie": {
+      "type": "string",
+      "title": "LARK_COOKIE",
+      "description": "Feishu web cookie (from feishu.cn DevTools → Network → request headers Cookie). Required for user-identity messaging tools.",
+      "required": false,
+      "sensitive": true
+    },
+    "lark_app_id": {
+      "type": "string",
+      "title": "LARK_APP_ID",
+      "description": "Feishu self-built app ID (cli_xxx). Required for Official API tools (group reads, docs, bitable, wiki, drive, calendar, tasks, OKR).",
+      "required": false,
+      "sensitive": true
+    },
+    "lark_app_secret": {
+      "type": "string",
+      "title": "LARK_APP_SECRET",
+      "description": "Feishu self-built app secret. Pairs with LARK_APP_ID.",
+      "required": false,
+      "sensitive": true
+    },
+    "lark_user_access_token": {
+      "type": "string",
+      "title": "LARK_USER_ACCESS_TOKEN",
+      "description": "User OAuth UAT (run `npx feishu-user-plugin oauth` to obtain). Required for P2P chat reading and user-owned resource creation.",
+      "required": false,
+      "sensitive": true
+    },
+    "lark_user_refresh_token": {
+      "type": "string",
+      "title": "LARK_USER_REFRESH_TOKEN",
+      "description": "User OAuth refresh token. Pairs with LARK_USER_ACCESS_TOKEN; auto-rotates the UAT on expiry.",
+      "required": false,
+      "sensitive": true
+    }
+  },
+  "compatibility": {
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

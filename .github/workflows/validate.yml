@@ -12,6 +12,7 @@ jobs:
       - run: npm ci
       - run: node scripts/check-version.js
       - run: node scripts/check-mcp-registry-version.js
+      - run: node scripts/check-mcpb-version.js
       - run: node scripts/check-tool-count.js
       - run: node scripts/sync-server-json.js check
       - name: AGENTS.md is in sync with CLAUDE.md

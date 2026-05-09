@@ -46,12 +46,14 @@
     "scripts/",
     ".claude-plugin/",
     ".cursor-plugin/",
+    ".mcpb/",
     "skills/",
     ".mcp.json.example",
     ".env.example",
     "CHANGELOG.md",
     "README.md",
     "README.en.md",
+    "PRIVACY.md",
     "LICENSE"
   ],
   "engines": {
