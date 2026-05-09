@@ -2,7 +2,7 @@
 
 **目标平台**：https://open.feishu.cn/community（开发者社区 Q&A 区）+ https://www.feishu.cn/community（飞行家 / 内容中心，正式投稿）
 **长度**：~600-800 字
-**状态**：📄 Draft —— 等用户 `发`
+**状态**：📄 草稿 —— 等用户说 `发`
 
 ---
 

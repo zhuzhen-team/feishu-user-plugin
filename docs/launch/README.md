@@ -1,64 +1,69 @@
-# Launch Materials — feishu-user-plugin v1.3.9 Growth Track
+# Launch Materials
 
-This directory contains drafts and submission templates for the v1.3.9 → v1.3.10 Growth lever (see [`ROADMAP.md`](../../ROADMAP.md) "v1.3.9 ⇢ v1.3.10 过渡专项 — Growth / 推广 / 影响力").
+v1.3.10 Growth track 的全部 launch 草稿与提交模板。**没有任何文件会自动外发** —— 中文社区 / 国际平台的内容都需要你审完说"发"再上线。
 
-## Status legend
+## 目录结构
 
-- 📄 **Draft ready** — content written, awaiting user `发` to publish externally
-- 🚀 **Submission-ready** — PR / form fields prepared, awaiting user push
-- ⏸ **Blocked** — needs additional repo work first (e.g. `.mcpb` packaging, Privacy Policy)
+```
+docs/launch/
+├── zh/              # 中文社区 / 平台（用中文写）
+│   ├── juejin.md            掘金主稿（实战流程角度，3500-5000 字）
+│   ├── zhihu-column.md      知乎专栏文章（与掘金 ≥30% 重写）
+│   ├── zhihu-answers.md     知乎答题目标清单 + 模板
+│   ├── v2ex.md              V2EX 自荐贴（短，周五上午发）
+│   ├── feishu-community.md  飞书开放平台开发者社区 投稿
+│   ├── hellogithub.md       HelloGitHub 月刊自荐
+│   └── ruanyifeng-weekly.md 阮一峰科技爱好者周刊 issue 自荐
+├── en/              # International platforms (English)
+│   └── x-thread.md          X (Twitter) 4-tweet long thread
+└── submissions/     # MCP discovery channel submission templates
+    ├── awesome-mcp-servers.md   punkpeye/awesome-mcp-servers PR 收录材料
+    ├── mcp-registry.md          Official MCP Registry 提交记录（v1.3.10 已 publish）
+    ├── anthropic-directory.md   Anthropic Connectors Directory（v1.4 推迟，阻塞清单）
+    └── cursor-marketplace.md    Cursor Marketplace（v1.4 推迟，阻塞清单）
+```
 
-## Index
+## 已完成的（v1.3.10 这次 ship 的部分）
 
-### MCP discovery channels (Tier 1 — official ecosystems)
-
-| File | Channel | Status | Mechanism |
-|---|---|---|---|
-| [`awesome-mcp-servers-pr.md`](awesome-mcp-servers-pr.md) | `punkpeye/awesome-mcp-servers` (86k★ curated list) | 🚀 PR-ready | Fork + GitHub PR |
-| [`mcp-registry-submission.md`](mcp-registry-submission.md) | Official MCP Registry (`registry.modelcontextprotocol.io`) | 🚀 Materials ready, user runs CLI | `mcp-publisher` CLI + GitHub OAuth device flow |
-| [`anthropic-directory-prep.md`](anthropic-directory-prep.md) | Anthropic Connectors Directory (`claude.com/docs/connectors`) | ⏸ Blocked on `.mcpb` + Privacy Policy | Web form, planned for v1.4 |
-| [`cursor-marketplace-prep.md`](cursor-marketplace-prep.md) | Cursor Marketplace | ⏸ Blocked on `.cursor-plugin/plugin.json` manifest | Form + repo manifest, planned for v1.4 |
-
-### Chinese dev community (Tier 2 — content-driven)
-
-| File | Platform | Status | Format |
-|---|---|---|---|
-| [`juejin-article.md`](juejin-article.md) | 掘金 (juejin.cn) | 📄 Draft | 3500-5000 字技术文章, 实战流程角度 |
-| [`zhihu-article.md`](zhihu-article.md) | 知乎 (zhihu.com) | 📄 Draft | 2500+ 字专栏文章, 30%+ rewrite vs 掘金 to avoid duplicate-content penalty |
-| [`zhihu-questions-to-answer.md`](zhihu-questions-to-answer.md) | 知乎 高赞问题答题 | 📋 Target list | 6+ 已存量高赞问题清单 + 答题大纲 |
-| [`v2ex-post.md`](v2ex-post.md) | V2EX `/go/create` + `/go/share` | 📄 Draft | ~600 字短帖, 周五上午发 |
-| [`feishu-community-post.md`](feishu-community-post.md) | 飞书开放平台开发者社区 | 📄 Draft | 软帖 / 求技术反馈姿态 |
-| [`hellogithub-submission.md`](hellogithub-submission.md) | HelloGitHub 月刊 | 📄 Draft | 自荐入口 https://hellogithub.com/periodical |
-| [`ruanyifeng-weekly-issue.md`](ruanyifeng-weekly-issue.md) | 阮一峰科技爱好者周刊 | 📄 Draft | 在 `ruanyf/weekly` 仓库提 issue 自荐 |
-
-### International dev community (Tier 3)
-
-| File | Platform | Status | Format |
-|---|---|---|---|
-| [`x-thread.md`](x-thread.md) | X (Twitter) | 📄 Draft | 4 推 long thread, tag `@alexalbert__` + `@AI_Jasonyu` |
-
----
-
-## Recommended posting order (per agent recon)
-
-| Day | Action |
+| 渠道 | 状态 |
 |---|---|
-| Day 0 | Submit awesome-mcp-servers PR + Official MCP Registry publish |
-| Day 1 | V2EX `/go/create`（周五上午 9-11 点）+ 知乎想法发版公告 |
-| Day 1-2 | 掘金长文（3500-5000 字）发布 |
-| Day 2 | X thread（主帖 → 5 分钟后 reply tag @alexalbert__ / @AI_Jasonyu） |
-| Day 3-7 | 知乎专栏建立 + 知乎主稿（30%+ rewrite）+ 高赞问题答题 |
-| Day 7+ | 飞书开放平台社区软帖、HelloGitHub 月刊自荐、阮一峰 weekly issue |
-| 持续 | LobeHub 上的描述需要联系他们更新（33 → 84 tools） |
+| Official MCP Registry | ✅ active, isLatest, v1.3.10 |
+| HelloGitHub 月刊自荐 issue #3254 | ✅ 已提交（`521xueweihan/HelloGitHub`） |
+| 阮一峰 weekly 自荐 issue #9888 | ✅ 已提交（`ruanyf/weekly`） |
+| Glama listing 提交 | ✅ 已提交，bot label `has-glama` 已识别（Docker introspection 处理中）|
+| punkpeye/awesome-mcp-servers PR #6090 | ✅ Ready for review，含 Glama badge |
+| GitHub repo Social preview | ✅ 上传 docs/og.png |
 
-## Differentiator (consistent across all channels)
+## 等你 dispatch 的（按建议顺序）
 
-**以用户本人身份发飞书消息（cookie + protobuf 协议路径），不是机器人。** 飞书官方开放 API 没有 `send_as_user` 权限点；机器人 token 发出的消息一律标 `sender_type: "app"`。
+### 中文（cost 由低到高）
 
-Competitors to be aware of (do **not** name them as targets in posts — leads to negative engagement; just know what you're up against):
+| 渠道 | 文件 | 建议时机 |
+|---|---|---|
+| V2EX | `zh/v2ex.md` | 周五上午 9-11 点北京时间 |
+| 知乎想法 + 专栏 | `zh/zhihu-column.md` + `zh/zhihu-answers.md` | 想法 = 当天发版公告；专栏 + 答题 = 一周内分批 |
+| 掘金 | `zh/juejin.md` | 任意工作日上午（"AI 编程"频道） |
+| 飞书开放平台社区 | `zh/feishu-community.md` | 选项 A 即时发；选项 B 内容中心审核 1-2 周 |
 
+### 国际
+
+| 渠道 | 文件 | 备注 |
+|---|---|---|
+| X (Twitter) | `en/x-thread.md` | 4 推 thread，主帖发后 5-10 分钟再 reply tag `@alexalbert__` `@AI_Jasonyu` |
+
+## 推迟到 v1.4
+
+| 渠道 | 阻塞 | 文件 |
+|---|---|---|
+| Anthropic Connectors Directory | 缺 `.mcpb` 打包 + Privacy Policy + manifest.json | `submissions/anthropic-directory.md` |
+| Cursor Marketplace | 缺 `.cursor-plugin/plugin.json` manifest | `submissions/cursor-marketplace.md` |
+
+## 差异化锚点（所有内容统一口径）
+
+**基于 cookie + protobuf 协议路径，支持以用户本人身份发消息——飞书官方开放 API 没有 `send_as_user` 权限点，机器人 token 发出的消息一律标 `sender_type: "app"`。**
+
+竞品（**不要**在文章里点名挑战，只是知道存在）：
 - `larksuite/lark-openapi-mcp`（飞书官方维护）
-- `cso1z/Feishu-MCP`（文档方向，掘金可见度高）
-- `ztxtxwd/feishu-mcp-server`（V2EX 可见度高）
-- `qingpingwang/remote-claude-code` + `chenhg5/cc-connect`（飞书 ↔ Claude Code Bridge）
-- `larksuite/cli`（2026-03 开源）
+- `cso1z/Feishu-MCP`（文档方向）
+- `ztxtxwd/feishu-mcp-server`
+- `qingpingwang/remote-claude-code` + `chenhg5/cc-connect`（Bridge 路线）
