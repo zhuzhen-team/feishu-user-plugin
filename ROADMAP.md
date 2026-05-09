@@ -24,12 +24,10 @@
 - [ ] **E. `src/config/` 目录化拆分**（条件触发：等 config.js 真长大或多 harness 配置规则差异变多再做。届时拆 `discovery.js` / `persistence.js` / `setup.js`）
 - [ ] **G. OpenClaw 偏好文件**
 
-## v1.4 候选
+### 上架提交（仓库已具备所有材料于 v1.3.11，等用户人肉表单提交）
 
-- [ ] **Anthropic Connectors Directory 提交**：需 `.mcpb` 打包 + `manifest.json::privacy_policies` + README "Privacy Policy" 段。缺一项即被拒。详细阻塞清单见 `docs/launch/anthropic-directory-prep.md`
-- [ ] **Cursor Marketplace 提交**：需 `.cursor-plugin/plugin.json` manifest。详细阻塞清单见 `docs/launch/cursor-marketplace-prep.md`
-- [ ] **MCP Registry CI 自动 publish**：把 `mcp-publisher publish mcp-registry.json` 接进 GitHub Actions release workflow，用 `github-oidc` 模式取代手动 PAT login
-- [ ] **百度站长 / Google Search Console 主动提交**：当 stars 涨起来 / 想要更快 indexing 时再做（被动 sitemap.xml + robots.txt 已就位）
+- [ ] **Anthropic Connectors Directory 提交**：v1.3.11 ship 了 `PRIVACY.md` + `.mcpb/manifest.json` + `scripts/build-mcpb.js`。剩下的：`node scripts/build-mcpb.js` 产出 `.mcpb` → 在 https://clau.de/desktop-extention-submission 上传。详见 `docs/launch/submissions/anthropic-directory.md`
+- [ ] **Cursor Marketplace 提交**：v1.3.11 ship 了 `.cursor-plugin/plugin.json`。剩下的：去 https://cursor.com/marketplace/publish 提交仓库 URL。详见 `docs/launch/submissions/cursor-marketplace.md`
 
 ## 已调研但暂不实施
 

@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [1.3.11] - 2026-05-09
 
-主线一项：Lark Desktop 多账号无感切换 — 用户在 Feishu Desktop 切账号，MCP 在 ~15 s 内自动跟进，无需任何 CLI 命令、无需 MCP 工具调用。配套三件 v1.4 prep（Privacy Policy / `.mcpb` manifest / `.cursor-plugin/plugin.json` / MCP Registry CI 自动 publish）已就位但未对外提交，等用户 dispatch。工具数 84 不变。
+主线一项：Lark Desktop 多账号无感切换 — 用户在 Feishu Desktop 切账号，MCP 在 ~15 s 内自动跟进，无需任何 CLI 命令、无需 MCP 工具调用。同期完成三项上架准备：MCP Registry CI 自动 publish 在 v1.3.11 头号 release 已自动跑通（`registry.modelcontextprotocol.io` 现 isLatest=1.3.11）；Anthropic Connectors Directory `.mcpb` + `PRIVACY.md` 与 Cursor Marketplace `.cursor-plugin/plugin.json` 已上 npm，等用户去外部平台填表单提交。工具数 84 不变。
 
 ### Added
 - **Lark Desktop 多账号无感切换 (A)**：用户在 Feishu Desktop 切换账号 → MCP 自动跟进，不需要任何 CLI 命令、不需要 MCP 工具调用。`credentials.json::profiles[*].larkHash` 字段绑定 profile 与 `~/Library/Containers/com.bytedance.macos.feishu/Data/Library/Application Support/LarkShell/sdk_storage/<hash>/`；owner heartbeat (15 s) 监听各账号 `cookie_store.db` 的 mtime，最近活跃的 hash 与当前 active 不一致 + mtime 推进时调 `setActiveProfile`（5 s debounce）。`setup` 在 `fresh` / `update` 模式下自动绑定（单账号直接绑、多账号在交互模式下让用户选 / 非交互模式取最近活跃 + 在 stderr 列出其它）。新 CLI flag：`--bind-hash <hash>` 显式绑定，`--no-bind-hash` 跳过自动检测。未绑定但活跃的 hash 在 stderr 打一次性提示带 `setup --profile <name> --bind-hash <hash>` 命令。Lark 加密 `cookie_store.db` 全程不读不解密，cookie 仍由 `LARK_COOKIE` 按 profile 单独提供。macOS-only；Linux / Windows 默认无副作用。
