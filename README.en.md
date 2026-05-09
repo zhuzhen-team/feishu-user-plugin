@@ -605,6 +605,6 @@ On the maintainer's machine, a post-merge hook (`scripts/sync-team-skills.sh`) a
 
 ## Acknowledgments
 
-- [cv-cat/LarkAgentX](https://github.com/cv-cat/LarkAgentX) -- Original Feishu protocol reverse-engineering (Python)
+- [cv-cat/LarkAgentX](https://github.com/cv-cat/LarkAgentX) -- Early Feishu web protocol research (Python)
 - [cv-cat/OpenFeiShuApis](https://github.com/cv-cat/OpenFeiShuApis) -- Underlying API research
 - [Model Context Protocol](https://modelcontextprotocol.io) -- The MCP standard
