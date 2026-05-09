@@ -51,14 +51,14 @@ This directory contains drafts and submission templates for the v1.3.9 → v1.3.
 | Day 7+ | 飞书开放平台社区软帖、HelloGitHub 月刊自荐、阮一峰 weekly issue |
 | 持续 | LobeHub 上的描述需要联系他们更新（33 → 84 tools） |
 
-## Wedge
+## Differentiator (consistent across all channels)
 
-Every channel leads with the same differentiation hammer: **以你本人身份发飞书消息（cookie protobuf 反向工程），不是机器人**. None of the top-ranked competing repos do this — they all rely on bot/webhook push. This is our cheapest, sharpest hook.
+**以用户本人身份发飞书消息（cookie + protobuf 协议路径），不是机器人。** 飞书官方开放 API 没有 `send_as_user` 权限点；机器人 token 发出的消息一律标 `sender_type: "app"`。
 
 Competitors to be aware of (do **not** name them as targets in posts — leads to negative engagement; just know what you're up against):
 
-- `larksuite/lark-openapi-mcp` (官方, 难撼动)
-- `cso1z/Feishu-MCP` (文档专精, 掘金引流强)
-- `ztxtxwd/feishu-mcp-server` (V2EX 引流强)
-- `qingpingwang/remote-claude-code` + `chenhg5/cc-connect` (飞书 ↔ Claude Code Bridge)
-- 飞书官方 CLI (`larksuite/cli`，2026-03 开源)
+- `larksuite/lark-openapi-mcp`（飞书官方维护）
+- `cso1z/Feishu-MCP`（文档方向，掘金可见度高）
+- `ztxtxwd/feishu-mcp-server`（V2EX 可见度高）
+- `qingpingwang/remote-claude-code` + `chenhg5/cc-connect`（飞书 ↔ Claude Code Bridge）
+- `larksuite/cli`（2026-03 开源）
