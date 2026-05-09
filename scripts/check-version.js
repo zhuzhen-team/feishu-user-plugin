@@ -22,10 +22,15 @@ if (!skillMatch) {
 }
 const skillVersion = skillMatch[1];
 
+// Source 4: .cursor-plugin/plugin.json
+const cursorPlugin = JSON.parse(fs.readFileSync(path.join(ROOT, '.cursor-plugin', 'plugin.json'), 'utf8'));
+const cursorVersion = cursorPlugin.version;
+
 const sources = [
   { label: 'package.json', version: pkgVersion, path: 'package.json' },
   { label: '.claude-plugin/plugin.json', version: pluginVersion, path: '.claude-plugin/plugin.json' },
   { label: 'skills/feishu-user-plugin/SKILL.md', version: skillVersion, path: 'skills/feishu-user-plugin/SKILL.md' },
+  { label: '.cursor-plugin/plugin.json', version: cursorVersion, path: '.cursor-plugin/plugin.json' },
 ];
 
 const versions = sources.map((s) => s.version);
