@@ -85,6 +85,32 @@ console.log(c.getProfileEvents("default"));
 
 After editing, either restart the MCP server or call `manage_ws_status(action=reconfig)` to apply.
 
+#### `larkHash` (optional, v1.3.11)
+
+```json
+"larkHash": "cdf3423ce6e643cdf21af46f1f263347"
+```
+
+32-char-hex Lark Desktop account hash from `~/Library/Containers/com.bytedance.macos.feishu/Data/Library/Application Support/LarkShell/sdk_storage/<hash>/`. When this field is set, the MCP owner heartbeat (15 s) watches the matching `cookie_store.db` mtime and auto-flips `credentials.json::active` to this profile when the user activates that account in Lark Desktop. macOS-only in v1.3.11.
+
+- **Default** (when absent): no auto-switch wiring for this profile — manual `switch_profile` MCP tool call only.
+- Managed by `getProfileLarkHash(name)` / `setProfileLarkHash(name, hash)` / `findProfileByHash(hash)` in `src/auth/credentials.js`.
+- Bound by `setup` (auto-detect on `fresh` / `update`) or explicitly via `setup --bind-hash <hash> --profile <name>`.
+- Cookies still come from `LARK_COOKIE` per profile — Lark's encrypted `cookie_store.db` is never read or decrypted.
+
+Example — bind two profiles to two Lark Desktop accounts:
+
+```bash
+node -e '
+const c = require("./src/auth/credentials");
+c.setProfileLarkHash("default", "cdf3423ce6e643cdf21af46f1f263347");
+c.setProfileLarkHash("work",    "abaf65b9880cf7e612abb5a54c512a51");
+console.log(c.findProfileByHash("cdf3423ce6e643cdf21af46f1f263347"));  // → "default"
+'
+```
+
+After binding, the MCP owner heartbeat takes over: switching the active account in Lark Desktop flips `credentials.json::active` within ~15 s. The cross-process sync (v1.3.9 §A.2) then propagates the new active to every running MCP process.
+
 ## Invariants
 
 1. **Atomic writes.** Every write goes through `tmp file + rename` to prevent partial reads under concurrent access (multiple MCP processes, Claude Code reading config simultaneously, UAT refresh lock holders).
