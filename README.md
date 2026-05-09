@@ -13,7 +13,7 @@
 
 兼容 Claude Code、Codex、Cursor、Windsurf、VS Code、Claude Desktop、OpenClaw 等 MCP 客户端。
 
-与其他飞书 MCP 的区别：通过 cookie + protobuf 反向工程飞书 web 协议，支持以**用户本人身份**发消息——飞书官方开放 API 没有 `send_as_user` 权限点，机器人 token 发出的消息一律标 `sender_type: "app"`。
+与其他飞书 MCP 的区别：基于 cookie + protobuf 协议路径，支持以**用户本人身份**发消息——飞书官方开放 API 没有 `send_as_user` 权限点，机器人 token 发出的消息一律标 `sender_type: "app"`。
 
 ## 三层鉴权
 
@@ -78,7 +78,7 @@ Claude：[read_messages → 总结 → send_to_group]  Sent
 | `send_image_as_user` | 以用户身份发图（v1.3.9） |
 | `send_file_as_user` | 以用户身份发文件（需先 `upload_file`） |
 | `send_post_as_user` | 富文本：标题 + 段落 + @ + 超链 |
-| `send_card_as_user` | 飞书交互卡片（机器人通道；cookie 通道经 v1.3.9 探测确认服务端关闭） |
+| `send_card_as_user` | 飞书交互卡片（机器人通道；cookie 通道服务端关闭，仅 bot 路径可用） |
 | `batch_send` | 一次发多条到不同 chat（text / image / file / post） |
 
 ### 用户身份 —— 联系人 / 信息（cookie，5 个）
@@ -344,8 +344,8 @@ CI（`.github/workflows/validate.yml`）每个 PR 跑同样的 gate。
 ## 已知限制
 
 - **Cookie 寿命**：12-24 小时无心跳过期，需重新登录 feishu.cn 拿 cookie
-- **协议变化**：cookie + protobuf 层依赖飞书 web 客户端的内部协议，飞书更新有概率失效（机器人能力不受影响）
-- **卡片**：cookie 通道发卡片服务端关闭（v1.3.9 探测确认），机器人通道可发
+- **协议变化**：cookie + protobuf 层依赖飞书 web 客户端的协议，飞书更新可能失效（机器人能力不受影响）
+- **卡片**：cookie 通道发卡片服务端不可用，机器人通道可发
 - **Lark 国际版**：实时事件 WS 不支持
 - **未实现**：`search_messages`（v1.3.10 计划）、md → wiki 同步（v1.3.10 主线）
 
@@ -363,6 +363,6 @@ Issues / PR 欢迎。提交前先看 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 致谢
 
-- [cv-cat/LarkAgentX](https://github.com/cv-cat/LarkAgentX) —— 早期飞书协议反向工程参考（Python）
+- [cv-cat/LarkAgentX](https://github.com/cv-cat/LarkAgentX) —— 早期飞书 web 协议研究（Python）
 - [cv-cat/OpenFeiShuApis](https://github.com/cv-cat/OpenFeiShuApis) —— 底层 API 研究
 - [Model Context Protocol](https://modelcontextprotocol.io) —— MCP 标准 + Anthropic / PulseMCP / GitHub / Stacklok 共维 registry
