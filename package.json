@@ -62,7 +62,7 @@
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.63.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "dotenv": "^16.4.7",
+    "dotenv": "^17.4.2",
     "feishu-docx": "^0.7.0",
     "protobufjs": "^7.5.6"
   },
