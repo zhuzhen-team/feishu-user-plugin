@@ -357,6 +357,26 @@ Issues / PR 欢迎。提交前先看 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 飞书改协议导致功能挂掉 —— 开 issue 带错误日志即可。
 
+## 隐私 / Privacy
+
+本地运行的 MCP 服务器，凭证留在用户本机，不上报遥测，不与插件作者后台通信。完整文本见 [PRIVACY.md](PRIVACY.md)。
+
+- **收集**：插件本身不收集任何数据；`LARK_COOKIE` / `LARK_APP_ID` / `LARK_APP_SECRET` / `LARK_USER_ACCESS_TOKEN` / `LARK_USER_REFRESH_TOKEN` 全部由用户主动配置，来源于用户自己的飞书 / Lark 账号
+- **处理**：仅处理用户通过 MCP 工具调用主动请求的消息 / 文档 / 多维表格 / 知识库 / 云空间 / 日历 / 任务 / OKR / 联系人，不留存、不分析
+- **存储**：`~/.feishu-user-plugin/credentials.json`（mode 0600）；可选事件日志 `~/.feishu-user-plugin/events.jsonl`（10 MB / 20 MB 自动轮转）
+- **第三方**：仅与用户自己的飞书租户和用户运行的 AI 客户端通信，无 CDN / 分析 / 错误上报
+- **保留**：完全用户控制；`rm -rf ~/.feishu-user-plugin && npm uninstall -g feishu-user-plugin` 即清空
+- **联系**：[GitHub Issues](https://github.com/EthanQC/feishu-user-plugin/issues)，安全问题在 issue 标题前加 `[security]`
+
+A locally-run MCP server. Credentials stay on the user's machine; no telemetry, no phone-home. Full text at [PRIVACY.md](PRIVACY.md).
+
+- **Collected**: nothing by the plugin itself; the five `LARK_*` envs are supplied by the user from their own Feishu / Lark account
+- **Processed**: only the messages / docs / bitable / wiki / drive / calendar / tasks / OKR / contacts the user explicitly requests via MCP tool calls
+- **Stored**: `~/.feishu-user-plugin/credentials.json` (mode 0600); optional event log at `~/.feishu-user-plugin/events.jsonl`
+- **Third-party**: only the user's own Feishu tenant and the AI client the user runs (Claude Code / Codex / Cursor / etc.)
+- **Retention**: entirely user-controlled; `rm -rf ~/.feishu-user-plugin && npm uninstall -g feishu-user-plugin` removes everything
+- **Contact**: [GitHub Issues](https://github.com/EthanQC/feishu-user-plugin/issues); security disclosures with `[security]` prefix in the title
+
 ## License
 
 [MIT](LICENSE)
