@@ -99,7 +99,10 @@ function parseSections(body) {
 
 function bulletsFromSection(content) {
   // CHANGELOG bullets typically begin with `- `. Multi-line bullets continue
-  // until the next `- ` or blank line. Normalize to one-bullet-per-line.
+  // until the next `- ` or blank line. Continuation lines are preserved with
+  // newlines so card rendering can show structured sub-paragraphs (e.g.
+  // "**机制**: ...\n**CLI**: ...\n**边界**: ..."). Normalize tabs/leading-
+  // space on continuation lines but keep the line break.
   const out = [];
   let cur = null;
   for (const raw of content.split('\n')) {
@@ -107,13 +110,14 @@ function bulletsFromSection(content) {
       if (cur) out.push(cur);
       cur = raw.replace(/^-\s+/, '').trim();
     } else if (cur && raw.trim()) {
-      cur += ' ' + raw.trim();
+      cur += '\n' + raw.trim();
     } else if (!raw.trim()) {
       if (cur) { out.push(cur); cur = null; }
     }
   }
   if (cur) out.push(cur);
-  return out.map(b => b.replace(/\s+/g, ' ').trim());
+  // Trim each bullet edge but preserve internal newlines.
+  return out.map(b => b.replace(/[ \t]+\n/g, '\n').replace(/\n[ \t]+/g, '\n').trim());
 }
 
 function stripBoldPrefix(bullet) {
@@ -226,7 +230,7 @@ function generateCard(version, date, parsed) {
     if (!content) continue;
     const zh = SECTION_TRANSLATE[name.toLowerCase()];
     const bullets = bulletsFromSection(content)
-      .map(b => `- ${stripBoldPrefix(b)}`)
+      .map(b => `- ${b}`)
       .join('\n');
     elements.push({ tag: 'div', text: { tag: 'lark_md', content: `**${zh}**\n${bullets}` } });
     elements.push({ tag: 'hr' });
@@ -237,7 +241,7 @@ function generateCard(version, date, parsed) {
     const m = title.match(/^Deferred\s+to\s+(v[\d.]+)/i);
     if (!m) continue;
     const bullets = bulletsFromSection(content)
-      .map(b => `- ${stripBoldPrefix(b)}`)
+      .map(b => `- ${b}`)
       .join('\n');
     elements.push({ tag: 'div', text: { tag: 'lark_md', content: `**下版本计划 (${m[1]})**\n${bullets}` } });
     elements.push({ tag: 'hr' });

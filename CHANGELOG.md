@@ -6,21 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [1.3.11] - 2026-05-09
 
-主线一项：Lark Desktop 多账号无感切换 — 用户在 Feishu Desktop 切账号，MCP 在 ~15 s 内自动跟进，无需任何 CLI 命令、无需 MCP 工具调用。同期完成三项上架准备：MCP Registry CI 自动 publish 在 v1.3.11 头号 release 已自动跑通（`registry.modelcontextprotocol.io` 现 isLatest=1.3.11）；Anthropic Connectors Directory `.mcpb` + `PRIVACY.md` 与 Cursor Marketplace `.cursor-plugin/plugin.json` 已上 npm，等用户去外部平台填表单提交。工具数 84 不变。
+主线：Lark Desktop 多账号无感切换 — 在 Feishu Desktop 切账号，MCP 在 ~15 s 内自动跟到对应 profile。同期完成三项上架基建：MCP Registry CI 自动 publish 在 v1.3.11 头号 release 已自动跑通（`registry.modelcontextprotocol.io` 现 isLatest=1.3.11）；Anthropic `.mcpb` 包 + `PRIVACY.md`、Cursor `.cursor-plugin/plugin.json` 仓库材料就绪并已上 npm。工具数 84 不变。
 
 ### Added
-- **Lark Desktop 多账号无感切换 (A)**：用户在 Feishu Desktop 切换账号 → MCP 自动跟进，不需要任何 CLI 命令、不需要 MCP 工具调用。`credentials.json::profiles[*].larkHash` 字段绑定 profile 与 `~/Library/Containers/com.bytedance.macos.feishu/Data/Library/Application Support/LarkShell/sdk_storage/<hash>/`；owner heartbeat (15 s) 监听各账号 `cookie_store.db` 的 mtime，最近活跃的 hash 与当前 active 不一致 + mtime 推进时调 `setActiveProfile`（5 s debounce）。`setup` 在 `fresh` / `update` 模式下自动绑定（单账号直接绑、多账号在交互模式下让用户选 / 非交互模式取最近活跃 + 在 stderr 列出其它）。新 CLI flag：`--bind-hash <hash>` 显式绑定，`--no-bind-hash` 跳过自动检测。未绑定但活跃的 hash 在 stderr 打一次性提示带 `setup --profile <name> --bind-hash <hash>` 命令。Lark 加密 `cookie_store.db` 全程不读不解密，cookie 仍由 `LARK_COOKIE` 按 profile 单独提供。macOS-only；Linux / Windows 默认无副作用。
-- **`src/auth/lark-desktop.js` 模块**：`getSdkStorageDir()` / `listAccountHashes()` / `mostRecentHash()` / `detectSwitch()` 全部 fixture-testable，无新依赖（仅 `fs.statSync`）。13 个单元测试位于 `src/test-lark-desktop.js`，CI 友好（不依赖 Lark Desktop 安装）。
-- **`.mcpb` 桌面扩展 manifest + Privacy Policy（上架准备）**：`PRIVACY.md` 中英双语，按 Anthropic Connectors Directory 评审标准 6 维度组织（采集 / 处理 / 存储 / 第三方 / 留存 / 联系）；`.mcpb/manifest.json` 走 `manifest_version=0.3` schema，含 `server.mcp_config` + `user_config` 块（5 个 `LARK_*` 全部声明 `sensitive=true`）；`scripts/build-mcpb.js` 产出 `dist/feishu-user-plugin-<version>.mcpb`；CI gate `scripts/check-mcpb-version.js` 接进 `validate.yml`。**仓库材料就绪**，剩余只待用户去 https://clau.de/desktop-extention-submission 表单提交（ROADMAP `v1.3.12 待办 / 上架提交`）。
-- **`.cursor-plugin/plugin.json`（上架准备）**：按 Cursor plugins schema 编写（`mcpServers` 块镜像 README 的 Claude Code 配置）；`scripts/check-version.js` 由 3 源扩到 4 源版本三角等价（`package.json` / `.claude-plugin/plugin.json` / `SKILL.md` / `.cursor-plugin/plugin.json`）。Schema 与 `docs/launch/submissions/cursor-marketplace.md` 校对发现 `author` 是 `{name, email}` 不是 `{name, url}`，已按官方 schema 修正。**仓库材料就绪**，剩余只待用户去 https://cursor.com/marketplace/publish 表单提交（ROADMAP `v1.3.12 待办 / 上架提交`）。
-- **MCP Registry CI 自动 publish（v1.4 prep）**：`.github/workflows/publish.yml` 增 mcp-publisher 步骤，`v*` tag 触发 → curl 安装 `mcp-publisher` → `login github-oidc`（runner OIDC token，无需 PAT）→ `publish mcp-registry.json`。`scripts/check-mcp-registry-version.js` 校验 `mcp-registry.json::version` + `packages[0].version` 与 `package.json::version` 一致；接进 `publish.yml`（pre-publish）+ `validate.yml`（PR-time）。**v1.3.11 头号 release 已自动跑通**——`registry.modelcontextprotocol.io` 现在 isLatest=1.3.11；以后每次 tag 推送自动同步，零人工。
+- **Lark Desktop 多账号无感切换 (A)**：用户在 Feishu Desktop 切换账号 → MCP 在 ~15 s 内自动跟到对应 profile，零 CLI 命令、零工具调用。
+**机制**：`credentials.json::profiles[*].larkHash` 字段绑 profile ↔ Lark `~/Library/.../sdk_storage/<hash>/`；owner heartbeat (15 s) `stat cookie_store.db` mtime；最近活跃 hash 与当前 active 不一致 + mtime 推进 → `setActiveProfile`（5 s debounce）。
+**CLI**：`setup` 在 `fresh` / `update` 模式自动绑定（单账号直接绑、多账号交互模式选 / 非交互取最近活跃 + stderr 列出其它）；新 flag `--bind-hash <hex>` 显式绑 / `--no-bind-hash` 跳过；未绑定但活跃的 hash 在 stderr 一次性提示 `setup --profile <name> --bind-hash <hash>`。
+**边界**：macOS-only；Linux / Windows 默认 no-op；Lark 加密 `cookie_store.db` 全程不读不解密；cookie 仍由 `LARK_COOKIE` 按 profile 单独提供。
+**实现**：新模块 `src/auth/lark-desktop.js`（`getSdkStorageDir` / `listAccountHashes` / `mostRecentHash` / `detectSwitch`）+ `credentials.js` 新 API（`getProfileLarkHash` / `setProfileLarkHash` / `findProfileByHash`）+ `server.js` heartbeat 反应器接入；13 个 fixture-based 单元测试 `src/test-lark-desktop.js`。
+
+- **`.mcpb` 桌面扩展打包 + `PRIVACY.md`**：仓库具备 Anthropic Connectors Directory 收录所需所有材料。
+**打包**：`node scripts/build-mcpb.js` 产出 `dist/feishu-user-plugin-1.3.11.mcpb`（250 KB），可上传 https://clau.de/desktop-extention-submission。
+**manifest**：`.mcpb/manifest.json` 走 `manifest_version=0.3` schema —— 顶层 `server.mcp_config` + `user_config` 块声明 5 个 `LARK_*` 全 `sensitive=true`，Claude Desktop UI 自动提示用户填凭证后通过 `${user_config.KEY}` 替换到 `mcp_config.env`。
+**隐私**：`PRIVACY.md` 中英双语 6 维度（采集 / 处理 / 存储 / 第三方 / 留存 / 联系），README 加 "## 隐私 / Privacy" 段。
+**CI gate**：`scripts/check-mcpb-version.js` 接进 `validate.yml` 校验 `.mcpb/manifest.json::version` 与 `package.json::version` 一致。
+
+- **`.cursor-plugin/plugin.json` + 4 源版本三角**：仓库具备 Cursor Marketplace 收录所需 manifest，提交入口 https://cursor.com/marketplace/publish。
+**manifest**：`mcpServers` 块镜像 README 的 Claude Code 配置；校对 `cursor/plugins` 官方 schema 修正 prep 文档错误 —— `author` 实际是 `{name, email}` with `additionalProperties: false`（非 `{name, url}`），`repository` 是字符串（非 `{type, url}`）。
+**版本三角**：`scripts/check-version.js` 由 3 源扩 4 源（`package.json` / `.claude-plugin/plugin.json` / `SKILL.md` / `.cursor-plugin/plugin.json`），任一源 mismatch 即 CI fail。
+
+- **MCP Registry CI 自动 publish**：`v1.3.11` 头号 release 已自动跑通——`registry.modelcontextprotocol.io` 现 isLatest=1.3.11；以后每次 tag 推送自动同步，零人工。
+**workflow**：`.github/workflows/publish.yml` 增 mcp-publisher 步骤 —— curl 安装 `mcp-publisher` 二进制 → `login github-oidc`（runner OIDC token 取代 PAT）→ `publish mcp-registry.json`；publish job 加 `permissions: id-token: write`。
+**CI gate**：`scripts/check-mcp-registry-version.js` 在 `publish.yml`（pre-publish）+ `validate.yml`（PR-time）双闸门校验 `mcp-registry.json::version` + `packages[0].version` 与 `package.json::version` 一致。
 
 ### Test scenarios
 - 单 profile + 单 hash：`setup` 自动绑定，stderr 一行 `Bound profile "default" to Lark account hash <hex>`，无后续噪声
 - 多 profile + 多 hash：在 Lark Desktop 切到 profile B 绑的账号 → 15 s 内 stderr 出 `Lark Desktop account changed; switching profile to "B"` → `credentials.json::active` 更新 → 下一次工具调用走 B 的凭证
 - 未绑定但活跃 hash：在 Lark Desktop 切到一个新账号 → stderr 出一次性提示带 `setup --profile <name> --bind-hash <hash>` 命令；后续 heartbeat 不再重复
-- 非 darwin：`getSdkStorageDir()` 返回 null，所有反应器代码 no-op；`setup --no-bind-hash` 显式跳过
-- v1.4 prep 三件套不影响 v1.3.10 → v1.3.11 的运行时行为，仅扩 CI / metadata / packaging
+- 非 darwin：`getSdkStorageDir()` 返回 null，反应器全部 no-op；`setup --no-bind-hash` 显式跳过
+- `node scripts/build-mcpb.js` 产出 `dist/feishu-user-plugin-1.3.11.mcpb`，`unzip -p` 验证 `manifest.json` 在 archive 根
+- `curl 'https://registry.modelcontextprotocol.io/v0/servers?search=feishu-user-plugin'` 返回 v1.3.11 isLatest=true
 
 ## [1.3.10] - 2026-05-09
 
