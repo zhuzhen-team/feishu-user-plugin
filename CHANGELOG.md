@@ -4,6 +4,56 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.10] - 2026-05-09
+
+Growth track 一次性 ship + Official MCP Registry 上架。本版无新工具（84 不变），主体是发现入口、文档语气与发布元数据：仓库一句话描述与 npm description 同步、GitHub Pages 中文优先 SEO landing 上线、`README.md` 主版本切到中文、`docs/launch/` 13 文件 launch 草稿就位、Dockerfile 给 Glama listing introspection 用、自定义 OG image 替代 GitHub 默认渲染、CONTRIBUTING.md 双语重写。所有用户可见文档统一去除 reverse-engineering / 暴力探测 / 营销腔 / 合规免责段。
+
+### Added
+- **Official MCP Registry 上架**：仓库根 `mcp-registry.json` 是 registry 元数据契约（schema `https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json`），`packages[].registryType=npm` + `transport.type=stdio` + 5 个 LARK_* 环境变量声明。`package.json::mcpName=io.github.EthanQC/feishu-user-plugin` 提供命名空间归属，与现有 OpenClaw 格式 `server.json` 并行不冲突。v1.3.10 起包同步推到 `registry.modelcontextprotocol.io/v0/servers/io.github.EthanQC/feishu-user-plugin`，下游 Smithery / mcp.run / LobeHub 自动拉取。
+- **Dockerfile + .dockerignore**：仓库根 `node:20-alpine` + `npm ci --omit=dev`，`CMD ["node", "src/index.js"]` 走 stdio。Glama 等需 Docker introspection 的 marketplace 检查可直接跑（MCP server 启动不需要 LARK_* env，工具调用时才校验，所以 introspection 不需要凭证）。
+- **GitHub Pages 中文优先 SEO landing**：`https://ethanqc.github.io/feishu-user-plugin/`（中文）+ `/en.html`（英文）。jekyll-cayman + jekyll-seo-tag + jekyll-sitemap，源在 `docs/`；`docs/_config.yml` exclude 内部 dev 文档（REFACTOR-NOTES、TESTING-METHODOLOGY、CREDENTIALS-FORMAT、COOKIE-PROTOBUF-CAPTURES、superpowers/）保持 SEO 信号集中。仓库 Homepage URL 指向 Pages。
+- **OG image 1200×630（中文 stat 卡）**：`docs/og.png`（rendered from `docs/og.svg`）+ `scripts/generate-og-image.js`（@resvg/resvg-js + 系统 PingFang SC 字体）。jekyll-seo-tag defaults 引用 + `twitter:card=summary_large_image`，社交分享卡替代 GitHub 默认渲染。
+- **`docs/launch/` 13 文件 launch material**：MCP 收录（awesome-mcp-servers 提交模板 / mcp-registry 提交步骤 / Anthropic Connectors 与 Cursor Marketplace 推迟到 v1.4 的阻塞清单）+ 中文长稿（掘金 3 实战场景 / 知乎专栏首篇 / 知乎答题目标清单）+ 平台短稿（V2EX 周五帖 / 飞书开放平台社区贴 / HelloGitHub 月刊自荐 / 阮一峰 weekly issue）+ 英文 X long thread。所有 drafts，等用户 dispatch。
+- **CONTRIBUTING.md 双语重写**：post-v1.3.7 layout（`src/clients/official/<domain>.js` + `src/tools/<domain>.js` + `_registry.js` ctx 契约）+ 4 个 pre-commit gate（CLAUDE.md sync / 三角等价 / 工具数徽章 / smoke）+ commit 前缀 + 9 步新增工具流程。中文优先，英文并列段。
+- **GitHub Discussions 启用**：作为社群运营 + 维护信号渠道，`announcements` / `Q&A` / `show-and-tell` 默认 categories。
+- **4 个 good-first-issue**（#61-#64）：CHANGELOG 历史回填 v1.3.0-v1.3.5；`README.en.md` section header 工具数对齐到 84；`read_doc_markdown` 测试覆盖；Cursor / Windsurf / OpenClaw 9 prompt 兼容矩阵。
+- **`.github/pull_request_template.md` 更新**：丢弃过时的 `test-send.js` / `test-all.js` checklist，换成 4 个真实 gate（smoke / 三角等价 / CLAUDE.md sync / 依赖审）。
+
+### Changed
+- **README 主版本切到中文**：`README.md` 中文优先，`README.en.md` 是英文镜像；旧 `README_CN.md`（v1.3.4 起停滞，工具数仍写 74）删除。`package.json::files` 加 `README.en.md` 让 npm tarball 同时含两份。
+- **About description 中文化**：GitHub repo 一句话描述从 "Feishu MCP Server using reverse-engineered protocol for user-identity messaging (not bot)" 换成中文版（"飞书 MCP 服务器：让 Claude Code 与 Codex 直接接管你的飞书工作流..."）；npm description 走 `package.json` 英文版（"All-in-one Feishu MCP server for Claude Code & Codex — 84 tools across 3 auth layers..."）保持国际可见度。
+- **topics 删 `reverse-engineering`**：标签 9 → 8（claude / claude-code / feishu / im / lark / mcp / messaging / protobuf）。
+- **README + Pages + docs/launch/ 全部去 reverse-engineering / 暴力探测 / brute-force 框架**：用户可见文档统一改为 plain technical 语气，不再把 cookie + protobuf 协议路径写成"反向工程 / 暴力探测"。`send-as-user` 仍是核心差异化锚点，描述为"基于 cookie + protobuf 协议路径"。
+- **删 ToS / 合规免责段**：README 与 Pages landing 顶部"个人 / 内部用途, 非商业 SaaS"段全部移除（用户判定为 performative，LICENSE + 技术现实已足够）。
+- **`docs/launch/awesome-mcp-servers-pr.md` 增补 Glama listing 要求**：Glama bot 在 PR #6090 用 `missing-glama` label 标记并要求提交到 `glama.ai/mcp/servers` + 加 score badge。entry line 模板更新为含 Glama badge 版本（待 Glama listing 通过后才渲染分数）。
+- **`docs/launch/mcp-registry-submission.md` 改为 agent-driven 版本**：从"用户跑 mcp-publisher CLI"换成"agent 装好 + 用 `gh auth token` 直连 login + publish"，仅 GitHub OAuth 一次点击在用户侧（v1.3.10 ship 完后用 `github-oidc` 模式接进 GitHub Actions release workflow，CI 全自动）。
+
+### Removed
+- **`README_CN.md`（5 个版本 stale）**：内容由新主版本 `README.md` 取代。
+- **demo 终端截图与生成脚本**：`docs/demo-send-as-user.{svg,png}` + `scripts/generate-demo-image.js` 全部移除（用户判定 README 不需要静态截图，OG image 已覆盖社交分享场景）。
+- **README 顶部 ToS / 合规免责段**：移除（详见 Changed 段）。
+
+### Deferred to v1.3.11
+- **A. Lark Desktop 多账号联动**（v1.3.10 原计划主线，平移到 v1.3.11）：用户在 Feishu Desktop 切账号 → MCP 自动跟进。schema 扩展 + setup CLI 自动检测 + owner heartbeat stat sdk_storage mtime + 未绑定 hash 的处理路径。预计 1-1.5 天单独 PR。
+- **C. 本地 md → 飞书知识库同步**（v1.3.4 起持续推迟）：md parser 选型、`src/doc-blocks.js` 构造器补齐、wikilink 三级解析、图片 / 文件 inline、CLI 子命令 vs MCP 工具取舍、增量 diff 策略。
+- **B.5 `search_messages`**：先试 UAT `/open-apis/im/v1/messages/search`，不暴露则尝试 cookie 路径。
+- **E. `src/config/` 目录化拆分**（条件触发）。
+- **G. OpenClaw 偏好文件**。
+
+### 已调研但暂不实施
+- **Anthropic Connectors Directory**：需 `.mcpb` 打包 + `manifest.json::privacy_policies` + README "Privacy Policy" 段；缺一项即被拒。规划 v1.4 任务，详见 `docs/launch/anthropic-directory-prep.md`。
+- **Cursor Marketplace**：需 `.cursor-plugin/plugin.json` manifest。规划 v1.4，详见 `docs/launch/cursor-marketplace-prep.md`。
+- **Windsurf MCP Marketplace**：无公开第三方提交渠道（仅官方 partnership 邀请）。靠 Official MCP Registry 同步覆盖。
+- **百度站长 / Google Search Console 主动提交**：用户决定靠自然爬取 + 反链。`docs/sitemap.xml` 与 `docs/robots.txt` 已就位作为被动准备，未来想提交时直接 paste-and-go。
+
+### Test scenarios
+- 验证 `npm view feishu-user-plugin version` 返回 `1.3.10`
+- `mcp-publisher publish mcp-registry.json` 推到 registry，`curl https://registry.modelcontextprotocol.io/v0/servers/io.github.EthanQC/feishu-user-plugin` 返回 v1.3.10 元数据
+- GitHub Pages https://ethanqc.github.io/feishu-user-plugin/ 与 `/en.html` 都返回 200，`<head>` 含 `og:image` 指向 `docs/og.png`
+- `docs/sitemap.xml` 由 jekyll-sitemap 自动生成，含 index + en 两个 URL
+- punkpeye/awesome-mcp-servers PR #6090 entry 带 Glama badge（待用户在 Glama 完成 listing 后渲染分数）
+- 所有用户可见文档（README / README.en / docs/index / docs/en / docs/launch/*）均不再含 "反向工程" / "reverse engineering" / "暴力探测" / "brute-force" 字样
+
 ## [1.3.9] - 2026-05-08
 
 D 系列首项 ship：新增 `read_doc_markdown` 工具，用 `feishu-docx` 把 docx blocks 转换为 markdown 字符串输出，替代 `get_doc_blocks` 的结构化 JSON，给 RAG / digest / 摘要类调用省 ~60% token（实测 216 KB JSON vs 90 KB markdown）。A 系列主线 ship：WS 机器级 SSOT + active profile 跨进程同步 + setup CLI 4 行决策矩阵 + per-profile events 字段。工具数 83 → 84。
