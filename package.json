@@ -45,6 +45,7 @@
     "proto/",
     "scripts/",
     ".claude-plugin/",
+    ".cursor-plugin/",
     "skills/",
     ".mcp.json.example",
     ".env.example",
