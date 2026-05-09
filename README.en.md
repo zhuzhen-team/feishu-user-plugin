@@ -12,8 +12,6 @@
 
 The only MCP server that lets you send messages as your **personal identity** (not a bot), while also integrating the full official Feishu API. Works with Claude Code, Cursor, Windsurf, OpenClaw, and any MCP-compatible client.
 
-![Claude Code calling send_to_user — send Feishu messages as your real user, not a bot](docs/demo-send-as-user.png)
-
 ## Highlights
 
 - **Send as yourself** -- Messages show your real name, not a bot. Supports text, rich text, images, files, stickers, and audio.
