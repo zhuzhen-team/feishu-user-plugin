@@ -8,6 +8,9 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC token for `mcp-publisher login github-oidc`
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,6 +29,9 @@ jobs:
           fi
           echo "Version verified: v$PKG_VERSION"
 
+      - name: Verify mcp-registry.json version matches package.json
+        run: node scripts/check-mcp-registry-version.js
+
       - name: Verify CHANGELOG has section for this version
         run: node scripts/check-changelog.js
 
@@ -33,3 +39,19 @@ jobs:
       - run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # MCP Registry publish — auto-syncs https://registry.modelcontextprotocol.io
+      # after npm. Install command pulled verbatim from the official guide:
+      # https://github.com/modelcontextprotocol/registry/blob/main/docs/modelcontextprotocol-io/github-actions.mdx
+      # (curl-based — Homebrew is not available on ubuntu-latest by default).
+      # Verify locally with:  curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher && ./mcp-publisher --help
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher --help
+
+      - name: Authenticate to MCP Registry (github-oidc)
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish to MCP Registry
+        run: ./mcp-publisher publish mcp-registry.json
