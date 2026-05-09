@@ -360,6 +360,51 @@ function setProfileEvents(name, eventList) {
   return true;
 }
 
+// --- Lark Desktop hash bindings (v1.3.11 §A) ---
+//
+// Each profile may carry an optional `larkHash` 32-char-hex field binding it
+// to one of `~/Library/Containers/com.bytedance.macos.feishu/.../sdk_storage/<hash>/`.
+// The owner heartbeat reactor uses this binding to decide which profile to
+// switch to when the user changes account in Lark Desktop. See
+// src/auth/lark-desktop.js for the detection / switch logic; this module
+// just owns the persisted binding.
+
+const _LARK_HASH_RE = /^[a-f0-9]{32}$/;
+
+function getProfileLarkHash(name) {
+  const f = _readFile();
+  const target = name || (f ? f.active : 'default');
+  if (f && f.profiles[target] && typeof f.profiles[target].larkHash === 'string') {
+    return f.profiles[target].larkHash;
+  }
+  return null;
+}
+
+function setProfileLarkHash(name, hash) {
+  if (hash !== null && (typeof hash !== 'string' || !_LARK_HASH_RE.test(hash))) {
+    throw new Error('setProfileLarkHash: hash must be 32-char hex (a-f, 0-9) or null');
+  }
+  const f = _readFile();
+  if (!f) throw new Error('No credentials.json — cannot set profile larkHash. Run `npx feishu-user-plugin migrate --confirm` first.');
+  if (!f.profiles[name]) {
+    throw new Error(`setProfileLarkHash: profile "${name}" not found. Available: ${Object.keys(f.profiles).join(', ')}`);
+  }
+  if (hash === null) delete f.profiles[name].larkHash;
+  else f.profiles[name].larkHash = hash;
+  _atomicWriteJson(_credentialsPath(), f);
+  return true;
+}
+
+function findProfileByHash(hash) {
+  if (typeof hash !== 'string' || !_LARK_HASH_RE.test(hash)) return null;
+  const f = _readFile();
+  if (!f) return null;
+  for (const [name, profile] of Object.entries(f.profiles)) {
+    if (profile.larkHash === hash) return name;
+  }
+  return null;
+}
+
 // --- Profile hints (v1.3.8) ---
 //
 // profileHints maps resourceKey → profileName, persisted in credentials.json.
@@ -419,6 +464,10 @@ module.exports = {
   // per-profile events list (v1.3.9 A.4)
   getProfileEvents,
   setProfileEvents,
+  // Lark Desktop hash bindings (v1.3.11 §A)
+  getProfileLarkHash,
+  setProfileLarkHash,
+  findProfileByHash,
   // profile hints (v1.3.8)
   getProfileHints,
   setProfileHint,

@@ -28,6 +28,8 @@ function parseArgs() {
     else if (argv[i] === '--force') args.force = true;
     else if (argv[i] === '--profile' && argv[i + 1]) args.profile = argv[++i];
     else if (argv[i] === '--activate') args.activate = true;
+    else if (argv[i] === '--bind-hash' && argv[i + 1]) args.bindHash = argv[++i];
+    else if (argv[i] === '--no-bind-hash') args.noBindHash = true;
   }
   return args;
 }
@@ -237,6 +239,48 @@ async function main() {
     }
   }
   // mode === 'preserve': credentials.json is unchanged; we only update the harness pointer.
+
+  // --- Lark Desktop hash auto-bind (v1.3.11 §A) ---
+  // Triggers on fresh / update (i.e. whenever credentials.json was just modified).
+  // Skipped via --no-bind-hash. Explicit --bind-hash overrides auto-detect.
+  if ((mode === 'fresh' || mode === 'update') && !cliArgs.noBindHash) {
+    try {
+      const larkDesktop = require('./auth/lark-desktop');
+      const hashes = larkDesktop.listAccountHashes();
+      if (hashes.length > 0) {
+        let chosenHash = cliArgs.bindHash;
+        if (!chosenHash) {
+          if (hashes.length === 1) {
+            chosenHash = hashes[0].hash;
+            console.log(`\n[Lark Desktop] Detected single account hash: ${chosenHash}`);
+          } else if (nonInteractive) {
+            chosenHash = hashes[0].hash;
+            console.log(`\n[Lark Desktop] Detected ${hashes.length} accounts; auto-binding "${targetProfile}" to most-recent: ${chosenHash}`);
+            console.log(`  Other hashes (run setup --profile <name> --bind-hash <hash> to bind):`);
+            hashes.slice(1).forEach((h) => {
+              const ts = new Date(h.mtimeMs).toISOString();
+              console.log(`    - ${h.hash}  (last active ${ts})`);
+            });
+          } else {
+            console.log(`\n[Lark Desktop] Multiple accounts detected:`);
+            hashes.forEach((h, i) => {
+              const ts = new Date(h.mtimeMs).toISOString();
+              console.log(`  ${i + 1}. ${h.hash}  (last active ${ts})`);
+            });
+            const pick = (await ask(`Bind profile "${targetProfile}" to which? [1]: `)).trim() || '1';
+            const idx = parseInt(pick, 10) - 1;
+            chosenHash = (idx >= 0 && idx < hashes.length) ? hashes[idx].hash : hashes[0].hash;
+          }
+        }
+        credentials.setProfileLarkHash(targetProfile, chosenHash);
+        console.log(`Bound profile "${targetProfile}" to Lark account hash ${chosenHash}`);
+        console.log(`  → MCP will auto-switch to this profile when Lark Desktop activates this account.`);
+      }
+      // hashes.length === 0 → silent (Lark not installed, or non-darwin) — don't disrupt setup
+    } catch (e) {
+      console.error(`[Lark Desktop] auto-bind skipped: ${e.message}`);
+    }
+  }
 
   // --- Write harness config ---
   // Always write pointer-only env to harness configs (v1.3.9 SSOT).

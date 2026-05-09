@@ -80,6 +80,11 @@ let ownerHeartbeatTimer = null;
 let nonOwnerPollTimer = null;
 let _ownerStartCallbacks = [];
 
+// Lark Desktop reactor state (v1.3.11 §A) — owned by the heartbeat callback.
+let _lastHashMtimes = {};
+let _lastSwitchAt = 0;
+const _seenUnboundHashes = new Set();
+
 function _onBecomeOwner(cb) { _ownerStartCallbacks.push(cb); }
 
 function _stopHeartbeat() {
@@ -203,12 +208,21 @@ async function _claimAndStart() {
 
   // Heartbeat + check active changes every 15s.
   let lastCredMtime = _credMtime();
+  // Bootstrap baseline so the very first heartbeat doesn't trigger a switch.
+  _lastHashMtimes = require('./auth/lark-desktop').listAccountHashes()
+    .reduce((acc, h) => { acc[h.hash] = h.mtimeMs; return acc; }, {});
   ownerHeartbeatTimer = setInterval(() => {
     if (ownerHandle) ownerHandle.heartbeat();
     const m = _credMtime();
     if (m !== null && m !== lastCredMtime) {
       lastCredMtime = m;
       _maybeReconfigure().catch((e) => console.error(`[feishu-user-plugin] reconfigure failed: ${e.message}`));
+    }
+    // Lark Desktop reactor (v1.3.11 §A)
+    try {
+      _runLarkDesktopReactor();
+    } catch (e) {
+      console.error(`[feishu-user-plugin] Lark reactor error: ${e.message}`);
     }
     // Defer-rotate check
     try {
@@ -240,6 +254,34 @@ function _credMtime() {
     const p = path.join(FEISHU_HOME, 'credentials.json');
     return fs.statSync(p).mtimeMs;
   } catch (_) { return null; }
+}
+
+// Lark Desktop reactor (v1.3.11 §A).
+// Called from the owner heartbeat. When the most-recently-active hash differs
+// from the active profile's bound hash AND its mtime advanced since the last
+// snapshot, flip credentials.json::active to the matching profile (the existing
+// _credMtime delta on the next tick triggers _maybeReconfigure which restarts
+// the WS client with the new profile's events list).
+function _runLarkDesktopReactor() {
+  const ld = require('./auth/lark-desktop');
+  const out = ld.detectSwitch({
+    prevSnapshot: _lastHashMtimes,
+    lastSwitchAt: _lastSwitchAt,
+    seenUnboundHashes: _seenUnboundHashes,
+  });
+  if (out.switchTo) {
+    _lastSwitchAt = Date.now();
+    console.error(
+      `[feishu-user-plugin] Lark Desktop account changed; switching profile to ` +
+      `"${out.switchTo.profile}" (hash ${out.switchTo.hash})`
+    );
+    try { credentials.setActiveProfile(out.switchTo.profile); }
+    catch (e) { console.error(`[feishu-user-plugin] setActiveProfile failed: ${e.message}`); }
+  }
+  // Refresh snapshot regardless of switch outcome — keeps debounce + advance
+  // detection consistent on subsequent ticks.
+  _lastHashMtimes = ld.listAccountHashes()
+    .reduce((acc, h) => { acc[h.hash] = h.mtimeMs; return acc; }, {});
 }
 
 // Cross-process active-profile sync (v1.3.9 A.2).
