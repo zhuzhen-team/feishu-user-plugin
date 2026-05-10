@@ -86,7 +86,7 @@ feishu-user-plugin/
 
 | 触发条件 | 检查 | 失败时怎么办 |
 |---|---|---|
-| `CLAUDE.md` staged | 自动同步到 `AGENTS.md` + `skills/.../references/CLAUDE.md`（hook 自己处理，不需要手动） | 看 `bash scripts/sync-claude-md.sh` 是否报错 |
+| `CLAUDE.md` staged | 自动同步到 `AGENTS.md`（hook 自己处理，不需要手动） | 看 `bash scripts/sync-claude-md.sh` 是否报错 |
 | `package.json` / `plugin.json` / `SKILL.md` / `.cursor-plugin/plugin.json` staged | 四个文件的 `version` 字段必须一致 | bump 四个一起 |
 | `src/server.js` / `src/tools/*` staged | `npm run smoke` —— 84 工具 schema diff；README "84 tools" 徽章 + SKILL.md `allowed-tools` 列表必须 = `src/server.js TOOLS` | `npm run smoke:baseline` 重写 baseline（**仅当工具增删改是有意的**），然后再 `npm run smoke` |
 | `src/*` staged | smoke test | 同上 |

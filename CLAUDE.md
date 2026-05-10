@@ -91,14 +91,11 @@ post-v1.3.7 phase A 重构后的文件职责矩阵在 **[docs/REFACTOR-NOTES.md]
 
 ## Doc 同步规则
 
-`CLAUDE.md` 是 source of truth。pre-commit hook 自动派生：
+`CLAUDE.md` 是 source of truth。pre-commit hook 自动把它派生为 `AGENTS.md`（Codex 用）：标题替换为 `# feishu-user-plugin — Codex 指令`，正文与 CLAUDE.md 相同。
 
-- `AGENTS.md`（Codex 用）：标题替换为 `# feishu-user-plugin — Codex 指令`，正文与 CLAUDE.md 相同
-- `skills/feishu-user-plugin/references/CLAUDE.md`：与 CLAUDE.md 字节相同
+**不要手编 AGENTS.md** —— hook 会覆盖。
 
-**不要手编 AGENTS.md 或 skill ref CLAUDE.md** —— hook 会覆盖。
-
-CI（`validate.yml`）每个 PR 跑 diff 校验三联同步。
+CI（`validate.yml`）每个 PR 跑 diff 校验两文件同步。
 
 ## Commit conventions
 
