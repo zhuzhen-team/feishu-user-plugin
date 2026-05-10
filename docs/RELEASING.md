@@ -43,7 +43,7 @@ GitHub Actions workflow `.github/workflows/publish.yml` 在 `v*` tag push 时自
 
 自动部分（Phase B3 hooks）：
 
-- **pre-commit（本仓）**：`CLAUDE.md` 任何改动自动 sync `AGENTS.md` + `skills/feishu-user-plugin/references/CLAUDE.md`（脚本：`scripts/sync-claude-md.sh`）
+- **pre-commit（本仓）**：`CLAUDE.md` 任何改动自动 sync 到 `AGENTS.md`（脚本：`scripts/sync-claude-md.sh`）
 - **post-merge（本仓，main）**：把 `skills/` + `.claude-plugin/plugin.json` 拷到 `team-skills/plugins/feishu-user-plugin/`，建 `sync/feishu-v<version>` 分支，开 PR 加 `--auto --merge`（脚本：`scripts/sync-team-skills.sh`）
 
 仍需手动的部分：

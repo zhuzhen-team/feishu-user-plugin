@@ -590,7 +590,7 @@ If Feishu updates their protocol and something breaks, please [open an issue](ht
 
 This repo uses husky to enforce several invariants on every commit:
 
-- **CLAUDE.md sync** — staging `CLAUDE.md` automatically regenerates `AGENTS.md` (identical body, different first line) and `skills/feishu-user-plugin/references/CLAUDE.md` (verbatim copy). Both are re-staged in the same commit.
+- **CLAUDE.md sync** — staging `CLAUDE.md` automatically regenerates `AGENTS.md` (identical body, different first line). It's re-staged in the same commit.
 - **Version triangle** — if `package.json`, `.claude-plugin/plugin.json`, or `skills/feishu-user-plugin/SKILL.md` are staged, all three `version` fields must agree or the commit is rejected.
 - **Tool-count badge** — if `src/server.js` or any file under `src/tools/` is staged, the `N tools` badge in `README.md` must match the actual `TOOLS.length` exported by `src/server.js`.
 - **Smoke test** — any change under `src/` triggers `npm run smoke` to catch schema regressions before commit.

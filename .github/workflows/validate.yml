@@ -21,6 +21,4 @@ jobs:
           tail -n +2 CLAUDE.md > /tmp/body.md
           { echo "# feishu-user-plugin — Codex 指令"; cat /tmp/body.md; } > /tmp/expected_AGENTS.md
           diff /tmp/expected_AGENTS.md AGENTS.md
-      - name: skill reference CLAUDE.md is in sync with root CLAUDE.md
-        run: diff CLAUDE.md skills/feishu-user-plugin/references/CLAUDE.md
       - run: npm run smoke
