@@ -10,7 +10,7 @@
 
 - [ ] `npm run smoke` passes — no regression in 84 tools / 9 prompts / login_status shape
 - [ ] If schema delta intentional: regenerated baseline with `npm run smoke:baseline`
-- [ ] Version triangle (`package.json` / `.claude-plugin/plugin.json` / `skills/feishu-user-plugin/SKILL.md`) consistent if any of these touched
+- [ ] Version quad (`package.json` / `.claude-plugin/plugin.json` / `skills/feishu-user-plugin/SKILL.md` / `.cursor-plugin/plugin.json`) consistent if any of these touched
 - [ ] CLAUDE.md auto-synced to AGENTS.md + skill ref (hook handles this; just `git add -p` if it stages something)
 - [ ] No new dependencies added (or justified if added)
 

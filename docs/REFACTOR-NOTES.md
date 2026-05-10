@@ -144,7 +144,7 @@ If a feature genuinely doesn't fit any domain (e.g. WebSocket event subscription
 ## Smoke Test Contract
 
 `scripts/smoke.js` is the regression gate. It freezes:
-- Tool count (currently 81)
+- Tool count (currently 84)
 - Each schema (sorted, normalized)
 - The shape of `get_login_status` response
 
