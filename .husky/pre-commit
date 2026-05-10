@@ -5,6 +5,11 @@ if git diff --cached --name-only | grep -qE "(^|/)package\.json$|(^|/)plugin\.js
   node scripts/check-version.js || exit 1
 fi
 
+# Description drift check when any manifest with a description field is staged
+if git diff --cached --name-only | grep -qE "(^|/)package\.json$|(^|/)plugin\.json$|(^|/)SKILL\.md$|(^|/)mcp-registry\.json$|(^|/)\.mcpb/manifest\.json$"; then
+  node scripts/check-description-drift.js || exit 1
+fi
+
 # Tool-count check when server.js or tools/ staged
 if git diff --cached --name-only | grep -qE "^src/server\.js|^src/tools/"; then
   node scripts/check-tool-count.js || exit 1
