@@ -18,7 +18,7 @@
 
 ## Cookie 鉴权失败
 
-- 浏览器 console `document.cookie` 拿不到 HttpOnly cookies（`session`、`sl_session`）。用 DevTools Network → 第一个请求 → Request Headers → Cookie。或者用 Playwright 两步提取（见 [docs/AUTH-SETUP.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/AUTH-SETUP.md)）
+- 浏览器 console `document.cookie` 拿不到 HttpOnly cookies（`session`、`sl_session`）。用 DevTools Network → 第一个请求 → Request Headers → Cookie。或者用 Playwright 两步提取（见 [AUTH-SETUP.md](./AUTH-SETUP.md)）
 - Playwright 登错账号：navigate 之前**永远** `context.clearCookies()`
 
 ## `read_messages` 报错

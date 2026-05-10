@@ -3,7 +3,7 @@
 > **谁该读**：第一次安装本插件的开发者、要诊断鉴权故障的用户、需要扩 OAuth scope 的维护者。  
 > **何时读**：安装时、Cookie 过期、UAT refresh 失败、新加 OAuth scope、配多 profile。
 
-覆盖三层鉴权 / 安装流程 / Cookie Setup / OAuth Scopes。终端用户简化安装见 [README](https://github.com/EthanQC/feishu-user-plugin#readme)。
+覆盖三层鉴权 / 安装流程 / Cookie Setup / OAuth Scopes。终端用户简化安装见 [README](../README.md)。
 
 ## 必需环境变量
 
@@ -34,7 +34,7 @@
 
 ## 凭证库（v1.3.7+）
 
-单一可信源 `~/.feishu-user-plugin/credentials.json`（mode 0600）。Schema 见 [docs/CREDENTIALS-FORMAT.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/CREDENTIALS-FORMAT.md)。MCP server 在该文件存在时优先读它；cookie 心跳和 UAT 刷新原子写回。多个 harness（Claude Code、Codex）共享一份 —— 不再有"Codex 仍持旧 UAT"漂移。
+单一可信源 `~/.feishu-user-plugin/credentials.json`（mode 0600）。Schema 见 [CREDENTIALS-FORMAT.md](./CREDENTIALS-FORMAT.md)。MCP server 在该文件存在时优先读它；cookie 心跳和 UAT 刷新原子写回。多个 harness（Claude Code、Codex）共享一份 —— 不再有"Codex 仍持旧 UAT"漂移。
 
 可选迁移：
 
