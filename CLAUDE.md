@@ -131,13 +131,14 @@ CI（`validate.yml`）每个 PR 跑 diff 校验三联同步。
 
 | 主题 | 文件 |
 |------|------|
-| 工具详细 + 用法 patterns | [docs/TOOLS.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/TOOLS.md)（中文） |
-| 安装与凭证 + Cookie 抓取 + OAuth Scopes | [docs/AUTH-SETUP.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/AUTH-SETUP.md)（中文） |
-| 错误诊断 / 故障排查 | [docs/TROUBLESHOOTING.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/TROUBLESHOOTING.md)（中文） |
-| 发版流程 + team-skills 同步 + 公告规则 | [docs/RELEASING.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/RELEASING.md)（中文） |
-| 文件职责矩阵 / 新增工具放哪 | [docs/REFACTOR-NOTES.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/REFACTOR-NOTES.md)（英文） |
-| 凭证文件 schema | [docs/CREDENTIALS-FORMAT.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/CREDENTIALS-FORMAT.md)（英文） |
-| 测试方法论 | [docs/TESTING-METHODOLOGY.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/TESTING-METHODOLOGY.md)（英文） |
+| 工具详细 + 用法 patterns | [docs/TOOLS.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/TOOLS.md) |
+| 安装与凭证 + Cookie 抓取 + OAuth Scopes | [docs/AUTH-SETUP.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/AUTH-SETUP.md) |
+| 错误诊断 / 故障排查 | [docs/TROUBLESHOOTING.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/TROUBLESHOOTING.md) |
+| 发版流程 + team-skills 同步 + 公告规则 | [docs/RELEASING.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/RELEASING.md) |
+| 文件职责矩阵 / 新增工具放哪 | [docs/REFACTOR-NOTES.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/REFACTOR-NOTES.md) |
+| 凭证文件 schema | [docs/CREDENTIALS-FORMAT.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/CREDENTIALS-FORMAT.md) |
+| 测试方法论 | [docs/TESTING-METHODOLOGY.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/TESTING-METHODOLOGY.md) |
+| Cookie protobuf 抓包记录 | [docs/COOKIE-PROTOBUF-CAPTURES.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/COOKIE-PROTOBUF-CAPTURES.md) |
 | 贡献流程（dev 环境 + 新增工具流程 + PR 流程） | [CONTRIBUTING.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/CONTRIBUTING.md)（中英双语） |
 | 路线图 | [ROADMAP.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/ROADMAP.md) |
 | 历史 changelog | [CHANGELOG.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/CHANGELOG.md) |
