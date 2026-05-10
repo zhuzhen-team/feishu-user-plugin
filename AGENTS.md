@@ -430,7 +430,7 @@ Three-layer version safety:
 
 Steps:
 1. Confirm target version with user (once)
-2. Bump `version` in `package.json` + `.claude-plugin/plugin.json` + `skills/feishu-user-plugin/SKILL.md` (single commit; `scripts/check-version.js` enforces triangle equality)
+2. Bump `version` in `package.json` + `.claude-plugin/plugin.json` + `skills/feishu-user-plugin/SKILL.md` + `.cursor-plugin/plugin.json` (all four — single commit; `scripts/check-version.js` enforces equality across these four; `mcp-registry.json` and `.mcpb/manifest.json` are version-checked separately by their own scripts)
 3. Open release PR, wait for CI green (auto-merge enabled on this repo, so `gh pr merge --auto --squash`)
 4. After merge, `git tag vX.Y.Z && git push origin vX.Y.Z` triggers GitHub Actions `Publish to npm` workflow
 5. Verify: `npm view feishu-user-plugin version` returns the new version
@@ -438,7 +438,6 @@ Steps:
 7. Run `node scripts/generate-release-artifacts.js` to produce `/tmp/feishu-release/v$VERSION/feishu-card.json`
 8. Present the card preview to user. Wait for "发"
 9. `send_card_as_user(chat_id="oc_0fab8e155f500f28bd437e8686921870", card=<JSON>)` — only after user explicitly approves
-6. **After npm confirms the new version is live, draft a release announcement in Chinese for the "AI技术解决（内部）" Feishu group and show it to the user for approval BEFORE sending.** Do not send until the user explicitly approves.
 
 ### Release announcement rules (every release)
 

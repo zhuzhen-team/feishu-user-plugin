@@ -347,7 +347,7 @@ CI（`.github/workflows/validate.yml`）每个 PR 跑同样的 gate。
 - **协议变化**：cookie + protobuf 层依赖飞书 web 客户端的协议，飞书更新可能失效（机器人能力不受影响）
 - **卡片**：cookie 通道发卡片服务端不可用，机器人通道可发
 - **Lark 国际版**：实时事件 WS 不支持
-- **未实现**：`search_messages`（v1.3.10 计划）、md → wiki 同步（v1.3.10 主线）
+- **未实现**：`search_messages`、md → wiki 同步（详见 [ROADMAP.md](ROADMAP.md)）
 
 完整 ROADMAP 见 [ROADMAP.md](ROADMAP.md)。
 

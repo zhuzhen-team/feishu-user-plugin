@@ -87,7 +87,7 @@ feishu-user-plugin/
 | 触发条件 | 检查 | 失败时怎么办 |
 |---|---|---|
 | `CLAUDE.md` staged | 自动同步到 `AGENTS.md` + `skills/.../references/CLAUDE.md`（hook 自己处理，不需要手动） | 看 `bash scripts/sync-claude-md.sh` 是否报错 |
-| `package.json` / `plugin.json` / `SKILL.md` staged | 三个文件的 `version` 字段必须一致 | bump 三个一起 |
+| `package.json` / `plugin.json` / `SKILL.md` / `.cursor-plugin/plugin.json` staged | 四个文件的 `version` 字段必须一致 | bump 四个一起 |
 | `src/server.js` / `src/tools/*` staged | `npm run smoke` —— 84 工具 schema diff；README "84 tools" 徽章 + SKILL.md `allowed-tools` 列表必须 = `src/server.js TOOLS` | `npm run smoke:baseline` 重写 baseline（**仅当工具增删改是有意的**），然后再 `npm run smoke` |
 | `src/*` staged | smoke test | 同上 |
 
@@ -169,7 +169,7 @@ For developers more comfortable in English. Mirrors the structure above:
 
 - **Setup**: `npm install && npx . setup --app-id <X> --app-secret <Y> && npx . oauth`
 - **Smoke gate**: `npm run smoke` after any schema-affecting change. Regen baseline only if the delta is intentional: `npm run smoke:baseline`
-- **Pre-commit gates** (husky): version triangle (`package.json` / `plugin.json` / `SKILL.md` versions must match), tool-count badge (`README.md` "N tools" must equal `src/server.js TOOLS.length`), CLAUDE.md sync, smoke for `src/*` changes
+- **Pre-commit gates** (husky): version quad (`package.json` / `plugin.json` / `SKILL.md` / `.cursor-plugin/plugin.json` versions must match), tool-count badge (`README.md` "N tools" must equal `src/server.js TOOLS.length`), CLAUDE.md sync, smoke for `src/*` changes
 - **Layout** (post-v1.3.7): `src/clients/official/<domain>.js` for Official API, `src/clients/user.js` for cookie identity, `src/tools/<domain>.js` for MCP tool schema + handler. Each tool module exports `{ schemas, handlers }`. See `src/tools/_registry.js` for the `ctx` contract and [docs/REFACTOR-NOTES.md](docs/REFACTOR-NOTES.md) for the full boundary matrix.
 - **Adding a tool**: see "新增工具的标准流程" above (steps map 1:1)
 - **Commit prefixes**: `feat: / fix: / docs: / chore: / refactor: / test:`
