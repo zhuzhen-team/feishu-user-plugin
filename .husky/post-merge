@@ -1,3 +1,14 @@
 if [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ]; then
-  bash scripts/sync-team-skills.sh || echo "[hook] team-skills sync failed (non-fatal)"
+  # Only sync to team-skills when this merge changed something the team-skills repo cares about:
+  #   - skills/                        (skill bodies + SKILL.md)
+  #   - .claude-plugin/plugin.json     (plugin metadata, including version)
+  #   - CHANGELOG.md                   (release notes injected into team-skills child README)
+  #   - package.json                   (version, used by sync script + catalog row)
+  # Doc-only PRs (CLAUDE.md / README / docs/*) skip the sync — saves ~5-10s + git fetch.
+  CHANGED=$(git diff --name-only HEAD@{1} HEAD 2>/dev/null || echo "FALLBACK")
+  if [ "$CHANGED" = "FALLBACK" ] || echo "$CHANGED" | grep -qE "^skills/|^\.claude-plugin/plugin\.json$|^CHANGELOG\.md$|^package\.json$"; then
+    bash scripts/sync-team-skills.sh || echo "[hook] team-skills sync failed (non-fatal)"
+  else
+    echo "[hook] no team-skills-relevant changes, skipping sync-team-skills.sh"
+  fi
 fi
