@@ -6,7 +6,7 @@
 
 ### 主线
 
-- [ ] **C. 本地 md → 飞书知识库同步**（v1.3.4 / 1.3.6 / 1.3.7 / 1.3.8 / 1.3.9 / 1.3.10 / 1.3.11 持续推迟；v1.3.12 主角）
+- [ ] **C. 本地 md → 飞书知识库同步**（v1.3.4 起多次推迟；v1.3.12 主角）
   - md parser 选型（remark / markdown-it / unified）
   - `src/doc-blocks.js` 补齐 heading / bullet / ordered / code / quote / divider / table / todo / callout 构造器
   - wikilink `[[page]]` 解析：按 md 文件名 / 标题 / 用户自定义 mapping 三级策略
