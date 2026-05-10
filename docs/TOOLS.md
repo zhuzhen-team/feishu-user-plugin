@@ -1,8 +1,9 @@
 # 工具引用（84 tools）
 
-每个工具的具体参数说明在 MCP `inputSchema.description` 字段里（运行时可见）。本文档列工具名 + 跨域 caveat + 常见用法 pattern。
+> **谁该读**：在本仓写新工具的开发者、在仓内干活的 AI agent、想知道某工具具体能力的高级用户。  
+> **何时读**：写新工具前对照域分布、调用某工具不确定参数、查跨域 caveat / 已知错误码。
 
-> 本文是 `CLAUDE.md` 的拆分附属文件，原本嵌在 CLAUDE.md 主文件，v1.3.12 起拆出来减少每会话 token 占用。
+每个工具的具体参数说明在 MCP `inputSchema.description` 字段里（运行时可见）。本文档列工具名 + 跨域 caveat + 常见用法 pattern。
 
 ## 目录
 

@@ -1,6 +1,9 @@
 # 发版流程
 
-> 本文是 `CLAUDE.md` 的拆分附属文件，覆盖 npm publish + team-skills 同步 + 发布公告全流程。
+> **谁该读**：仓库 maintainer、要修发版流程的开发者、看公告卡格式约定的人。  
+> **何时读**：bump 版本前、修 publish workflow、改 CHANGELOG 格式、调整 release 公告规则。
+
+覆盖 npm publish + team-skills 同步 + 发布公告全流程。**关键：用户确认每个 release 恰好两次** —— 一次确认目标版本，一次确认公告卡片。
 
 ## 关键约束（"必读"，不要跳过）
 

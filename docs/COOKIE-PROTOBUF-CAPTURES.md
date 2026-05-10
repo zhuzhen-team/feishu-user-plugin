@@ -1,5 +1,8 @@
 # Cookie Protobuf Wire Format 抓包记录
 
+> **谁该读**：扩展 cookie 协议路径的开发者（少数）—— 例如新增 user-identity 消息类型、扩 `proto/lark.proto` 字段。  
+> **何时读**：要做协议反向、看到 user-identity 消息类型缺失字段、Feishu 协议变更时复盘。
+
 活文档 —— 每抓到一种消息类型并解码后追加。
 
 ## 抓包方法论

@@ -1,5 +1,8 @@
 # 凭证文件格式
 
+> **谁该读**：要手编 `~/.feishu-user-plugin/credentials.json` 的高级用户、加 multi-profile 的开发者、给 schema 加新字段的维护者。  
+> **何时读**：手动迁移凭证、debug profile 切换、扩 events / larkHash 等可选字段、做向后兼容设计。
+
 feishu-user-plugin 所有凭证的单一可信源，v1.3.7 引入。
 
 ## 路径
