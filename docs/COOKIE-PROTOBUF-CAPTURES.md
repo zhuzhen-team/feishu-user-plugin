@@ -1,32 +1,24 @@
-# Cookie Protobuf Wire Format Captures
+# Cookie Protobuf Wire Format 抓包记录
 
-Living document — appended as each message type is captured & decoded.
+活文档 —— 每抓到一种消息类型并解码后追加。
 
-## Capture Session Methodology
+## 抓包方法论
 
-The Feishu Web client encodes outgoing messages as protobuf inside a `Packet`
-wrapper, then POSTs them to `https://internal-api-lark-api.feishu.cn/im/gateway/`.
-The wire format is documented in `proto/lark.proto`, but multiple message types
-have hidden metadata fields not yet captured. To extend the proto:
+飞书 Web 客户端把出站消息编码成 protobuf 包在 `Packet` wrapper 里，POST 到 `https://internal-api-lark-api.feishu.cn/im/gateway/`。Wire format 在 `proto/lark.proto` 文档化，但多个消息类型仍有未抓到的隐藏元数据字段。扩展 proto：
 
-1. **Run a capture session** with Playwright MCP (this is what an agent driving
-   `mcp__plugin_playwright_playwright__*` tools does):
+1. **跑一次抓包会话**（用 Playwright MCP —— agent 驱动 `mcp__plugin_playwright_playwright__*` 工具就是干这个）：
    - `browser_navigate('https://www.feishu.cn/messenger/')`
-   - Verify session via `browser_evaluate("document.cookie.includes('session=')")`
-   - Inject all cookies from `LARK_COOKIE` env if missing (browser_run_code with
-     `context.addCookies()`)
-   - `browser_click` on the self-chat ("我自己") in the chat list
-   - For IMAGE: `browser_file_upload` with a small test PNG
-   - For AUDIO: click record button (require browser to grant microphone permission;
-     headless Playwright often denies — manual capture may be needed)
-   - For STICKER: open emoji panel, click a sticker, click send
-   - For CARD: web UI may not expose card composition; capture from a
-     prebuilt card sent by another route (e.g. via `send_message_as_bot` and
-     then forward to self-chat to capture wire format)
-   - **Critical: monkey-patch fetch BEFORE sending** to capture the protobuf
-     payload:
+   - 通过 `browser_evaluate("document.cookie.includes('session=')")` 验证 session
+   - 缺失时用 `LARK_COOKIE` env 注入所有 cookies（`browser_run_code` 走 `context.addCookies()`）
+   - `browser_click` 在 chat 列表的自己（"我自己"）上
+   - IMAGE：`browser_file_upload` 用一个小测试 PNG
+   - AUDIO：点录音按钮（需要浏览器允许麦克风权限；headless Playwright 经常拒绝 —— 可能需要手动抓）
+   - STICKER：打开 emoji 面板，点一个 sticker，点发送
+   - CARD：web UI 可能不暴露 card 编排；从其他路由发的预制 card 抓（如经 `send_message_as_bot` 然后转发到自己 chat 抓 wire format）
+   - **关键：发送之前 monkey-patch fetch** 抓 protobuf 载荷：
+
      ```javascript
-     // browser_run_code: install the patcher first
+     // browser_run_code: 先装 patcher
      const origFetch = window.fetch;
      window.__CAPTURED_GATEWAY_BODY__ = null;
      window.fetch = async (url, opts) => {
@@ -41,93 +33,60 @@ have hidden metadata fields not yet captured. To extend the proto:
        return origFetch(url, opts);
      };
      ```
-   - Then send via the UI, then `browser_evaluate('window.__CAPTURED_GATEWAY_BODY__')`
-2. **Save the raw bytes** to `/tmp/feishu-captures/<type>-N.b64`.
-3. **Decode** with `node scripts/decode-feishu-protobuf.js Packet --b64 "$(cat /tmp/feishu-captures/<type>-N.b64)"`.
-   The decoder shows decoded fields PLUS unknown tags it found in the wire that
-   aren't yet in the proto. Add those fields to `proto/lark.proto`.
-4. **Iterate**: re-decode, identify deeper unknown fields (the bytes we
-   identified as unknown may themselves be nested messages with their own
-   unknown fields). Repeat until decoder reports `--- All fields known ---`.
 
-## IMAGE (cmd=5, type=5)
+   - 然后 UI 发送，再 `browser_evaluate('window.__CAPTURED_GATEWAY_BODY__')`
 
-Status: **attempted in v1.3.9 session 2026-05-08, blocked on UI navigation** — set aside per user directive
-("先放一下"). Capture pipeline proven; image upload trigger needs deeper investigation.
+2. **存原始字节**到 `/tmp/feishu-captures/<type>-N.b64`
 
-### Progress made
+3. **解码** `node scripts/decode-feishu-protobuf.js Packet --b64 "$(cat /tmp/feishu-captures/<type>-N.b64)"`。解码器显示已解码字段加上 wire 中找到的 proto 里还没有的未知 tag。把那些字段加到 `proto/lark.proto`
 
-- Cookie injection from LARK_COOKIE env via `context.addCookies()` works (29 cookies parsed from
-  `~/.claude.json` mcpServers env block, all 29 inject cleanly).
-- `page.addInitScript()` to register fetch / XHR / WebSocket capture patches BEFORE page load is the
-  right pattern (the prior attempt installed patches AFTER page load and missed the bootstrap WS
-  connection).
-- After init-script + reload, **2 `/im/gateway/` POSTs were captured at boot** confirming Feishu web
-  client sends via HTTP POST (not WebSocket) to the same `internal-api-lark-api.feishu.cn/im/gateway/`
-  endpoint our plugin hits.
+4. **迭代**：重新解码、识别更深层的未知字段（被识别为未知的字节自身可能是嵌套 message 带自己的未知字段）。重复直到解码器报告 `--- All fields known ---`
 
-### Blocker
+## IMAGE（cmd=5, type=5）
 
-When clicked, `飞书plugin测试群` chat opens the **Lark Editor "Pin" panel** as the right pane
-(infinite contenteditable wrapped in `editor-kit-container` and `code-block-zone-container`), NOT a
-standard chat input box with bottom toolbar. Possible causes:
+状态：**v1.3.9 会话 2026-05-08 尝试，因 UI 导航卡住搁置** —— 按用户指示（"先放一下"）暂停。抓包 pipeline 已验证，图片上传触发需要更深调查。
 
-1. The `/next/messenger/` URL routes to a docs-first interface; the chat input may be rendered in a
-   different layout selectable via a UI tab.
-2. The chat input contenteditable may live in a shadow DOM root that
-   `document.querySelectorAll('[contenteditable="true"]')` doesn't pierce.
-3. Feishu's image upload may use Electron-style native file dialog via private API
-   (`window.electronAPI` / `feishuBridge`) that bypasses standard `<input type="file">` entirely.
+### 已取得的进展
 
-Toolbar buttons (14 found in the input row at y≈794) when clicked do NOT create file inputs —
-clicking them either opens emoji/sticker panels or has no observable DOM effect.
+- 通过 `context.addCookies()` 从 LARK_COOKIE env 注入 cookie 工作（从 `~/.claude.json` mcpServers env block 解析出 29 个 cookie，全部 inject 干净）
+- `page.addInitScript()` 在页面加载**前**注册 fetch / XHR / WebSocket 抓取 patch 是正确模式（之前 attempt 在页面加载**后**安装 patch，错过了 bootstrap WS 连接）
+- init-script + reload 后 **boot 时抓到 2 个 `/im/gateway/` POST**，确认飞书 web 客户端经 HTTP POST（不是 WebSocket）发到我们插件命中的同一个 `internal-api-lark-api.feishu.cn/im/gateway/` 端点
 
-Synthesized `paste` and `drop` events with `DataTransfer` containing a File object DID NOT trigger
-upload — Feishu's paste handler likely requires the user-trusted event flag, which Playwright's
-synthetic events don't carry.
+### 阻塞
 
-### Recommended next steps
+点击 `飞书plugin测试群` chat 时打开了**Lark Editor "Pin" 面板**作为右侧 pane（无穷的 contenteditable 包在 `editor-kit-container` 和 `code-block-zone-container` 里），**不是**带底部工具栏的标准 chat input。可能原因：
 
-1. **Use Chrome DevTools Protocol (CDP) directly** — `page.context()._connection.send('Network.enable')`
-   plus subscribing to `Network.requestWillBeSentExtraInfo` would capture the POST bodies independent
-   of UI navigation. Combine with manual user-driven send (script the Playwright session to PAUSE,
-   user manually navigates the actual Feishu Desktop app or another browser tab, capture happens
-   in the Playwright tab via shared cookies — won't work cross-process).
-2. **Find the actual chat input** — try `page.locator('textarea, [role="textbox"]').all()` instead of
-   `[contenteditable]`; or sample the rendered DOM after pressing Tab from the page top to find
-   focusable input candidates; or pierce shadow DOM with `el.shadowRoot` traversal.
-3. **Skip web client; capture from Feishu Desktop client** — start mitmproxy or Charles, configure
-   the Feishu desktop app to use it, capture HTTPS traffic to `internal-api-lark-api.feishu.cn/im/gateway/`
-   directly. Cleaner because the desktop client is the same process that originated our existing
-   working text/file/post wire format.
-4. **Brute-force the protobuf** — given v1.3.7 already encodes IMAGE with `Content.imageKey` only and
-   gets HTTP 400, write a small harness that tries adding individual fields one at a time
-   (`imageKey` + `width`, then `+ height`, then `+ mimeType`, etc.) and observes 200 vs 400 response
-   to converge on the required field set. Slower but works without web client capture.
+1. `/next/messenger/` URL 走到一个 docs-first 接口；chat input 可能在不同布局里通过 UI tab 选中
+2. Chat input contenteditable 可能在 shadow DOM root 里，`document.querySelectorAll('[contenteditable="true"]')` 穿不过
+3. 飞书的图片上传可能用 Electron 风格原生文件对话框（经私有 API `window.electronAPI` / `feishuBridge`）完全绕开标准 `<input type="file">`
 
-### Capture pipeline artifacts
+工具栏按钮（input 行 y≈794 处找到 14 个）点击时**不创建** file input —— 点击它们要么打开 emoji/sticker 面板要么没可观察 DOM 效果。
 
-The capture init-script template is in
-[`.playwright-mcp/init-script.js`](../.playwright-mcp/init-script.js)
-(or regenerate from this doc). Three test PNGs are pre-generated at
-`.playwright-mcp/captures/test-{small,medium,large}.png` (50×50 / 200×150 / 1200×800).
+合成的 `paste` 和 `drop` 事件带含 File 对象的 `DataTransfer` **没**触发上传 —— 飞书的 paste handler 大概要求 user-trusted event flag，Playwright 的合成事件不带。
 
-## AUDIO (cmd=5, type=7)
+### 建议下一步
 
-Status: pending. Deleted from v1.3.9 scope per Spec 2 (low usage).
+1. **直接用 Chrome DevTools Protocol（CDP）** —— `page.context()._connection.send('Network.enable')` 加订阅 `Network.requestWillBeSentExtraInfo` 会独立于 UI 导航抓 POST body。配合手动用户驱动发送（脚本化 Playwright session 暂停，用户手动导航实际飞书 Desktop app 或另一浏览器 tab，抓包发生在 Playwright tab 通过共享 cookie —— 跨进程不工作）
+2. **找到真的 chat input** —— 试 `page.locator('textarea, [role="textbox"]').all()` 而不是 `[contenteditable]`；或从页面顶部按 Tab 后采样渲染后 DOM 找可聚焦 input 候选；或用 `el.shadowRoot` 遍历穿透 shadow DOM
+3. **跳过 web 客户端，从飞书 Desktop 客户端抓** —— 启 mitmproxy 或 Charles，配飞书 desktop app 用它，直接抓到 `internal-api-lark-api.feishu.cn/im/gateway/` 的 HTTPS 流量。更干净，因为 desktop 客户端是和我们已有工作 text/file/post wire format 同源的进程
+4. **对 protobuf brute-force** —— 鉴于 v1.3.7 已经只用 `Content.imageKey` 编码 IMAGE 拿到 HTTP 400，写一个小 harness 一次试加单个字段（`imageKey` + `width`，再 `+ height`，再 `+ mimeType`，等等）观察 200 vs 400 响应收敛到必需字段集。慢但不需要 web 客户端抓包就能 work
 
-## STICKER (cmd=5, type=10)
+### 抓包 pipeline 产物
 
-Status: pending. Deleted from v1.3.9 scope per Spec 2 (low value).
+抓包 init-script 模板在 `.playwright-mcp/init-script.js`（或从本文档重生）。三个测试 PNG 预生成在 `.playwright-mcp/captures/test-{small,medium,large}.png`（50×50 / 200×150 / 1200×800）。
 
-## CARD (cmd=5, type=14)
+## AUDIO（cmd=5, type=7）
 
-Status: **attempted in v1.3.9 session 2026-05-08; not started**. Same blocker as IMAGE — UI
-navigation to the card editor fails because the right pane is occupied by Lark Editor / Pin
-framework. Spec 2 §2.4 documented three fallback paths (forward existing bot card / web SDK
-embed / direct protocol injection). Path iii (brute-force protocol) is most likely to succeed
-without web UI.
+状态：pending。v1.3.9 scope 按 Spec 2 删除（使用率低）。
+
+## STICKER（cmd=5, type=10）
+
+状态：pending。v1.3.9 scope 按 Spec 2 删除（价值最低）。
+
+## CARD（cmd=5, type=14）
+
+状态：**v1.3.9 会话 2026-05-08 尝试；未启动**。同 IMAGE 阻塞 —— UI 导航到 card 编辑器失败因为右侧 pane 被 Lark Editor / Pin 框架占据。Spec 2 §2.4 文档了三条 fallback 路径（forward 已存在 bot card / web SDK embed / 直接协议注入）。Path iii（brute-force 协议）最有可能不靠 web UI 抓包就成功。
 
 ## search_messages
 
-Status: pending. UAT-first attempt before reverse-engineering — see Phase 6 (deferred to v1.3.10).
+状态：pending。在反向工程之前先 UAT-first 尝试 —— 见 Phase 6（v1.3.10 推迟）。

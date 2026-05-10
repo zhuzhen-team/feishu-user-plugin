@@ -1,14 +1,14 @@
-# Credentials File Format
+# 凭证文件格式
 
-Single source of truth for all feishu-user-plugin credentials, introduced in v1.3.7.
+feishu-user-plugin 所有凭证的单一可信源，v1.3.7 引入。
 
-## Path
+## 路径
 
 ```
 ~/.feishu-user-plugin/credentials.json
 ```
 
-Mode `0600` (owner read/write only). The directory `~/.feishu-user-plugin/` is created with mode `0700`.
+Mode `0600`（仅 owner 读写）。目录 `~/.feishu-user-plugin/` 创建时 mode `0700`。
 
 ## Schema
 
@@ -38,42 +38,42 @@ Mode `0600` (owner read/write only). The directory `~/.feishu-user-plugin/` is c
 }
 ```
 
-### Fields
+### 字段
 
-| Field | Type | Purpose |
-|-------|------|---------|
-| `version` | integer | Schema version. Currently `1`. |
-| `active` | string | Name of the profile to use when no override is given. Must be a key in `profiles`. |
-| `profiles` | object | Map of `<profileName> → profileBlock`. Each profile block holds the same `LARK_*` keys the MCP server reads from `process.env`, plus the optional `events` array. |
-| `profileHints` | object | Multi-profile auto-switch cache. Map of `<resourceKey> → <profileName>`. Populated automatically by the auto-switch middleware. |
+| 字段 | 类型 | 用途 |
+|------|------|------|
+| `version` | integer | Schema 版本。当前 `1` |
+| `active` | string | 没有 override 时使用的 profile 名。必须是 `profiles` 的一个 key |
+| `profiles` | object | `<profileName> → profileBlock` 映射。每个 profile block 持有 MCP server 从 `process.env` 读的同样的 `LARK_*` keys，加上可选的 `events` 数组 |
+| `profileHints` | object | 多 profile auto-switch 缓存。`<resourceKey> → <profileName>` 映射。由 auto-switch 中间件自动填充 |
 
-### Profile block keys
+### Profile block 字段
 
-#### `LARK_*` env keys
+#### `LARK_*` env 字段
 
-| Key | Required for | Notes |
-|-----|--------------|-------|
-| `LARK_COOKIE` | User-identity messaging | Full cookie string including HttpOnly cookies (`session`, `sl_session`). |
-| `LARK_APP_ID` | Official API + UAT refresh | App credential. |
-| `LARK_APP_SECRET` | Official API + UAT refresh | App credential. |
-| `LARK_USER_ACCESS_TOKEN` | P2P chat reading + UAT-first writes | OAuth access token. |
-| `LARK_USER_REFRESH_TOKEN` | UAT auto-refresh | OAuth refresh token. |
-| `LARK_UAT_EXPIRES` | UAT lifecycle | Unix epoch (seconds). Optional — decoded from token if absent. |
+| Key | 用途 | 备注 |
+|-----|------|------|
+| `LARK_COOKIE` | 用户身份发消息 | 完整 cookie 字符串含 HttpOnly cookies（`session`、`sl_session`） |
+| `LARK_APP_ID` | Official API + UAT 刷新 | App 凭证 |
+| `LARK_APP_SECRET` | Official API + UAT 刷新 | App 凭证 |
+| `LARK_USER_ACCESS_TOKEN` | P2P 读取 + UAT-first 写入 | OAuth access token |
+| `LARK_USER_REFRESH_TOKEN` | UAT 自动刷新 | OAuth refresh token |
+| `LARK_UAT_EXPIRES` | UAT 生命周期 | Unix epoch（秒）。可选 —— 没有时从 token 解码 |
 
-#### `events` array (optional, v1.3.9)
+#### `events` 数组（可选，v1.3.9）
 
 ```json
 "events": ["im.message.receive_v1", "approval.instance.created_v4"]
 ```
 
-List of Feishu real-time event types the WebSocket client subscribes to for this profile.
+本 profile WebSocket 客户端订阅的飞书实时事件类型列表。
 
-- **Default** (when absent or empty): `["im.message.receive_v1"]`
-- Managed by `getProfileEvents(name)` / `setProfileEvents(name, list)` in `src/auth/credentials.js`.
-- The owner MCP process reads this list at WS start and on `_maybeReconfigure()` to decide whether to restart the WebSocket client.
-- Supported event types are those exposed by the Feishu WS SDK. Adding an unsupported type is a no-op for the SDK but wastes a subscription slot.
+- **默认**（缺失或空时）：`["im.message.receive_v1"]`
+- 由 `src/auth/credentials.js` 中的 `getProfileEvents(name)` / `setProfileEvents(name, list)` 管理
+- Owner MCP 进程在 WS 启动和 `_maybeReconfigure()` 时读这个列表，决定是否重启 WebSocket client
+- 支持的事件类型是飞书 WS SDK 暴露的那些。加不支持的类型对 SDK 是 no-op，但浪费一个订阅槽位
 
-Example — add approval events to the default profile:
+例 —— 给 default profile 加审批事件：
 
 ```bash
 node -e '
@@ -83,22 +83,22 @@ console.log(c.getProfileEvents("default"));
 '
 ```
 
-After editing, either restart the MCP server or call `manage_ws_status(action=reconfig)` to apply.
+编辑后，要么重启 MCP server，要么调 `manage_ws_status(action=reconfig)` 应用。
 
-#### `larkHash` (optional, v1.3.11)
+#### `larkHash`（可选，v1.3.11）
 
 ```json
 "larkHash": "cdf3423ce6e643cdf21af46f1f263347"
 ```
 
-32-char-hex Lark Desktop account hash from `~/Library/Containers/com.bytedance.macos.feishu/Data/Library/Application Support/LarkShell/sdk_storage/<hash>/`. When this field is set, the MCP owner heartbeat (15 s) watches the matching `cookie_store.db` mtime and auto-flips `credentials.json::active` to this profile when the user activates that account in Lark Desktop. macOS-only in v1.3.11.
+来自 `~/Library/Containers/com.bytedance.macos.feishu/Data/Library/Application Support/LarkShell/sdk_storage/<hash>/` 的 32 字符 hex Lark Desktop 账号 hash。设置该字段后，MCP owner heartbeat（15 秒）watch 对应 `cookie_store.db` 的 mtime，用户在 Lark Desktop 切到该账号时自动 flip `credentials.json::active` 到这个 profile。v1.3.11 仅 macOS。
 
-- **Default** (when absent): no auto-switch wiring for this profile — manual `switch_profile` MCP tool call only.
-- Managed by `getProfileLarkHash(name)` / `setProfileLarkHash(name, hash)` / `findProfileByHash(hash)` in `src/auth/credentials.js`.
-- Bound by `setup` (auto-detect on `fresh` / `update`) or explicitly via `setup --bind-hash <hash> --profile <name>`.
-- Cookies still come from `LARK_COOKIE` per profile — Lark's encrypted `cookie_store.db` is never read or decrypted.
+- **默认**（缺失时）：本 profile 无 auto-switch wiring —— 只能手动调 `switch_profile` MCP 工具
+- 由 `src/auth/credentials.js` 中的 `getProfileLarkHash(name)` / `setProfileLarkHash(name, hash)` / `findProfileByHash(hash)` 管理
+- 通过 `setup`（`fresh` / `update` 时自动检测）或 `setup --bind-hash <hash> --profile <name>` 显式绑定
+- Cookie 仍按 profile 来自 `LARK_COOKIE` —— Lark 加密的 `cookie_store.db` 永不读、永不解密
 
-Example — bind two profiles to two Lark Desktop accounts:
+例 —— 把两个 profile 绑定到两个 Lark Desktop 账号：
 
 ```bash
 node -e '
@@ -109,44 +109,46 @@ console.log(c.findProfileByHash("cdf3423ce6e643cdf21af46f1f263347"));  // → "d
 '
 ```
 
-After binding, the MCP owner heartbeat takes over: switching the active account in Lark Desktop flips `credentials.json::active` within ~15 s. The cross-process sync (v1.3.9 §A.2) then propagates the new active to every running MCP process.
+绑定后 MCP owner heartbeat 接管：在 Lark Desktop 切活跃账号 ~15 秒内 flip `credentials.json::active`。跨进程同步（v1.3.9 §A.2）随后把新的 active 传播到所有 MCP 进程。
 
-## Invariants
+## 不变量
 
-1. **Atomic writes.** Every write goes through `tmp file + rename` to prevent partial reads under concurrent access (multiple MCP processes, Claude Code reading config simultaneously, UAT refresh lock holders).
-2. **Single active profile.** Exactly one of `profiles.*` is active at any time, named by `active`. `switch_profile` is the only way to flip it.
-3. **0600 permissions.** Enforced on every write (`fs.chmodSync` after rename).
-4. **Schema versioning.** Future schema changes bump `version`. Readers must check and refuse to load unknown major versions.
+1. **原子写入**。每次写都通过 `tmp file + rename`，防止并发访问下的部分读（多个 MCP 进程、Claude Code 同时读 config、UAT 刷新锁持有者）
+2. **唯一活跃 profile**。任何时候 `profiles.*` 有且仅有一个活跃，由 `active` 命名。`switch_profile` 是唯一切换方式
+3. **0600 权限**。每次写都强制执行（`fs.chmodSync` after rename）
+4. **Schema 版本化**。未来 schema 变更 bump `version`。读取方必须检查并拒绝加载未知主版本
 
-## Backward compatibility
+## 向后兼容
 
-The MCP server reads credentials in this order:
+MCP server 按以下顺序读凭证：
 
-1. `~/.feishu-user-plugin/credentials.json` if it exists → use the active profile's env block.
-2. Otherwise: fall back to `process.env.LARK_*` for the default profile, and `process.env.LARK_PROFILES_JSON` for named profiles. This is the v1.3.6 behaviour and stays intact for users who have not migrated.
+1. `~/.feishu-user-plugin/credentials.json` 存在 → 用活跃 profile 的 env block
+2. 否则：fallback 到 `process.env.LARK_*`（默认 profile）和 `process.env.LARK_PROFILES_JSON`（命名 profile）。这是 v1.3.6 行为，对未迁移的用户保持不变
 
-`persistToConfig({ ... })` (used by cookie heartbeat and UAT refresh) writes to:
-- `credentials.json` if it exists (the active profile's keys are updated atomically).
-- The discovered MCP config (`~/.claude.json` etc.) otherwise (v1.3.6 behaviour).
+`persistToConfig({ ... })`（cookie 心跳和 UAT 刷新用）写入：
 
-## Migration
+- `credentials.json` 存在时（活跃 profile 的 keys 原子更新）
+- 否则写到 discovered MCP config（`~/.claude.json` 等）（v1.3.6 行为）
+
+## 迁移
 
 ```bash
-npx feishu-user-plugin migrate              # dry-run; prints what would be written
-npx feishu-user-plugin migrate --confirm    # writes credentials.json
+npx feishu-user-plugin migrate              # dry-run；打印将写入什么
+npx feishu-user-plugin migrate --confirm    # 真写 credentials.json
 ```
 
-The migrator:
-1. Calls `findMcpConfig()` to locate the existing harness config.
-2. Reads the env block.
-3. Parses `LARK_PROFILES_JSON` if set (registers each named profile).
-4. Builds the credentials.json structure with `active="default"` and all discovered profiles.
-5. Atomic writes to `~/.feishu-user-plugin/credentials.json` with `0600`.
+迁移器：
 
-After migration the harness configs are left untouched. The MCP server now prefers `credentials.json`; if it's later removed, the harness env block remains as fallback. Users who want to fully strip credentials from harness configs can do it manually — there's no auto-rewrite step in v1.3.7 to keep the migration reversible.
+1. 调 `findMcpConfig()` 定位现有 harness config
+2. 读 env block
+3. 解析 `LARK_PROFILES_JSON`（若设置）—— 注册每个命名 profile
+4. 用 `active="default"` + 所有发现的 profile 构建 credentials.json
+5. 原子写入 `~/.feishu-user-plugin/credentials.json` 带 `0600`
 
-## Why this exists
+迁移后 harness config 不动。MCP server 现在优先 `credentials.json`；如果 later 删除，harness env block 仍作为 fallback。想完全从 harness config 剥离凭证的用户可以手动 —— v1.3.7 没有自动 rewrite 步骤，保留迁移可逆。
 
-Before v1.3.7 each harness (Claude Code, Codex) duplicated the credentials in its own config (`~/.claude.json` mcpServers env block, `~/.codex/config.toml` mcp_servers.env). The cookie heartbeat and UAT refresh would auto-persist to whichever config was discovered first by `findMcpConfig()`. The other harness's copy went stale until the next OAuth re-run.
+## 为什么存在
 
-Consolidating into a single file makes the rotation-on-refresh model work consistently across harnesses: every MCP process reads from the same file and every refresh writes back to the same file.
+v1.3.7 之前每个 harness（Claude Code、Codex）在自己 config 里复制凭证（`~/.claude.json` mcpServers env block、`~/.codex/config.toml` mcp_servers.env）。Cookie 心跳和 UAT 刷新会自动持久化到 `findMcpConfig()` 第一个发现的 config。另一个 harness 的副本在下次 OAuth 重跑前一直 stale。
+
+合并到单一文件让 rotation-on-refresh 模型在 harness 间一致：每个 MCP 进程从同一个文件读，每次 refresh 写回同一个文件。

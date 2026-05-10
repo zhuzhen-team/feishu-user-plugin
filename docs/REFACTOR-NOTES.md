@@ -1,160 +1,146 @@
-# v1.3.7 Refactor Notes — Where New Code Goes
+# v1.3.7 重构笔记 —— 新代码该放哪
 
-This document is the boundary contract from the v1.3.7 phase A refactor. It exists so the next person who adds a feature doesn't accidentally rebuild a god file. If you're confused about where something belongs, read this — and if the rules don't fit your case, propose an update before adding the code.
+本文是 v1.3.7 phase A 重构后的"边界契约"。下一个加 feature 的人不至于不小心又写出一个 god 文件。如果不确定某段代码该放哪，先读本文 —— 如果规则不适用，先提议改本文再写代码。
 
-## Goals
+## 目标
 
-- **One file = one domain.** Soft target ≤600 lines, smell at >900.
-- **`index.js` stays a 5-line entry point.** Never add logic there again.
-- **`server.js` stays a thin bootstrap + dispatcher.** Never add tool-specific logic there.
-- **Adding a tool should not touch more than 2 files** (one client domain + one tool domain). If your change cuts across more files than that, the boundaries are wrong.
+- **一个文件 = 一个域**。软目标 ≤600 行，>900 行就是味道
+- **`index.js` 保持 5 行入口**。永远别再加逻辑
+- **`server.js` 保持瘦 bootstrap + dispatcher**。永远别加工具特有逻辑
+- **新增一个工具不应触碰多于 2 个文件**（一个 client 域 + 一个 tool 域）。如果改动跨更多文件，说明边界划错了
 
-## Layout (post v1.3.7 phase A)
+## 布局（post v1.3.7 phase A）
 
 ```
 src/
-├── index.js                     # ~6 lines — shebang + logger + server.main()
-├── server.js                    # MCP bootstrap, ctx assembly, request dispatch
-├── logger.js                    # global stdout guard + Lark SDK stderr logger
-├── utils.js                     # fetchWithTimeout, request-id helpers
-├── resolver.js                  # wiki node / Feishu URL → native token
-├── error-codes.js               # classifyError for fallback routing
-├── doc-blocks.js                # docx block constructors
-├── oauth.js / oauth-auto.js     # OAuth CLI flow + Playwright helper
-├── cli.js                       # `npx feishu-user-plugin <cmd>` entry
-├── setup.js                     # setup CLI wizard
-├── config.js                    # MCP-config discovery + atomic persistence
-│                                #   (deferred split into config/ → Phase B)
+├── index.js                     # ~6 行 —— shebang + logger + server.main()
+├── server.js                    # MCP bootstrap、ctx 装配、请求 dispatch
+├── logger.js                    # 全局 stdout guard + Lark SDK stderr logger
+├── utils.js                     # fetchWithTimeout、request-id helper
+├── resolver.js                  # wiki node / 飞书 URL → native token
+├── error-codes.js               # classifyError（fallback 路由用）
+├── doc-blocks.js                # docx block 构造器
+├── oauth.js / oauth-auto.js     # OAuth CLI 流程 + Playwright helper
+├── cli.js                       # `npx feishu-user-plugin <cmd>` 入口
+├── setup.js                     # setup CLI 向导
+├── config.js                    # MCP-config discovery + atomic 持久化
+│                                #   （延迟拆分到 config/ → Phase B）
 ├── auth/
-│   └── credentials.js           # Single-source-of-truth credentials API.
-│                                #   Reads ~/.feishu-user-plugin/credentials.json
-│                                #   (atomic, 0600). Falls back to legacy
-│                                #   process.env / mcpServers discovery for
-│                                #   v1.3.6 users until they run `migrate`.
+│   └── credentials.js           # 单一可信源凭证 API。
+│                                #   读 ~/.feishu-user-plugin/credentials.json
+│                                #   （atomic、0600）。v1.3.6 用户在跑
+│                                #   `migrate` 之前 fallback 到 legacy
+│                                #   process.env / mcpServers discovery。
 ├── clients/
-│   ├── user.js                  # Cookie + protobuf user-identity client
+│   ├── user.js                  # Cookie + protobuf 用户身份 client
 │   └── official/
-│       ├── base.js              # constructor, UAT lifecycle, _safeSDKCall,
-│       │                        #   _asUserOrApp, _uatREST, _populateSenderNames,
-│       │                        #   _formatMessage, _normalizeTimestamp,
-│       │                        #   verifyApp, _getAppToken
-│       ├── index.js             # composes base + domain mixins onto prototype
-│       ├── im.js                # 20 IM methods incl. readMessagesWithFallback
-│       ├── docs.js              # 12 docx + block-edit methods
-│       ├── bitable.js           # 22 bitable methods
+│       ├── base.js              # 构造函数、UAT lifecycle、_safeSDKCall、
+│       │                        #   _asUserOrApp、_uatREST、_populateSenderNames、
+│       │                        #   _formatMessage、_normalizeTimestamp、
+│       │                        #   verifyApp、_getAppToken
+│       ├── index.js             # 把 base + 域 mixin 合到 prototype
+│       ├── im.js                # 20 个 IM 方法含 readMessagesWithFallback
+│       ├── docs.js              # 12 个 docx + block-edit 方法
+│       ├── bitable.js           # 22 个 bitable 方法
 │       ├── drive.js             # listFiles / createFolder / copy / move / delete
 │       ├── wiki.js              # listSpaces / search / nodes / attachToWiki
 │       ├── uploads.js           # uploadImage/File/Media/DocMedia/DriveFile + downloadDocImage
-│       ├── calendar.js          # 3 calendar read methods
-│       ├── okr.js               # 3 OKR read methods
-│       ├── contacts.js          # findUserByIdentity, getUserById
-│       └── groups.js            # createChat/updateChat + member ops
+│       ├── calendar.js          # 3 个 calendar read 方法
+│       ├── okr.js               # 3 个 OKR read 方法
+│       ├── contacts.js          # findUserByIdentity、getUserById
+│       └── groups.js            # createChat/updateChat + 成员操作
 └── tools/
-    ├── _registry.js             # text/json/sendResult response builders + ctx contract
-    ├── bitable.js               # 19 bitable handlers
-    ├── messaging-user.js        # 10 send_*_as_user + batch_send + send_card_as_user
-    ├── messaging-bot.js         # 8 bot-side send/edit/reaction/pin
-    ├── docs.js                  # 7 docs + block-edit handlers
-    ├── drive.js                 # 6 drive + upload_drive_file handlers
-    ├── im-read.js               # 5 IM read handlers + ChatIdMapper singleton
-    ├── wiki.js                  # 4 wiki read handlers
-    ├── contacts.js              # 4 contact lookup handlers
-    ├── groups.js                # 4 group management handlers
-    ├── diagnostics.js           # 3 health-check + media-download handlers
-    ├── calendar.js              # 3 calendar handlers
-    ├── okr.js                   # 3 OKR handlers
-    ├── uploads.js               # 3 upload handlers
-    └── profile.js               # 2 profile management handlers
+    ├── _registry.js             # text/json/sendResult 响应构造器 + ctx 契约
+    ├── bitable.js               # 19 个 bitable handler
+    ├── messaging-user.js        # 10 个 send_*_as_user + batch_send + send_card_as_user
+    ├── messaging-bot.js         # 8 个 bot 端 send/edit/reaction/pin
+    ├── docs.js                  # 7 个 docs + block-edit handler
+    ├── drive.js                 # 6 个 drive + upload_drive_file handler
+    ├── im-read.js               # 5 个 IM read handler + ChatIdMapper 单例
+    ├── wiki.js                  # 4 个 wiki read handler
+    ├── contacts.js              # 4 个 contact lookup handler
+    ├── groups.js                # 4 个 group 管理 handler
+    ├── diagnostics.js           # 3 个 health-check + media-download handler
+    ├── calendar.js              # 3 个 calendar handler
+    ├── okr.js                   # 3 个 OKR handler
+    ├── uploads.js               # 3 个 upload handler
+    └── profile.js               # 2 个 profile 管理 handler
 ```
 
-## Decision Tree for "Where does my new code go?"
+## "新代码放哪" 决策树
 
-### Adding a new MCP tool (handler + schema)
+### 加新 MCP 工具（handler + schema）
 
-1. Determine its **domain** by mapping to existing tool categories.
-2. Add the schema to `src/tools/<domain>.js::schemas`.
-3. Add the handler to `src/tools/<domain>.js::handlers` as `async name(args, ctx) { ... }`.
-4. If the handler needs a Feishu API call that doesn't exist yet, add a method to `src/clients/official/<domain>.js` (or `clients/user.js` for cookie identity).
-5. Only create a new `src/tools/<x>.js` if you're adding ≥3 related tools that don't fit existing domains. Otherwise piggyback on the closest match.
+1. 看它属于哪个**域**（按现有工具分类映射）
+2. 把 schema 加到 `src/tools/<domain>.js::schemas`
+3. 把 handler 加到 `src/tools/<domain>.js::handlers`，写法 `async name(args, ctx) { ... }`
+4. 如果 handler 需要的飞书 API 调用还不存在，把方法加到 `src/clients/official/<domain>.js`（或 cookie 身份用 `clients/user.js`）
+5. 仅当增加 ≥3 个相关工具且不属于现有域时才创建新的 `src/tools/<x>.js`。否则附加到最近的域
 
-### Adding a new Feishu Official API call
+### 加新飞书 Official API 调用
 
-- Add the method to `src/clients/official/<domain>.js`.
-- If the call is shared across ≥2 domains, put it in `clients/official/base.js` instead.
-- Cross-domain methods like `_safeSDKCall`, `_asUserOrApp`, `_uatREST`, `_populateSenderNames` live in base.js.
+- 把方法加到 `src/clients/official/<domain>.js`
+- 如果调用跨 ≥2 个域共享，放到 `clients/official/base.js`
+- `_safeSDKCall` / `_asUserOrApp` / `_uatREST` / `_populateSenderNames` 这种跨域方法在 base.js
 
-### Adding a new Cookie-identity API call
+### 加新 Cookie 身份 API 调用
 
-- Add to `src/clients/user.js`.
-- Protobuf encoding helpers stay co-located there.
+- 加到 `src/clients/user.js`
+- protobuf 编码 helper 同位置
 
-### Adding a new credential / auth concept
+### 加新凭证 / 鉴权概念
 
-- Credentials API: `src/auth/credentials.js`. Use `readCredentials()` /
-  `persistToConfig()` for the back-compat surface, or `readCanonical()` /
-  `getActiveProfileEnv()` / `setActiveProfile()` for canonical access. The
-  schema is documented at `docs/CREDENTIALS-FORMAT.md`.
-- Cookie heartbeat still lives inline in `clients/user.js` and calls
-  `persistToConfig` from auth/credentials. UAT refresh + cross-process file
-  lock still lives in `clients/official/base.js` and calls
-  `readCredentials` + `persistToConfig` from auth/credentials. Both will
-  be extracted into `src/auth/{cookie,uat}.js` once they've been stable
-  through one or two release cycles in the new persistence shape.
+- 凭证 API：`src/auth/credentials.js`。向后兼容面用 `readCredentials()` / `persistToConfig()`，规范访问用 `readCanonical()` / `getActiveProfileEnv()` / `setActiveProfile()`。Schema 见 [docs/CREDENTIALS-FORMAT.md](./CREDENTIALS-FORMAT.md)
+- Cookie 心跳目前仍在 `clients/user.js` 里 inline，调 auth/credentials 的 `persistToConfig`。UAT 刷新 + 跨进程文件锁仍在 `clients/official/base.js`，调 auth/credentials 的 `readCredentials` + `persistToConfig`。等新持久化形态稳定一两个 release 后会拆出 `src/auth/{cookie,uat}.js`
 
-### Adding a new config / setup behaviour
+### 加新 config / setup 行为
 
-- `src/config.js` owns legacy MCP-config discovery (`findMcpConfig`,
-  `writeNewConfig`, `_atomicWrite` for ~/.claude.json / ~/.codex/config.toml /
-  .mcp.json) — this is where harness-specific JSON/TOML knowledge lives.
-- `src/auth/credentials.js` is the canonical credentials surface; it
-  delegates to `config.js` only for legacy fallback (when no
-  `~/.feishu-user-plugin/credentials.json` exists).
-- `src/setup.js` is the CLI wizard. Adding a new setup behaviour: extend
-  setup.js + writeNewConfig (config.js) for the harness-write path; teach
-  auth/credentials.js if the new behaviour also needs to round-trip through
-  credentials.json.
+- `src/config.js` 拥有 legacy MCP-config discovery（`findMcpConfig` / `writeNewConfig` / `_atomicWrite`，覆盖 ~/.claude.json / ~/.codex/config.toml / .mcp.json）—— 这里管 harness 特定的 JSON/TOML 知识
+- `src/auth/credentials.js` 是规范凭证面；仅在 legacy fallback（`~/.feishu-user-plugin/credentials.json` 不存在时）委托给 `config.js`
+- `src/setup.js` 是 CLI 向导。加新 setup 行为：扩展 setup.js + writeNewConfig（config.js）走 harness-write 路径；如果新行为还需要往 credentials.json round-trip，教 auth/credentials.js
 
-### Adding a cross-cutting helper
+### 加跨切面 helper
 
-- Used by ≥2 modules: `src/utils.js`.
-- Used by one tool only: keep it inside that tool file.
+- 被 ≥2 个模块用：`src/utils.js`
+- 只被一个工具用：留在该工具文件里
 
-### Response shaping (text vs JSON vs sendResult)
+### 响应构造（text vs JSON vs sendResult）
 
-- Always import from `src/tools/_registry.js`. Don't reinvent.
-- `text(s)` — plain text MCP response.
-- `json(o)` — JSON-pretty response, lifts any `o.fallbackWarning` to the top.
-- `sendResult(r, desc)` — for send-style responses where `r.success` decides text.
+- 总是从 `src/tools/_registry.js` import。别重复造
+- `text(s)` —— 纯文本 MCP 响应
+- `json(o)` —— JSON-pretty 响应，`o.fallbackWarning` 自动提到顶
+- `sendResult(r, desc)` —— 给 send 风格响应用，`r.success` 决定文本
 
-## What NOT to Do
+## 不要做
 
-- ❌ Do **not** add new methods to `src/official.js` — it's a back-compat barrel, slated for deletion in v1.3.8.
-- ❌ Do **not** add new methods to `src/index.js` — it's a 6-line entry point, nothing else.
-- ❌ Do **not** add tool-specific logic to `src/server.js` — it's the dispatcher only.
-- ❌ Do **not** create `src/tools/<x>.js` for a single tool. Group related tools.
-- ❌ Do **not** bypass `src/server.js` to register tools. Every handler must be reachable via `TOOL_MODULES.flatMap(m => m.schemas)`.
-- ❌ Do **not** bypass `src/clients/official/index.js` to construct the client. Always `require('./clients/official')`.
-- ❌ Do **not** reach back into `server.js` from a tool module to grab state. Add a field to the `ctx` object instead, and document it in `_registry.js`'s docstring.
-- ❌ Do **not** restore the legacy `switch (name) { case 'tool_name': ... }` dispatch pattern. Tool dispatch is now O(1) lookup in `HANDLERS`.
+- ❌ **不要**给 `src/official.js` 加新方法 —— 它是向后兼容 barrel，v1.3.8 已删
+- ❌ **不要**给 `src/index.js` 加新方法 —— 它是 6 行入口，仅此
+- ❌ **不要**给 `src/server.js` 加工具特有逻辑 —— 它仅是 dispatcher
+- ❌ **不要**为单个工具创建 `src/tools/<x>.js`。聚合相关工具
+- ❌ **不要**绕过 `src/server.js` 注册工具。每个 handler 必须通过 `TOOL_MODULES.flatMap(m => m.schemas)` 可达
+- ❌ **不要**绕过 `src/clients/official/index.js` 构造 client。永远 `require('./clients/official')`
+- ❌ **不要**从 tool 模块反向去 `server.js` 抓状态。把字段加到 `ctx` 对象上，并在 `_registry.js` 的 docstring 里记录
+- ❌ **不要**恢复 legacy `switch (name) { case 'tool_name': ... }` dispatch 模式。工具 dispatch 现在是 `HANDLERS` 里 O(1) 查找
 
-## When These Rules Don't Fit
+## 当规则不适用时
 
-If a feature genuinely doesn't fit any domain (e.g. WebSocket event subscription in v1.3.8), create a new top-level subdirectory with a clear scope (`src/events/`, `src/realtime/`) and document it here. New top-level dirs need this file updated in the same PR.
+如果功能确实不属于任何域（如 v1.3.8 的 WebSocket event subscription），创建一个新的顶层子目录并明确 scope（`src/events/`、`src/realtime/`），同 PR 更新本文件。新顶层目录在同 PR 必须更新本文。
 
-## Smoke Test Contract
+## Smoke 测试契约
 
-`scripts/smoke.js` is the regression gate. It freezes:
-- Tool count (currently 84)
-- Each schema (sorted, normalized)
-- The shape of `get_login_status` response
+`scripts/smoke.js` 是回归闸门。它冻结：
 
-Every refactor commit must run `npm run smoke` and exit 0. If a commit intentionally adds/removes/renames tools or changes a schema, run `npm run smoke:baseline` to update `tests/baseline/*.json` in the same commit, with a clear "schema delta" subject line.
+- 工具数量（当前 84）
+- 每个 schema（排序、规范化）
+- `get_login_status` 响应的 shape
 
-## Phase B Deferrals (resolved in v1.3.8)
+每次 refactor commit 必须跑 `npm run smoke` 并 exit 0。如果 commit 有意添加 / 删除 / 重命名工具或改 schema，同 commit 跑 `npm run smoke:baseline` 更新 `tests/baseline/*.json`，commit subject 注明 "schema delta"。
 
-The Phase B deferrals (UAT + cookie helper extracts) shipped in v1.3.8:
+## Phase B 延迟项（已在 v1.3.8 解决）
 
-- `src/auth/uat.js` — UAT lifecycle (refresh, lock, persist) extracted from `clients/official/base.js`. Methods on the client are now 1-line delegates.
-- `src/auth/cookie.js` — heartbeat scheduler extracted from `clients/user.js`. Same delegation pattern.
+Phase B 延迟项（UAT + cookie helper 抽取）已在 v1.3.8 ship：
 
-The optional `src/config/{discovery,persistence,setup}.js` split was not done because `config.js` is now mostly a legacy fallback target — splitting low-traffic legacy code adds churn without payoff. Revisit if config.js grows.
+- `src/auth/uat.js` —— UAT lifecycle（refresh、lock、persist）从 `clients/official/base.js` 抽出。client 上的方法现在是 1 行 delegate
+- `src/auth/cookie.js` —— heartbeat 调度器从 `clients/user.js` 抽出。同样的 delegate 模式
+
+可选的 `src/config/{discovery,persistence,setup}.js` 拆分没做，因为 `config.js` 现在主要是 legacy fallback 目标 —— 拆分低流量 legacy 代码增加 churn 不带来 payoff。如果 config.js 长大再回头看。
