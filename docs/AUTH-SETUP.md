@@ -47,6 +47,23 @@ npx feishu-user-plugin migrate --confirm    # 真写 credentials.json
 
 向后兼容：v1.3.6 用户没 credentials.json 行为零变化。该文件只在存在时被优先选。MCP server stderr 启动行 `Auth:` 现在显示来源（`credentials.json profile=default` vs `env vars (legacy)`），一眼能看出当前走哪条路径。
 
+## 创建飞书应用
+
+`LARK_APP_ID` / `LARK_APP_SECRET` 是用 Official API（70+ 工具）的前置条件：
+
+1. [飞书开放平台](https://open.feishu.cn/app) 登录 → 创建**自建应用**（不能选商店应用 / 第三方应用，否则 P2P 读取会被锁）
+2. 添加应用能力 → 启用机器人
+3. 权限管理 → 添加 scope：
+   - 消息：`im:message`、`im:message:readonly`、`im:chat:readonly`
+   - 文档：`docx:document`、`bitable:record`、`wiki:wiki:readonly`、`drive:drive:readonly`
+   - 联系人：`contact:user.base:readonly`
+   - 按需：`okr:okr:readonly`、`calendar:calendar:readonly`、`task:task`、`drive:drive`、`docs:document.media:upload`、`wiki:wiki` 等
+4. 凭证与基础信息 → 复制 App ID（`cli_xxx`）+ App Secret
+5. 创建版本 → 提交审核 → 管理员审批
+6. 把 bot 加到要读消息的群里
+
+完整 OAuth scope 表见下面 [OAuth Scopes](#oauth-scopes重跑-npx-feishu-user-plugin-oauth-时)。
+
 ## 安装
 
 ### 配置位置
