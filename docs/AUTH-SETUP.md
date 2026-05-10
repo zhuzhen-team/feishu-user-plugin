@@ -1,6 +1,9 @@
 # 鉴权与安装
 
-> 本文是 `CLAUDE.md` 的拆分附属文件，覆盖三层鉴权 / 安装流程 / Cookie Setup / OAuth Scopes。安装面向终端用户的简单说明在 `README.md`。
+> **谁该读**：第一次安装本插件的开发者、要诊断鉴权故障的用户、需要扩 OAuth scope 的维护者。  
+> **何时读**：安装时、Cookie 过期、UAT refresh 失败、新加 OAuth scope、配多 profile。
+
+覆盖三层鉴权 / 安装流程 / Cookie Setup / OAuth Scopes。终端用户简化安装见 [README](https://github.com/EthanQC/feishu-user-plugin#readme)。
 
 ## 必需环境变量
 

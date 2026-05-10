@@ -1,6 +1,9 @@
 # feishu-user-plugin 测试方法论
 
-如何在不烧坏共享 sandbox 的前提下，用真实飞书 API 测试本插件。加测试前、跑 release-cycle 回归前、看到 flaky failure 后必读。
+> **谁该读**：贡献者、跑 release-cycle 回归的 maintainer、写测试脚本的 AI agent。  
+> **何时读**：加测试前、跑发版回归、看到 flaky failure、cleanup 测试残留资源、改 smoke baseline。
+
+如何在不烧坏共享 sandbox 的前提下，用真实飞书 API 测试本插件。
 
 插件横跨三种身份（cookie / app / UAT）和四个内容域（messaging / docx / bitable / drive）。每个测试都要明确：行使的是哪种身份、留下的是什么状态。
 
