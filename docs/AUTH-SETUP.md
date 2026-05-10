@@ -53,9 +53,9 @@ npx feishu-user-plugin migrate --confirm    # 真写 credentials.json
 
 1. [飞书开放平台](https://open.feishu.cn/app) 登录 → 创建**自建应用**（不能选商店应用 / 第三方应用，否则 P2P 读取会被锁）
 2. 添加应用能力 → 启用机器人
-3. 权限管理 → 添加 scope：
+3. 权限管理 → 添加 scope（与 `src/oauth.js::SCOPES` 保持一致，否则 OAuth flow 会请求未授权 scope 而失败）：
    - 消息：`im:message`、`im:message:readonly`、`im:chat:readonly`
-   - 文档：`docx:document`、`bitable:record`、`wiki:wiki:readonly`、`drive:drive:readonly`
+   - 文档：`docx:document`、`bitable:app`、`wiki:wiki:readonly`、`drive:drive:readonly`
    - 联系人：`contact:user.base:readonly`
    - 按需：`okr:okr:readonly`、`calendar:calendar:readonly`、`task:task`、`drive:drive`、`docs:document.media:upload`、`wiki:wiki` 等
 4. 凭证与基础信息 → 复制 App ID（`cli_xxx`）+ App Secret

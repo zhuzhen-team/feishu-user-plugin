@@ -6,11 +6,12 @@ const { TOOLS } = require(path.join(__dirname, '..', 'src', 'server'));
 
 const failures = [];
 
-// Source 1: README.md "N tools" badge
+// Source 1: README.md tool count — accepts "N tools" (English) or "N 工具" (Chinese)
+// since README.md is Chinese-primary while README.en.md mirrors in English.
 const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
-const readmeMatch = readme.match(/(\d+)\s+tools/);
+const readmeMatch = readme.match(/(\d+)\s*(?:tools|工具)/);
 if (!readmeMatch) {
-  failures.push('No "N tools" badge in README.md');
+  failures.push('No "N tools" / "N 工具" marker in README.md');
 } else if (parseInt(readmeMatch[1], 10) !== TOOLS.length) {
   failures.push(`README.md claims ${readmeMatch[1]} tools, src/server.js has ${TOOLS.length}`);
 }
