@@ -15,6 +15,17 @@
 
 与其他飞书 MCP 的区别：基于 cookie + protobuf 协议路径，支持以**用户本人身份**发消息——飞书官方开放 API 没有 `send_as_user` 权限点，机器人 token 发出的消息一律标 `sender_type: "app"`。
 
+## 与官方对比（飞书 2026 年也发了 MCP + CLI）
+
+- [`larksuite/lark-openapi-mcp`](https://github.com/larksuite/lark-openapi-mcp) —— 官方 OpenAPI MCP，**⚠ Beta** + 最后更新 2025-08（9 个月前），README 明文不支持文件上传下载、不支持文档编辑；1271 个 endpoint 工具但 preset.default 仅 ~20，其余"未做兼容性测试"
+- [`larksuite/cli`](https://github.com/larksuite/cli) —— 官方 CLI（9.9k stars，活跃），17 业务域 200+ commands + 24 AI Agent Skills，但是 **CLI 形态而不是 MCP**，Codex / Cursor / Windsurf 等用它要 shell out
+
+**什么时候用本仓**：需要以你本人身份发消息 / 读 P2P 私聊（架构性独家）；或者用 MCP 协议但不需要邮件/审批/HR/会议纪要等本仓未覆盖的域。
+
+**什么时候用官方**：需要邮件 / 审批 / 考勤 / HR / 招聘 / 会议纪要等业务系统域；或主用 Claude Code 单一 CLI 形态。
+
+完整诚实对比见 [docs/COMPARISON.md](docs/COMPARISON.md)。
+
 ## 用法
 
 ```
