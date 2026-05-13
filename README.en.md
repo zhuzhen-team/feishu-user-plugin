@@ -13,16 +13,20 @@ Feishu / Lark MCP server covering IM, docs, bitable, wiki, drive, calendar, task
 
 Works with Claude Code, Codex, Cursor, Windsurf, VS Code, Claude Desktop, OpenClaw, and any MCP-compatible client.
 
-What sets it apart from other Feishu MCPs: a cookie + protobuf protocol path that supports **user-identity messaging** — Feishu's official open API has no `send_as_user` scope, and bot-token messages are tagged `sender_type: "app"`.
+There are two paths to user-identity messaging: **Feishu's official OAuth scope `im:message.send_as_user`** (requires creating a self-built app + admin approval), or this repo's **cookie + protobuf path** (zero app barrier — capture cookie and you're ready). This repo is no longer architecturally exclusive, but it remains the simpler option for "individual developers / no admin access / want to try quickly" scenarios.
 
 ## vs the official Feishu/Lark tools (released 2026)
 
 - [`larksuite/lark-openapi-mcp`](https://github.com/larksuite/lark-openapi-mcp) — official OpenAPI MCP, **⚠ Beta**, last updated 2025-08 (9 months stale). Their README explicitly states "File upload/download not yet supported" and "Direct document editing not supported"; 1271 endpoint tools but preset.default only enables ~20, the rest "not undergone compatibility testing".
-- [`larksuite/cli`](https://github.com/larksuite/cli) — official CLI (9.9k stars, actively maintained), 17 business domains, 200+ commands + 24 AI Agent Skills, but it's a **CLI, not an MCP server**. Codex / Cursor / Windsurf etc would have to shell out to it.
+- [`larksuite/cli`](https://github.com/larksuite/cli) — official CLI (9.9k stars, actively maintained), 17 business domains, 200+ commands + 24 AI Agent Skills. **Now supports `+messages-send --as user`** via OAuth scope `im:message.send_as_user`. But it's a **CLI, not an MCP server**. Codex / Cursor / Windsurf etc would have to shell out to it.
 
-**When to use this repo**: you need to send messages as your real user identity / read P2P chat history (architecturally exclusive); or you want native MCP-protocol access without needing mail/approval/HR/meeting-minutes etc that this repo doesn't cover.
+**When to use this repo**:
 
-**When to use the official**: you need mail / approval / attendance / HR / hiring / meeting-minutes etc business-system domains; or you're locked into Claude Code's CLI-only form factor.
+- You want user-identity messaging / P2P chat reading but **can't / don't want to create a Feishu self-built app** (individual developer / no admin access) — the cookie path has zero barrier
+- You use MCP protocol (Codex / Cursor / Windsurf / VS Code etc) and don't need mail / approval / HR / meeting-minutes domains that this repo doesn't cover
+- You run multiple MCP clients simultaneously and need "every event delivered exactly once across the entire machine" (v1.3.9+ machine-level WS SSOT)
+
+**When to use the official**: you need mail / approval / attendance / HR / hiring / meeting-minutes business-system domains; or you already have a Feishu app + admin-approved OAuth scopes and prefer the officially-maintained long-term path.
 
 Full honest comparison: [docs/COMPARISON.md](docs/COMPARISON.md).
 
