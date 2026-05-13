@@ -13,7 +13,9 @@
 
 兼容 Claude Code、Codex、Cursor、Windsurf、VS Code、Claude Desktop、OpenClaw 等 MCP 客户端。
 
-用户身份发消息有两条路径：**飞书官方 OAuth scope `im:message.send_as_user`**（需要创建自建应用 + 管理员审批），或本仓的 **cookie + protobuf 路径**（零应用门槛，cookie 抓出来就跑）。本仓不再是物理性独家，但仍然是"个人开发者 / 没有管理员权限 / 想快速试"场景的简便选项。
+用户身份发消息有两条路径：**飞书官方 OAuth scope `im:message.send_as_user`**（需要创建自建应用 + 管理员审批），或本仓的 **cookie + protobuf 路径**（cookie 抓出来就跑）。本仓不再是物理性独家，但仍然是"个人开发者 / 没有管理员权限 / 想快速试用户身份发消息"场景的简便选项。
+
+> ⚠ **注意限定范围**：cookie 路径"零应用门槛"只对**纯文本 / post 类用户身份发消息**严格成立：`send_to_user` / `send_to_group` / `send_as_user` / `send_post_as_user` / `batch_send`（text/post 模式）5 个工具。`send_image_as_user` / `send_file_as_user` 的发送本身走 cookie，但 `image_key` / `file_key` 必须先经 Official API（`upload_image` / `upload_file`）上传；`send_card_as_user` 服务端禁了 cookie 通道，始终走 bot。本仓其他能力（读群消息、操作文档 / 表格 / 知识库 / 云空间 / 日历 / 任务 / OKR / 实时事件等）也**仍然需要创建飞书自建应用**（`LARK_APP_ID` + `LARK_APP_SECRET`），跟官方 MCP / CLI 完全一样。
 
 ## 与官方对比（飞书 2026 年也发了 MCP + CLI）
 

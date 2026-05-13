@@ -303,7 +303,13 @@ function main() {
   const teamSkillsBlock = generateTeamSkillsChangelog(version, date, parsed, null);
   fs.writeFileSync(path.join(outDir, 'team-skills-changelog.md'), teamSkillsBlock);
 
-  const rootRow = generateRootReadmeRow(version, pkg.description);
+  // Use .claude-plugin/plugin.json::description (NOT package.json), because
+  // team-skills' own scripts/generate-readme.py reads each plugin's
+  // .claude-plugin/plugin.json::description. Mismatch causes team-skills
+  // CI "Validate Plugins" to fail (caught 2026-05-13 root-cause analysis:
+  // 7 of last 30 team-skills CI runs failed for exactly this drift).
+  const pluginJson = JSON.parse(fs.readFileSync(path.join(ROOT, '.claude-plugin', 'plugin.json'), 'utf8'));
+  const rootRow = generateRootReadmeRow(version, pluginJson.description);
   fs.writeFileSync(path.join(outDir, 'team-skills-readme-row.md'), rootRow + '\n');
 
   const card = generateCard(version, date, parsed);

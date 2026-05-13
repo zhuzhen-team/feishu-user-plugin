@@ -13,7 +13,9 @@ Feishu / Lark MCP server covering IM, docs, bitable, wiki, drive, calendar, task
 
 Works with Claude Code, Codex, Cursor, Windsurf, VS Code, Claude Desktop, OpenClaw, and any MCP-compatible client.
 
-There are two paths to user-identity messaging: **Feishu's official OAuth scope `im:message.send_as_user`** (requires creating a self-built app + admin approval), or this repo's **cookie + protobuf path** (zero app barrier — capture cookie and you're ready). This repo is no longer architecturally exclusive, but it remains the simpler option for "individual developers / no admin access / want to try quickly" scenarios.
+For user-identity messaging there are two paths: **Feishu's official OAuth scope `im:message.send_as_user`** (requires creating a self-built app + admin approval), or this repo's **cookie + protobuf path** (capture cookie and you're ready). This repo is no longer architecturally exclusive, but it remains the simpler option for "individual developers / no admin access / want to try user-identity messaging quickly" scenarios.
+
+> ⚠ **Scope of the zero-app-barrier claim**: only **text / post user-identity messaging** is strictly app-free: `send_to_user` / `send_to_group` / `send_as_user` / `send_post_as_user` / `batch_send` (text/post mode) — 5 tools. `send_image_as_user` / `send_file_as_user` send via cookie, but `image_key` / `file_key` must first be uploaded through the Official API (`upload_image` / `upload_file`); `send_card_as_user` is server-blocked on the cookie channel and always routes through bot. All other capabilities in this repo (reading group messages, document / bitable / wiki / drive / calendar / tasks / OKR / realtime events) **still require a Feishu self-built app** (`LARK_APP_ID` + `LARK_APP_SECRET`) — same as the official MCP / CLI.
 
 ## vs the official Feishu/Lark tools (released 2026)
 
