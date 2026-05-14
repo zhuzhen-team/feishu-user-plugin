@@ -67,10 +67,22 @@ const REDIRECT_URI = `http://127.0.0.1:${PORT}/callback`;
 //   sheets:spreadsheet                     for sheet_image / sheet_file media uploads
 //   drive:file:upload                      narrower scope for drive/v1/files/upload_all (independent of drive:drive)
 // v1.3.7 additions:
-//   calendar:calendar.event:write          create/update/delete/respond calendar events
+//   calendar:calendar.event:{create,update,delete,reply}   calendar write — Feishu splits
+//                                          "write" into 4 verbs. Using the umbrella name
+//                                          `calendar:calendar.event:write` makes the
+//                                          OAuth authorize endpoint 422-reject the whole
+//                                          request. scripts/check-scopes.js bans it.
 //   task:task                              full Task v2 read+write
-//   okr:okr.content:write                  create/delete OKR progress records
-const SCOPES = 'offline_access auth:user.id:read im:message im:message:readonly im:chat im:chat:readonly contact:user.base:readonly contact:user.id:readonly docx:document drive:drive drive:file:upload bitable:app wiki:wiki:readonly wiki:wiki okr:okr:readonly okr:okr.period:readonly okr:okr.content:readonly okr:okr.content:write calendar:calendar:readonly calendar:calendar.event:read calendar:calendar.event:write docs:document.media:download docs:document.media:upload sheets:spreadsheet task:task';
+//   okr:okr.content:writeonly              create/delete OKR progress records.
+//                                          Note: Feishu uses `:writeonly` (one word),
+//                                          not `:write` (check-scopes.js banlist).
+// v1.3.12 additions:
+//   contact:contact.base:readonly          broader contact lookup (员工通讯录基本信息)
+//   im:resource                            user-side image/file download from messages
+//
+// To add a scope: edit this line + add a row in docs/AUTH-SETUP.md scope table.
+// scripts/check-scopes.js enforces both in CI.
+const SCOPES = 'offline_access auth:user.id:read im:message im:message:readonly im:chat im:chat:readonly im:resource contact:user.base:readonly contact:user.id:readonly contact:contact.base:readonly docx:document drive:drive drive:file:upload bitable:app wiki:wiki:readonly wiki:wiki okr:okr:readonly okr:okr.period:readonly okr:okr.content:readonly okr:okr.content:writeonly calendar:calendar:readonly calendar:calendar.event:read calendar:calendar.event:create calendar:calendar.event:update calendar:calendar.event:delete calendar:calendar.event:reply docs:document.media:download docs:document.media:upload sheets:spreadsheet task:task';
 
 if (!APP_ID || !APP_SECRET) {
   console.error('Missing LARK_APP_ID or LARK_APP_SECRET.');

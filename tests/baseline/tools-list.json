@@ -98,7 +98,7 @@
   },
   {
     "name": "create_calendar_event",
-    "description": "[Official API + UAT, v1.3.7] Create a new calendar event. Requires `calendar:calendar.event:write` scope (re-run `npx feishu-user-plugin oauth` after enabling). The current identity (UAT-first) must have writer or owner permission on the calendar.\n\nTime fields: A time object: {timestamp:\"<unix-seconds>\", timezone?:\"Asia/Shanghai\"} OR {date:\"YYYY-MM-DD\"} for all-day events.",
+    "description": "[Official API + UAT, v1.3.7] Create a new calendar event. Requires `calendar:calendar.event:create` scope (re-run `npx feishu-user-plugin oauth` after enabling). The current identity (UAT-first) must have writer or owner permission on the calendar.\n\nTime fields: A time object: {timestamp:\"<unix-seconds>\", timezone?:\"Asia/Shanghai\"} OR {date:\"YYYY-MM-DD\"} for all-day events.",
     "inputSchema": {
       "properties": {
         "attendee_ability": {
@@ -422,7 +422,7 @@
   },
   {
     "name": "delete_calendar_event",
-    "description": "[Official API + UAT, v1.3.7] Delete a calendar event. Requires `calendar:calendar.event:write` scope.",
+    "description": "[Official API + UAT, v1.3.7] Delete a calendar event. Requires `calendar:calendar.event:delete` scope.",
     "inputSchema": {
       "properties": {
         "calendar_id": {
@@ -1806,7 +1806,7 @@
   },
   {
     "name": "respond_calendar_event",
-    "description": "[Official API + UAT, v1.3.7] Respond to an event invitation. The current identity must be in the event's attendee list. Requires `calendar:calendar.event:write` scope.",
+    "description": "[Official API + UAT, v1.3.7] Respond to an event invitation. The current identity must be in the event's attendee list. Requires `calendar:calendar.event:reply` scope.",
     "inputSchema": {
       "properties": {
         "calendar_id": {
@@ -2193,7 +2193,7 @@
   },
   {
     "name": "update_calendar_event",
-    "description": "[Official API + UAT, v1.3.7] Patch fields on an existing calendar event. Pass only the fields you want to change. Requires `calendar:calendar.event:write` scope.",
+    "description": "[Official API + UAT, v1.3.7] Patch fields on an existing calendar event. Pass only the fields you want to change. Requires `calendar:calendar.event:update` scope.",
     "inputSchema": {
       "properties": {
         "attendee_ability": {

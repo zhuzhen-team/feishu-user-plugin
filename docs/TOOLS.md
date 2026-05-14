@@ -85,14 +85,14 @@
 ## Official API — OKR（6 tools）
 `list_user_okrs` / `get_okrs` / `list_okr_periods` / `create_okr_progress_record` / `list_okr_progress_records` / `delete_okr_progress_record`
 
-- 写需要 `okr:okr.content:write` scope
+- 写需要 `okr:okr.content:writeonly` scope
 - `list_okr_progress_records` 从 `get_okrs` 提取 triples（飞书无 native list 接口）
 - 飞书开放 API 不暴露 OKR 本体 CRUD（仅暴露读 + 进展记录写）
 
 ## Official API — Calendar（8 tools）
 `list_calendars` / `list_calendar_events` / `get_calendar_event` / `create_calendar_event` / `update_calendar_event` / `delete_calendar_event` / `respond_calendar_event` / `get_freebusy`
 
-- 写需要 `calendar:calendar.event:write` scope
+- 写需要 `calendar:calendar.event:{create,update,delete,reply}` scope
 - 读 UAT-first（primary + 共享 + 订阅）；bot 只能看到自己被显式邀请的日历
 
 ## Official API — Tasks v2（7 tools，v1.3.7 新域）
@@ -154,7 +154,7 @@
 
 `user_id` 必填 —— 用自己的 open_id（从 `get_login_status` / `search_contacts`）读自己 OKR，或同事的 open_id（受权限限制）。
 
-写（v1.3.7，需要 `okr:okr.content:write` scope）：
+写（v1.3.7，需要 `okr:okr.content:writeonly` scope）：
 
 4. `create_okr_progress_record(target_id, target_type=1|2, content_text, source_title?, source_url?, progress_percent?)` —— `target_type` 1 表 objective，2 表 key result。`content_text` 自动包成飞书要求的 block 格式；要更复杂载荷（list / mention / docs link / gallery）直接传 `content`
 5. `list_okr_progress_records(okr_id)` —— 从 `get_okrs` 提取 `{progress_id, target_id, target_type}` triples
@@ -165,7 +165,7 @@
 1. `list_calendars` —— 拿日历列表，`type=primary` 是个人日历
 2. `list_calendar_events(calendar_id, start_time=<unix_sec>, end_time=<unix_sec>)` —— 列时间窗口内事件
 3. `get_calendar_event(calendar_id, event_id)` —— 完整详情（参与人 / 地点 / 附件 / 会议链接）
-4. `create_calendar_event(calendar_id, summary, start_time, end_time, ...)` —— `start_time` / `end_time` 是对象：`{timestamp:"<unix-seconds>", timezone?:"Asia/Shanghai"}` 或 `{date:"YYYY-MM-DD"}`（全天）。v1.3.7+ 需要 `calendar:calendar.event:write` scope
+4. `create_calendar_event(calendar_id, summary, start_time, end_time, ...)` —— `start_time` / `end_time` 是对象：`{timestamp:"<unix-seconds>", timezone?:"Asia/Shanghai"}` 或 `{date:"YYYY-MM-DD"}`（全天）。v1.3.7+ 需要 `calendar:calendar.event:{create,update,delete,reply}` scope
 5. `update_calendar_event(calendar_id, event_id, ...patch)` —— 只传要改的字段
 6. `delete_calendar_event(calendar_id, event_id, need_notification?)` —— 传 `meeting_chat_id` 同时解散关联会议群
 7. `respond_calendar_event(calendar_id, event_id, rsvp_status=accept|decline|tentative)` —— 用当前 UAT 身份 RSVP

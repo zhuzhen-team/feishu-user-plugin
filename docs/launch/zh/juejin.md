@@ -118,7 +118,7 @@ cookie 获取：跟 Claude Code 说一句"帮我设置一下飞书 cookie"会自
 **踩坑提醒**：
 - `target_type: 1` 是 objective，`target_type: 2` 是 key result，别搞混
 - 飞书 OKR 开放 API **没有完整 CRUD**——只暴露读 + 进展记录写。本体 create/update/delete 永远不会有
-- 写需要 `okr:okr.content:write` scope（自建应用权限管理里勾），UAT 也要重新授权一次
+- 写需要 `okr:okr.content:writeonly` scope（自建应用权限管理里勾），UAT 也要重新授权一次
 
 ---
 
