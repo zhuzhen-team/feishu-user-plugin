@@ -141,9 +141,24 @@ class LarkOfficialClient {
       }
     }
 
-    // Step 3: parallel resolve users via contact API
+    // Step 3: parallel resolve users via contact API.
+    // v1.3.12: read result.status so failed lookups don't disappear silently.
+    // The 2026-05 incident had ~100% lookup failure for weeks (UAT revoked +
+    // tenant scope gap) and senderName=null without any breadcrumb in stderr.
     if (unknownUserIds.size > 0) {
-      await Promise.allSettled([...unknownUserIds].map(id => this.getUserById(id)));
+      const userIds = [...unknownUserIds];
+      const results = await Promise.allSettled(userIds.map(id => this.getUserById(id)));
+      const failed = [];
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].status === 'rejected') {
+          failed.push({ id: userIds[i], reason: results[i].reason?.message || String(results[i].reason) });
+        }
+      }
+      if (failed.length) {
+        const sample = failed.slice(0, 3).map(f => `${f.id}(${f.reason})`).join(', ');
+        const tail = failed.length > 3 ? ` (+${failed.length - 3} more)` : '';
+        console.error(`[feishu-user-plugin] sender name lookup failed for ${failed.length}/${userIds.length} ids: ${sample}${tail}`);
+      }
     }
     // Cookie fallback for any user still unknown
     if (userClient) {
@@ -156,9 +171,22 @@ class LarkOfficialClient {
         }
       }
     }
-    // Parallel resolve apps (best-effort; usually only self-app appears)
+    // Parallel resolve apps (best-effort; usually only self-app appears).
+    // v1.3.12: same Promise.allSettled status-reading fix as the user path.
     if (unknownAppIds.size > 0) {
-      await Promise.allSettled([...unknownAppIds].map(id => this.getAppName(id)));
+      const appIds = [...unknownAppIds];
+      const results = await Promise.allSettled(appIds.map(id => this.getAppName(id)));
+      const failed = [];
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].status === 'rejected') {
+          failed.push({ id: appIds[i], reason: results[i].reason?.message || String(results[i].reason) });
+        }
+      }
+      if (failed.length) {
+        const sample = failed.slice(0, 3).map(f => `${f.id}(${f.reason})`).join(', ');
+        const tail = failed.length > 3 ? ` (+${failed.length - 3} more)` : '';
+        console.error(`[feishu-user-plugin] app name lookup failed for ${failed.length}/${appIds.length} ids: ${sample}${tail}`);
+      }
     }
 
     // Step 4: populate senderName, isExternal, displayLabel

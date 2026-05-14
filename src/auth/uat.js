@@ -144,8 +144,24 @@ function persistUAT(client) {
 }
 
 async function withUAT(client, fn) {
+  const { classifyError } = require('../error-codes');
   let uat = await getValidUAT(client);
-  const data = await fn(uat);
+
+  // First attempt. If fn() throws an upstream flake (network reset, response
+  // body truncated mid-JSON, gateway 5xx), classifyError says action='retry'
+  // and we re-run once with the same UAT — the token is still valid, the
+  // call just lost. Auth-related codes are the existing refresh path below.
+  let data;
+  try {
+    data = await fn(uat);
+  } catch (err) {
+    const cls = classifyError(err);
+    if (cls.action === 'retry') {
+      return fn(uat);
+    }
+    throw err;
+  }
+
   if (data.code === 99991668 || data.code === 99991663 || data.code === 99991677) {
     if (data.code === 99991668 && typeof data.msg === 'string' && /not support/i.test(data.msg)) {
       return data;
@@ -182,40 +198,31 @@ async function uatREST(client, method, urlPath, { body, query } = {}) {
 }
 
 async function asUserOrApp(client, { uatPath, method = 'GET', body, query, sdkFn, label }) {
-  let uatSummary = null;
-  if (client.hasUAT) {
-    try {
-      const data = await uatREST(client, method, uatPath, { body, query });
-      if (data.code === 0) {
-        data._viaUser = true;
-        return data;
-      }
-      uatSummary = `as user: code=${data.code} msg=${data.msg}`;
-      console.error(`[feishu-user-plugin] ${label} ${uatSummary}, retrying as app`);
-    } catch (err) {
-      uatSummary = `as user: ${err.message}`;
-      console.error(`[feishu-user-plugin] ${label} as user threw (${err.message}), retrying as app`);
-    }
-  }
+  // v1.3.12: internal implementation routes through withIdentityFallback in
+  // src/auth/identity-state.js. The public shape — return data with _viaUser
+  // and optional _fallbackWarning, throw Error with .uatSummary + .appError
+  // when both sides fail — is preserved for 15+ existing callsites.
+  const { withIdentityFallback } = require('./identity-state');
   try {
-    const appData = await client._safeSDKCall(sdkFn, label);
-    if (appData && typeof appData === 'object') {
-      appData._viaUser = false;
-      if (uatSummary) {
-        appData._fallbackWarning = `⚠️  UAT 不可用 (${uatSummary}),本次操作以 bot 身份执行。资源归属于共享 bot「Claude聊天助手」,不是你。恢复方法:运行 \`npx feishu-user-plugin oauth\` 后重启 Claude Code / Codex。`;
-      } else if (!client.hasUAT) {
-        appData._fallbackWarning = `⚠️  未配置 UAT,本次操作以 bot 身份执行。资源归属于共享 bot「Claude聊天助手」,不是你。想让资源归你所有,先跑 \`npx feishu-user-plugin oauth\` 然后重启 Claude Code / Codex。`;
-      }
+    const result = await withIdentityFallback({
+      client,
+      uatFn: () => uatREST(client, method, uatPath, { body, query }),
+      botFn: () => client._safeSDKCall(sdkFn, label),
+      label,
+    });
+    // Surface state machine breadcrumbs in stderr so long-running servers can
+    // be diagnosed without grepping the LLM transcript. (Pre-v1.3.12 already
+    // logged on fallback; we keep parity but only when fallback actually
+    // happened, not on every BOT_ONLY call.)
+    if (result.via === 'bot' && result.viaReason) {
+      console.error(`[feishu-user-plugin] ${label} fell back to bot (${result.identity}): ${result.viaReason}`);
     }
-    return appData;
-  } catch (appErr) {
-    if (uatSummary) {
-      const err = new Error(`${label} failed on both identities. ${uatSummary}. as app: ${appErr.message}`);
-      err.uatSummary = uatSummary;
-      err.appError = appErr;
-      throw err;
-    }
-    throw appErr;
+    return result.data;
+  } catch (e) {
+    // Legacy callers expect err.appError — keep the alias alongside the new
+    // err.botError that withIdentityFallback sets.
+    if (e && e.botError && !e.appError) e.appError = e.botError;
+    throw e;
   }
 }
 
