@@ -61,19 +61,19 @@
     },
     {
       "name": "create_calendar_event",
-      "description": "Create a new calendar event. Requires `calendar:calendar.event:write` scope (re-run `npx feishu-user-plugin oauth` after enabling). The current identity (UAT-first) must have writer or owner permissio"
+      "description": "Create a new calendar event. Requires `calendar:calendar.event:create` scope (re-run `npx feishu-user-plugin oauth` after enabling). The current identity (UAT-first) must have writer or owner permissi"
     },
     {
       "name": "update_calendar_event",
-      "description": "Patch fields on an existing calendar event. Pass only the fields you want to change. Requires `calendar:calendar.event:write` scope."
+      "description": "Patch fields on an existing calendar event. Pass only the fields you want to change. Requires `calendar:calendar.event:update` scope."
     },
     {
       "name": "delete_calendar_event",
-      "description": "Delete a calendar event. Requires `calendar:calendar.event:write` scope."
+      "description": "Delete a calendar event. Requires `calendar:calendar.event:delete` scope."
     },
     {
       "name": "respond_calendar_event",
-      "description": "Respond to an event invitation. The current identity must be in the event's attendee list. Requires `calendar:calendar.event:write` scope."
+      "description": "Respond to an event invitation. The current identity must be in the event's attendee list. Requires `calendar:calendar.event:reply` scope."
     },
     {
       "name": "get_freebusy",

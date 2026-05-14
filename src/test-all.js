@@ -324,4 +324,27 @@ main().catch(console.error).finally(() => {
   require('./test-events-log').run();
   require('./test-events-cursor').run();
   require('./test-events-owner').run();
+  require('./test-error-codes').run();
+  require('./test-identity-state').run().catch(e => {
+    console.error('identity-state: FAIL', e);
+    process.exitCode = 1;
+  });
+  require('./test-with-uat-retry').run().catch(e => {
+    console.error('with-uat-retry: FAIL', e);
+    process.exitCode = 1;
+  });
+  require('./test-populate-sender-names').run().catch(e => {
+    console.error('populate-sender-names: FAIL', e);
+    process.exitCode = 1;
+  });
+  require('./test-credentials-monitor').run().catch(e => {
+    console.error('credentials-monitor: FAIL', e);
+    process.exitCode = 1;
+  });
+  require('./test-lru-cache').run().catch(e => {
+    console.error('lru-cache: FAIL', e);
+    process.exitCode = 1;
+  });
+  require('./test-lockfile-pid').run();
+  require('./test-display-label');  // standalone — runs on require, exits non-zero on fail
 });
