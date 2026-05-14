@@ -329,6 +329,22 @@ module.exports = {
       return f;
     });
     await this._populateSenderNames(children, userClient);
+    // Best-effort: surface the origin chat NAME for each child so the LLM doesn't
+    // misread the children as native messages of the current chat. A single
+    // merge_forward usually has 1 origin chat → 1 API call. Failures are silent
+    // (bot may not be in the origin chat) and the field is simply absent.
+    const originChatIds = [...new Set(children.map(c => c.originChatId).filter(Boolean))];
+    const chatNameMap = new Map();
+    await Promise.allSettled(originChatIds.map(async (cid) => {
+      try {
+        const info = await this.getChatInfo(cid);
+        if (info?.name) chatNameMap.set(cid, info.name);
+      } catch {}
+    }));
+    for (const c of children) {
+      const name = c.originChatId && chatNameMap.get(c.originChatId);
+      if (name) c.forwardedFromChatName = name;
+    }
     return children;
   },
 

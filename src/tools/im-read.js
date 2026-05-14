@@ -107,7 +107,7 @@ const schemas = [
   },
   {
     name: 'read_p2p_messages',
-    description: '[User UAT] Read P2P (direct message) chat history using user_access_token. Works for chats the bot cannot access. Returns newest messages first by default. Auto-expands merge_forward messages into their child messages by default — disable with expand_merge_forward=false. Requires OAuth setup.',
+    description: '[User UAT] Read P2P (direct message) chat history using user_access_token. Works for chats the bot cannot access. Returns newest messages first by default. Auto-expands merge_forward messages into their child messages by default — disable with expand_merge_forward=false. Requires OAuth setup.\n\n**Sender semantics (v1.3.12)**: each message has a `displayLabel` (e.g. `周宇`, `[Bot] Claude聊天助手`, `[匿名]`, `[系统]`, `[已撤回] 怪兽`) — prefer it over raw `senderId` when narrating who-said-what. Also surfaced: `senderType` (user|app|anonymous), `senderIdType` (open_id|union_id|user_id), `senderTenantKey`, `isExternal` (cross-tenant), `isRecalled`, `isThreadReply` (parent_id present).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -145,7 +145,7 @@ const schemas = [
   },
   {
     name: 'read_messages',
-    description: '[Official API + UAT fallback] Read message history from any group. Accepts oc_xxx ID, numeric ID, or chat name (auto-searched). Auto-falls back to UAT for external groups the bot cannot access. Returns newest messages first by default, with sender names resolved. Auto-expands merge_forward messages into their child messages (with original sender / time / content preserved) by default — disable with expand_merge_forward=false. Text messages have URLs extracted into `urls`; Feishu doc links are additionally surfaced as `feishuDocs` so agents can feed them straight into read_doc / get_doc_blocks.',
+    description: '[Official API + UAT fallback] Read message history from any group. Accepts oc_xxx ID, numeric ID, or chat name (auto-searched). Auto-falls back to UAT for external groups the bot cannot access. Returns newest messages first by default, with sender names resolved. Auto-expands merge_forward messages into their child messages (with original sender / time / content preserved) by default — disable with expand_merge_forward=false. Text messages have URLs extracted into `urls`; Feishu doc links are additionally surfaced as `feishuDocs` so agents can feed them straight into read_doc / get_doc_blocks.\n\n**Sender semantics (v1.3.12)**: each message has a `displayLabel` (e.g. `周宇`, `[Bot] Claude聊天助手`, `[匿名]`, `[系统]`, `[已撤回] 怪兽`) — prefer it over raw `senderId` when narrating who-said-what. Also surfaced: `senderType` (user|app|anonymous), `senderIdType` (open_id|union_id|user_id), `senderTenantKey`, `isExternal` (cross-tenant), `isRecalled`, `isThreadReply` (parent_id present). **merge_forward children** carry `originChatId` (the chat the conversation came from, NOT the chat you queried) and best-effort `forwardedFromChatName` — do NOT treat children as native messages of the current group.',
     inputSchema: {
       type: 'object',
       properties: {
