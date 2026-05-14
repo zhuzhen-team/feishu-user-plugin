@@ -101,7 +101,10 @@ async function getAppInfo() {
       body: JSON.stringify({ app_id: APP_ID, app_secret: APP_SECRET }),
     });
     const tokenData = await tokenRes.json();
-    if (!tokenData.app_access_token) return null;
+    if (!tokenData.app_access_token) {
+      console.error(`[oauth] app_access_token request returned no token: ${JSON.stringify(tokenData)}`);
+      return null;
+    }
 
     // Get app info — try the direct app query first, fall back to underauditlist
     let appName = null;
@@ -112,6 +115,15 @@ async function getAppInfo() {
     appName = directData?.data?.app?.app_name;
 
     if (!appName) {
+      // v1.3.12: 99991672 specifically means "no permission to read application
+      // info" — caused by missing tenant-side scope `application:application:self_manage`
+      // (no admin review required, see docs/AUTH-SETUP.md). Without it the
+      // sender displayLabel for bot messages falls back to "[Bot] (cli_xxx)".
+      if (directData?.code === 99991672) {
+        console.error(`[oauth] App name resolve failed (code=99991672): need application:application:self_manage scope (tenant-side, 免审). displayLabel will fall back to '[Bot] (cli_xxx)'`);
+      } else if (directData?.code && directData.code !== 0) {
+        console.error(`[oauth] App name resolve failed: code=${directData.code} msg=${directData.msg}`);
+      }
       const listRes = await fetch('https://open.feishu.cn/open-apis/application/v6/applications/underauditlist?lang=zh_cn&page_size=1', {
         headers: { 'Authorization': `Bearer ${tokenData.app_access_token}` },
       });
@@ -120,7 +132,8 @@ async function getAppInfo() {
     }
 
     return { appName, tenantKey: tokenData.tenant_key };
-  } catch {
+  } catch (e) {
+    console.error(`[oauth] App name lookup threw: ${e.message}`);
     return null;
   }
 }
