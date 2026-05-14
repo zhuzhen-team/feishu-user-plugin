@@ -29,6 +29,8 @@ const { resolveToken } = require('./resolver');
 const { listPrompts, getPrompt } = require('./prompts');
 const credentials = require('./auth/credentials');
 const profileRouter = require('./auth/profile-router');
+const { createCredentialsMonitor } = require('./auth/credentials-monitor');
+const identityState = require('./auth/identity-state');
 
 // --- Tool modules ---
 // Adding a new domain: create src/tools/<x>.js exporting { schemas, handlers }
@@ -284,36 +286,50 @@ function _runLarkDesktopReactor() {
     .reduce((acc, h) => { acc[h.hash] = h.mtimeMs; return acc; }, {});
 }
 
-// Cross-process active-profile sync (v1.3.9 A.2).
-// Each tool call: stat credentials.json; if mtime changed AND active differs
-// from in-memory currentProfile, do an in-process setActiveProfile().
-// _credMtimeBaseline starts null — first call sets the baseline without syncing.
-let _credMtimeBaseline = null;
+// Cross-process credentials sync (v1.3.12 — CredentialsMonitor).
+// One poller, multiple hooks. Each tool call entry runs `credMonitor.sync()`
+// which:
+//   - active profile changed → flips in-memory currentProfile + clears caches
+//   - UAT field changed     → reloads officialClient._uat without restart
+//   - cookie field changed  → (no-op for now — userClient already re-inits
+//                              on next getUserClient call when nulled)
+//   - any change            → invalidates the identity-state cache so the
+//                              next call re-probes
+//
+// This replaces v1.3.9's _syncActiveProfileFromDisk (active-only) + the
+// "restart Claude Code to pick up new UAT" hand-off pattern.
+const credMonitor = createCredentialsMonitor();
 
-function _syncActiveProfileFromDisk() {
-  const m = _credMtime();
-  if (m === null) return; // no credentials.json — nothing to sync
-  if (_credMtimeBaseline === null) { _credMtimeBaseline = m; return; }
-  if (m === _credMtimeBaseline) return; // unchanged
-  _credMtimeBaseline = m;
-  let newActive;
-  try { newActive = credentials.getActiveProfileName(); } catch (_) { return; }
-  if (newActive === currentProfile) return;
-  console.error(`[feishu-user-plugin] active profile changed on disk: ${currentProfile} → ${newActive}`);
-  // Use the same setActiveProfile flow that switch_profile uses, except don't
-  // re-write credentials.json (which it already reflects the change).
+credMonitor.onProfileSwitch(({ to }) => {
+  if (!to || to === currentProfile) return;
   try {
-    credentials.getActiveProfileEnv(newActive); // validate profile exists
-    currentProfile = newActive;
+    credentials.getActiveProfileEnv(to); // validate profile exists
+    console.error(`[feishu-user-plugin] active profile changed on disk: ${currentProfile} → ${to}`);
+    currentProfile = to;
     userClient = null;
     officialClient = null;
-    // resolver.js has a wiki-node resolution cache; clear it on profile switch
-    // so wiki nodes belonging to the previous app-id don't cross-contaminate.
     require('./resolver').clearCache();
   } catch (e) {
-    console.error(`[feishu-user-plugin] sync to "${newActive}" failed: ${e.message}; staying on "${currentProfile}"`);
+    console.error(`[feishu-user-plugin] sync to "${to}" failed: ${e.message}; staying on "${currentProfile}"`);
   }
-}
+});
+
+credMonitor.onUatChange((env) => {
+  // Hot-reload UAT into the running officialClient. No restart needed.
+  if (!officialClient) return; // next getOfficialClient() reads env directly
+  const token = env?.LARK_USER_ACCESS_TOKEN || null;
+  const refresh = env?.LARK_USER_REFRESH_TOKEN || null;
+  const expires = parseInt(env?.LARK_UAT_EXPIRES || '0') || (token ? officialClient._decodeTokenExpiry(token) : 0);
+  officialClient._uat = token;
+  officialClient._uatRefresh = refresh;
+  officialClient._uatExpires = expires;
+  identityState.invalidateIdentity(officialClient);
+  console.error('[feishu-user-plugin] UAT reloaded from credentials.json (no restart needed)');
+});
+
+credMonitor.onCacheInvalidate(() => {
+  if (officialClient) identityState.invalidateIdentity(officialClient);
+});
 
 async function _maybeReconfigure() {
   if (!ownerHandle || !wsServer) return;
@@ -393,9 +409,11 @@ function buildCtx() {
           console.error(`[feishu-user-plugin] WARN: setActiveProfile("${n}") failed to persist to credentials.json: ${e.message}. In-memory currentProfile updated anyway, but other MCP processes won't see the switch.`);
         }
       }
-      // Re-baseline mtime so _syncActiveProfileFromDisk doesn't immediately
-      // trigger a redundant sync on the next tool call after we just wrote.
-      _credMtimeBaseline = _credMtime();
+      // Run a sync so credMonitor adopts the just-written file as its
+      // baseline. The onProfileSwitch hook will see `to === currentProfile`
+      // and short-circuit; UAT/cookie hooks fire only if those fields
+      // actually differ from the prior active profile, which is harmless.
+      credMonitor.sync();
     },
     resolveDocId,
     getWsServer: () => wsServer,
@@ -431,9 +449,9 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  // Cross-process active-profile sync (v1.3.9 A.2): if another MCP process
-  // wrote a new `active` field to credentials.json, pick it up before dispatch.
-  _syncActiveProfileFromDisk();
+  // Credentials hot-reload (v1.3.12): poll credentials.json for changes and
+  // fire registered hooks (profile / UAT / cookie / invalidate).
+  credMonitor.sync();
   const { name, arguments: args } = request.params;
   const handler = HANDLERS[name];
   if (!handler) {

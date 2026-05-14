@@ -1,5 +1,5 @@
 const lark = require('@larksuiteoapi/node-sdk');
-const { fetchWithTimeout } = require('../../utils');
+const { fetchWithTimeout, LRUCache } = require('../../utils');
 const { stderrLogger } = require('../../logger');
 const uatLifecycle = require('../../auth/uat');
 
@@ -11,8 +11,12 @@ class LarkOfficialClient {
     this._uat = null;
     this._uatRefresh = null;
     this._uatExpires = 0;
-    this._userNameCache = new Map(); // open_id → display name
-    this._appNameCache = new Map();  // app_id (cli_xxx) → app name
+    // v1.3.12: bounded caches with TTL. Pre-v1.3.12 these were plain Maps that
+    // grew without bound and never expired, so a week-old server would carry
+    // stale display names. 500 entries / 10min covers the common chat-volume
+    // working set without keeping cold entries forever.
+    this._userNameCache = new LRUCache({ max: 500, ttlMs: 600_000 }); // open_id → display name
+    this._appNameCache = new LRUCache({ max: 100, ttlMs: 600_000 });  // app_id (cli_xxx) → app name
     this._selfTenantKey = null;      // populated lazily on first message read
   }
 

@@ -24,10 +24,36 @@ function _writeLockBody(fd, info) {
   fs.writeSync(fd, body);
 }
 
+// Probe whether `pid` is a live process. Returns true when alive (or when we
+// can't tell for certain; we prefer "alive" on EPERM because falsely
+// declaring an EPERM'd process dead would race-steal a lock from another
+// user's MCP server). Returns false only when ESRCH says "no such process".
+function _isProcessAlive(pid) {
+  if (!Number.isFinite(pid) || pid <= 0) return true; // unknown → safe default
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    if (e.code === 'ESRCH') return false;
+    // EPERM — process exists but we can't signal it. Treat as alive.
+    return true;
+  }
+}
+
+function _readPidFromLock(lockPath) {
+  try {
+    const body = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+    if (body && typeof body.pid === 'number' && body.pid > 0) return body.pid;
+  } catch (_) { /* malformed or unreadable — caller falls back to mtime */ }
+  return null;
+}
+
 // Long-lived (owner) acquisition.
 //
 // Returns { release(), heartbeat() } on success.
-// Returns null if lock active (mtime within staleMs).
+// Returns null if lock active (mtime within staleMs AND pid still alive).
+// v1.3.12: pid liveness check shortcircuits the 60s stale window when the
+// holder process is definitively gone (SIGKILL'd, crashed, host reboot).
 function acquireLongLived(lockPath, { info = {}, staleMs = 60_000 } = {}) {
   _ensureDir(lockPath);
 
@@ -38,8 +64,18 @@ function acquireLongLived(lockPath, { info = {}, staleMs = 60_000 } = {}) {
   }
   if (stat) {
     const ageMs = Date.now() - stat.mtimeMs;
-    if (ageMs < staleMs) return null;
-    // Stale — try to steal. Rename out of the way to make room for EXCL create.
+    const fresh = ageMs < staleMs;
+    let canSteal = !fresh;
+    if (fresh) {
+      // mtime suggests alive — verify by pid liveness. If the body has a pid
+      // and that pid is gone, the holder crashed and we can steal now.
+      const pid = _readPidFromLock(lockPath);
+      if (pid !== null && !_isProcessAlive(pid)) {
+        canSteal = true;
+      }
+    }
+    if (!canSteal) return null;
+    // Stealable — rename out of the way to make room for EXCL create.
     const stolenPath = lockPath + '.stale-' + process.pid + '-' + Date.now();
     try { fs.renameSync(lockPath, stolenPath); } catch (e) {
       // Race: someone else got there first; try again from scratch.
@@ -123,4 +159,4 @@ function withMutex(lockPath, fn, { staleMs = 30_000, retries = 30, retryDelayMs 
   }
 }
 
-module.exports = { acquireLongLived, withMutex };
+module.exports = { acquireLongLived, withMutex, _isProcessAlive };
