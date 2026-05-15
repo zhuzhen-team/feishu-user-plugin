@@ -33,11 +33,18 @@ const TARGET_PROFILE = _parseTargetProfile();
 const _hasCanonical = !!credentialsModule.readCanonical();
 let creds;
 let profileLabel;
+// v1.3.12 (PR #45 P2): capture targetName at module init, NOT at OAuth
+// callback time. If we re-read getActiveProfileName() inside saveToken (as
+// the v1.3.6 code did), a concurrent `switch_profile` or Lark Desktop
+// account flip between "open browser for authorize" and "callback fires"
+// would write tokens to the WRONG profile silently. The whole oauth flow
+// is anchored to the profile name resolved here.
+let RESOLVED_PROFILE = null;
 if (_hasCanonical) {
-  const targetName = TARGET_PROFILE || credentialsModule.getActiveProfileName();
+  RESOLVED_PROFILE = TARGET_PROFILE || credentialsModule.getActiveProfileName();
   try {
-    creds = credentialsModule.getActiveProfileEnv(targetName);
-    profileLabel = `credentials.json::profiles[${targetName}]`;
+    creds = credentialsModule.getActiveProfileEnv(RESOLVED_PROFILE);
+    profileLabel = `credentials.json::profiles[${RESOLVED_PROFILE}]`;
   } catch (e) {
     console.error(`OAuth target profile error: ${e.message}`);
     console.error(`Available: ${credentialsModule.listProfileNames().join(', ')}`);
@@ -180,8 +187,9 @@ function saveToken(tokenData) {
 
   let ok = false;
   if (_hasCanonical) {
-    const targetName = TARGET_PROFILE || credentialsModule.getActiveProfileName();
-    ok = credentialsModule.persistProfileUpdate(targetName, updates);
+    // Use the profile name captured at module init, not whatever
+    // credentials.json::active is *now*. See PR #45 race condition fix.
+    ok = credentialsModule.persistProfileUpdate(RESOLVED_PROFILE, updates);
     if (ok) console.log(`Tokens written to ${profileLabel}`);
   } else {
     ok = legacyConfig.persistToConfig(updates);

@@ -9,9 +9,16 @@
 //   - decodeTokenExpiry(token) — JWT exp parsing
 //   - getValidUAT(client) — returns current UAT, refreshes if expiring
 //   - refreshUAT(client) — full refresh dance with file lock + persist
-//   - withUAT(client, fn) — wrapper that retries fn once on auth-error codes
+//   - withUAT(client, fn) — wrapper that retries fn once on auth codes + on
+//     transient throws (classifyError action='retry'); v1.3.12 widening
 //   - uatREST(client, method, path, opts) — generic UAT REST helper
-//   - asUserOrApp(client, opts) — UAT-first, bot-fallback wrapper
+//   - asUserOrApp(client, opts) — legacy UAT-first / bot-fallback signature.
+//     v1.3.12: the body is now a thin shape adapter around
+//     withIdentityFallback (src/auth/identity-state.js). The public contract
+//     — return data with _viaUser ∈ {true,false} + optional _fallbackWarning,
+//     throw Error with .uatSummary + .appError on dual failure — is
+//     preserved so 15+ existing callsites in calendar/docs/bitable/wiki/okr/
+//     tasks/drive/im keep compiling.
 //   - persistUAT(client) — writes through auth/credentials
 //   - adoptPersistedUATIfNewer(client) — peer-rotation adoption
 //   - acquireRefreshLock / releaseRefreshLock — cross-process advisory lock

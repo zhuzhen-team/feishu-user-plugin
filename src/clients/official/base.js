@@ -193,6 +193,19 @@ class LarkOfficialClient {
       }
     }
 
+    // v1.3.12 negative cache: any id we tried to resolve but couldn't gets
+    // a null sentinel under the same LRU+TTL. The 10-min TTL on the cache
+    // gives renamed / newly-joined users a re-resolution window without
+    // dispatching N redundant API calls per read_messages on hot chats.
+    // has(id)==true / get(id)==null lets _computeDisplayLabel fall back to
+    // "(open_id)" exactly the same way as before.
+    for (const id of unknownUserIds) {
+      if (!this._userNameCache.has(id)) this._userNameCache.set(id, null);
+    }
+    for (const id of unknownAppIds) {
+      if (!this._appNameCache.has(id)) this._appNameCache.set(id, null);
+    }
+
     // Step 4: populate senderName, isExternal, displayLabel
     for (const item of items) {
       item.senderName = item.senderId ? (this._userNameCache.get(item.senderId) || null) : null;

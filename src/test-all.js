@@ -346,5 +346,9 @@ main().catch(console.error).finally(() => {
     process.exitCode = 1;
   });
   require('./test-lockfile-pid').run();
+  require('./test-negative-cache').run().catch(e => {
+    console.error('negative-cache: FAIL', e);
+    process.exitCode = 1;
+  });
   require('./test-display-label');  // standalone — runs on require, exits non-zero on fail
 });

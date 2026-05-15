@@ -97,6 +97,32 @@ class LRUCache {
   clear() { this._map.clear(); }
 
   get size() { return this._map.size; }
+
+  // Map-compatible iteration. Skips expired entries so callers don't observe
+  // stale data via spread / for-of. Order follows the underlying Map's
+  // insertion order (= LRU recency order, oldest first).
+  *entries() {
+    for (const [key, entry] of this._map) {
+      if (this._isExpired(entry)) continue;
+      yield [key, entry.value];
+    }
+  }
+
+  *keys() {
+    for (const [key, entry] of this._map) {
+      if (this._isExpired(entry)) continue;
+      yield key;
+    }
+  }
+
+  *values() {
+    for (const [, entry] of this._map) {
+      if (this._isExpired(entry)) continue;
+      yield entry.value;
+    }
+  }
+
+  [Symbol.iterator]() { return this.entries(); }
 }
 
 module.exports = {

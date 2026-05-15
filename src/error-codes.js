@@ -27,9 +27,11 @@ const FAILURE_MAP = {
   19001:  { action: 'uat', reason: 'bot_chat_not_found' },
 
   // UAT revoked — refresh_token explicitly invalid_grant (user revoked OAuth
-  // or 30-day window elapsed). The whole identity is gone; bot fallback is
-  // the only short-term option, and the caller must surface this to the LLM
-  // so the user knows to re-run `npx feishu-user-plugin oauth`.
+  // or 30-day window elapsed). The live trigger for this code lives in
+  // identity-state.js::_classifyUatFailure (UAT REST throws / returns 20064);
+  // this entry exists for *symmetry* — should a bot-side surface ever return
+  // 20064 (it shouldn't, bot uses app_access_token not refresh_token), the
+  // fallback caller would route to UAT once and surface revocation.
   20064: { action: 'uat', reason: 'uat_revoked' },
   // Cross-tenant bot block — bot lives in tenant A, target resource is in
   // tenant B. Will never be granted. Distinct from 240001 (which is the

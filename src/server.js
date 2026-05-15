@@ -158,14 +158,22 @@ function getOfficialClient() {
 }
 
 // Mirror of LarkOfficialClient.loadUAT() but sourced from a specific env block
-// instead of process.env, so credentials.json profiles work uniformly.
+// instead of process.env, so credentials.json profiles work uniformly. Also
+// the hot-reload entry point used by credMonitor.onUatChange: when `env` has
+// no UAT (user nuked the token), clear the in-memory copy instead of
+// silently leaving the stale token in place.
 function loadUATFromEnv(client, env) {
-  const token = env.LARK_USER_ACCESS_TOKEN;
-  const refresh = env.LARK_USER_REFRESH_TOKEN;
-  const expires = parseInt(env.LARK_UAT_EXPIRES || '0');
-  if (!token) return;
+  const token = env?.LARK_USER_ACCESS_TOKEN || null;
+  const refresh = env?.LARK_USER_REFRESH_TOKEN || null;
+  const expires = parseInt(env?.LARK_UAT_EXPIRES || '0') || 0;
+  if (!token) {
+    client._uat = null;
+    client._uatRefresh = null;
+    client._uatExpires = 0;
+    return;
+  }
   client._uat = token;
-  client._uatRefresh = refresh || null;
+  client._uatRefresh = refresh;
   client._uatExpires = expires || client._decodeTokenExpiry(token);
 }
 
@@ -316,13 +324,10 @@ credMonitor.onProfileSwitch(({ to }) => {
 
 credMonitor.onUatChange((env) => {
   // Hot-reload UAT into the running officialClient. No restart needed.
+  // Routing through loadUATFromEnv keeps the field-write logic in one
+  // place — same helper used at getOfficialClient() startup.
   if (!officialClient) return; // next getOfficialClient() reads env directly
-  const token = env?.LARK_USER_ACCESS_TOKEN || null;
-  const refresh = env?.LARK_USER_REFRESH_TOKEN || null;
-  const expires = parseInt(env?.LARK_UAT_EXPIRES || '0') || (token ? officialClient._decodeTokenExpiry(token) : 0);
-  officialClient._uat = token;
-  officialClient._uatRefresh = refresh;
-  officialClient._uatExpires = expires;
+  loadUATFromEnv(officialClient, env);
   identityState.invalidateIdentity(officialClient);
   console.error('[feishu-user-plugin] UAT reloaded from credentials.json (no restart needed)');
 });

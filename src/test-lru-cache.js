@@ -102,6 +102,42 @@ async function run() {
     assert.equal(c.get('open_x'), 'Alice');
   }
 
+  // --- 8. Iteration support: the comment claims "API-compatible with the
+  // old Map", so spread / for-of / entries / keys / values must all work.
+  // Map is iterable via Symbol.iterator yielding [key, value] tuples.
+  {
+    const c = new LRUCache({ max: 5, ttlMs: 60_000 });
+    c.set('a', 1);
+    c.set('b', 2);
+    c.set('c', 3);
+    const collected = [...c];
+    assert.equal(collected.length, 3);
+    // Map insertion order, [key, value] tuples.
+    assert.deepEqual(collected[0], ['a', 1]);
+    assert.deepEqual(collected[2], ['c', 3]);
+
+    const forOfKeys = [];
+    for (const [k] of c) forOfKeys.push(k);
+    assert.deepEqual(forOfKeys, ['a', 'b', 'c']);
+
+    assert.deepEqual([...c.keys()], ['a', 'b', 'c']);
+    assert.deepEqual([...c.values()], [1, 2, 3]);
+    assert.deepEqual([...c.entries()], [['a', 1], ['b', 2], ['c', 3]]);
+  }
+
+  // --- 9. Iteration skips expired entries (TTL gate is consistent across
+  // get/has and iteration so callers don't see stale data via spread).
+  {
+    const c = new LRUCache({ max: 5, ttlMs: 50 });
+    c.set('a', 1);
+    c.set('b', 2);
+    await new Promise(r => setTimeout(r, 80));
+    c.set('c', 3); // fresh after expiry of a/b
+    const collected = [...c];
+    assert.equal(collected.length, 1);
+    assert.deepEqual(collected[0], ['c', 3]);
+  }
+
   console.log('lru-cache.js: PASS');
 }
 
