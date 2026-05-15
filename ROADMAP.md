@@ -6,24 +6,6 @@
 
 ## v1.3.12 待办
 
-### 待决策（先确认再开工）
-
-- [ ] **仓名是否改成 `feishu-mcp-server`**：当前 `feishu-user-plugin` 中 "plugin" 是 Claude Code skill 框架特定术语，搜"飞书 mcp"/"飞书 cli"/"飞书 plugin"找不到本仓（GitHub 搜索实测）。改名让 SEO + 搜索友好（跟 github/github-mcp-server / suekou/mcp-notion-server / korotovsky/slack-mcp-server 命名一致）。npm package name 保留 `feishu-user-plugin` 不动以维持老用户 `npm install` 兼容。GitHub 自动 redirect 旧 URL。
-
-### 主线
-
-- [ ] **C. md ↔ 飞书 wiki 双向无损同步**（v1.3.4 起多次推迟；v1.3.12 主角）
-  - **正向 md → wiki**：
-    - md parser 选型（remark / markdown-it / unified）
-    - `src/doc-blocks.js` 补齐 heading / bullet / ordered / code / quote / divider / table / todo / callout 构造器
-    - wikilink `[[page]]` 解析：按 md 文件名 / 标题 / 用户自定义 mapping 三级策略
-    - 图片内联：md 图片语法（`![alt](./img.png)`）→ `uploadMedia(parent_type='docx_image')` + `image_path` 快捷
-    - 文件附件 inline：md 链接到本地文件（`[label](./file.pdf)`）→ `file_path` 快捷
-    - CLI 子命令 `sync-md <path>` vs MCP 工具 `sync_markdown_to_wiki` 取舍
-    - 增量 diff：已存在 wiki 节点的更新策略（全量覆盖 / 按 block_id 精细 diff）
-  - **反向 wiki → md 导出**（新增）：从飞书文档 / wiki 节点导出成 md，保真度参考 riba2534/feishu-cli "双向无损转换" 标准
-- [ ] **Mermaid / PlantUML → 飞书画板**：md 代码块里的 Mermaid / PlantUML 自动转飞书画板（可编辑矢量图，非截图）。独立差异化点，学 riba2534（实测 88 个 Mermaid 93.2% 成功率）+ cso1z 飞书画板写入。配合 C 主线同期做。
-
 ### Protobuf 阶段二
 
 - [ ] **B.5 `search_messages`** —— 先试 UAT `/open-apis/im/v1/messages/search`，飞书未暴露则反向 cookie 路径
@@ -44,15 +26,12 @@
   - repo description 加 `cli` / `mcp` 字样
   - GitHub topics 补 `feishu-mcp` / `feishu-cli` / `mcp-server` / `cli`
   - SEO 目标：搜"飞书 mcp" / "飞书 cli" / "飞书 plugin" 首页能见到本仓
-- [ ] **演示视频 / GIF**（占位项，等用户录）—— 学 cso1z 在 README 顶部嵌 B 站演示
 
 ### 工程质量
 
-- [ ] **CHANGELOG 回填 v1.3.0 - v1.3.5**：从 `git log v1.3.0...v1.3.5` + 对应 commit message 重写每版 entry，参考 v1.3.6+ 已有的 `### Added / Changed / Fixed` 风格。原 issue #61。
-- [ ] **`read_doc_markdown` 测试覆盖**：加到 `scripts/test-all-tools.js`，准备一个含 image / file 块的 fixture docx 测占位符产出。原 issue #63。
+- [ ] **CHANGELOG 回填 v1.3.0 - v1.3.2**：CHANGELOG 当前最早 entry 是 v1.3.3，缺 v1.3.0/v1.3.1/v1.3.2。从 `git log v1.3.0...v1.3.2 --oneline` + 对应 commit message 重写每版 entry，参考 v1.3.6+ 已有的 `### Added / Changed / Fixed` 风格。原 issue #61（v1.3.3-v1.3.5 已 substantial，不需补）。
 - [ ] **客户端兼容性测试**：在 Cursor / Windsurf / OpenClaw 各跑 `/send` `/status` 两条 prompt，写测试报告。原 issue #64。
 - [ ] **gitleaks 防 cookie 误提交**：仓根加 `.gitleaks.toml`（学 [larksuite/cli](https://github.com/larksuite/cli) 的配置），接进 `.husky/pre-commit` + `.github/workflows/validate.yml`。防意外把 `LARK_COOKIE` / `LARK_APP_SECRET` / UAT 提交进 git
-- [ ] **GitHub Copilot review workflow 处理**：本仓最近 100 次 CI run 中 22 次失败都是 "Copilot code review" workflow（GitHub hosted service，非我们 `.github/workflows/` 配置，因 billing/auth 问题永远 fail）。team-skills 仓同样问题 7 次。处理方案：GitHub Settings → Code review → Disable Copilot（让实际工作的 Codex review 单独运作）。需要管理员在 GitHub UI 操作
 
 ### 战略性微调
 
@@ -93,8 +72,5 @@
 - ~~`send_audio_as_user`~~（用户 2026-05-07 决定删除：使用频率低，反向工程成本不值）
 - ~~`send_sticker_as_user`~~（用户 2026-05-07 决定删除：价值最低，且需先调研飞书 sticker pack API）
 - ~~测试群解散 `oc_daaa6a50f2a97dc668aaf79ae4dc6e4e`~~（用户已不在该群，搁置）
-
-## 上架提交（仓库已具备所有材料于 v1.3.11，等用户人肉表单提交）
-
-- [ ] **Anthropic Connectors Directory 提交**：v1.3.11 ship 了 `PRIVACY.md` + `.mcpb/manifest.json` + `scripts/build-mcpb.js`。剩下的：`node scripts/build-mcpb.js` 产出 `.mcpb` → 在 https://clau.de/desktop-extention-submission 上传。详见 `docs/launch/submissions/anthropic-directory.md`
-- [ ] **Cursor Marketplace 提交**：v1.3.11 ship 了 `.cursor-plugin/plugin.json`。剩下的：去 https://cursor.com/marketplace/publish 提交仓库 URL。详见 `docs/launch/submissions/cursor-marketplace.md`
+- ~~md ↔ 飞书 wiki 双向无损同步~~（v1.3.4 起多次推迟，v1.3.12 决定不做）
+- ~~Mermaid / PlantUML → 飞书画板~~（依赖 md ↔ wiki 主线，主线删后一并删）

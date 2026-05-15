@@ -9,11 +9,11 @@
 | 编号 | 名称 | 状态 |
 |------|------|------|
 | A | Scope hardcode + 三方 drift | ✅ v1.3.12 实施（`scripts/check-scopes.js` + `src/oauth.js` SCOPES 修正 + `docs/AUTH-SETUP.md` 完整 scope table） |
-| B | Silent fallback 掩盖状态机错误 | ⏸ 设计完成，待实施 |
+| B | Silent fallback 掩盖状态机错误 | ✅ v1.3.12 实施（`src/auth/identity-state.js` 6 态枚举 + `withIdentityFallback` + `asUserOrApp` 内部 rewire + FAILURE_MAP 扩展 + `withUAT` retry 集合扩展 + `_populateSenderNames` 读 allSettled status + negative-cache sentinel） |
 | C | LLM-unfriendly 数据呈现 | ✅ v1.3.12 实施（`displayLabel` + 5 个新 sender 字段 + merge_forward `forwardedFromChatName`） |
-| D | "长跑 MCP server" hot-reload 缺失 | ⏸ 设计完成，待实施 |
+| D | "长跑 MCP server" hot-reload 缺失 | ✅ v1.3.12 实施（`src/auth/credentials-monitor.js` + `server.js` dispatcher wire + `onUatChange` 调 `loadUATFromEnv` + `LRUCache` 取代 unbounded Map + `events/lockfile.js` PID liveness check + `readOwnerInfo` 综合 alive 判定） |
 
-本文件记录 B 和 D 的设计，便于未来 v1.3.13+ 直接实施。
+本文件保留 B 和 D 的设计文档作为实施 reference + 未来类似问题的复用范式。
 
 ---
 
@@ -165,15 +165,15 @@ class CredentialsMonitor:
 | 2 | 15 个 user-side scope 未开通 | ✅ 手工开 |
 | 3 | 6 个 tenant-side scope 未开通 | ✅ 手工开 |
 | 4 | UAT refresh_token revoked | ✅ 重 oauth |
-| 5 | UAT refresh race（多进程并发） | ⏸ 等 B + D |
+| 5 | UAT refresh race（多进程并发） | ✅ B + D（CredentialsMonitor 让多进程通过 credentials.json 主动同步内存 UAT） |
 | 6 | `_populateSenderNames` 不用 mentions name | ✅ C 修复 |
-| 7 | `_userNameCache` 无 TTL | ⏸ 等 D |
-| 8 | `Promise.allSettled` 静默吞错 | ⏸ 等 B |
+| 7 | `_userNameCache` 无 TTL | ✅ D（LRUCache max=500 / TTL=10min；profile switch nullify client 自然清空） |
+| 8 | `Promise.allSettled` 静默吞错 | ✅ B（读 results.status + 失败 ids 上 stderr + v1.3.12 self-review 加 null sentinel 防重复 dispatch） |
 | 9 | merge_forward children.chatId 跨群 | ✅ C 修复（surface `forwardedFromChatName` + tool desc warning） |
 | 10 | senderType=app 无 label | ✅ C 修复（`displayLabel: [Bot] Claude聊天助手`；依赖 tenant-side `application:application:self_manage` scope，免审） |
-| 11 | WS owner stale lock | ⏸ 等 D |
-| 12 | `JSON.parse` 静默 catch | ⏸ low priority |
-| 13 | `withUAT` retry 集合窄 | ⏸ 等 B（FAILURE_MAP 扩展） |
+| 11 | WS owner stale lock | ✅ D（`acquireLongLived` 在 mtime fresh 时也 `process.kill(pid, 0)`，ESRCH 立即 steal；readOwnerInfo alive = mtime fresh ∧ pid alive） |
+| 12 | `JSON.parse` 静默 catch | ⏸ partial（oauth.js getAppInfo 通过 F1 修；base.js 的 message body parsing silent 是故意的，飞书有时返回非 JSON 文本） |
+| 13 | `withUAT` retry 集合窄 | ✅ B（FAILURE_MAP 加 20064/91403/1254xxx；TRANSIENT_PATTERNS 加 JSON parse error；withUAT 对 classifyError action='retry' 重试一次） |
 | 14 | thread (rootId/parentId) 没线性化 | ✅ C 部分修复（`isThreadReply` flag），完整线性化等后续 |
 
-C 完成后 senderName 100% 填充 + displayLabel 覆盖 5 种 sender 形态 + merge_forward 跨群有显式警告。剩下 6 个隐患（5/7/8/11/12/13）都不影响日常使用，但**多进程并发**或**长跑超过 1 周**场景会逐渐触发。
+v1.3.12 实施完成后：14 个根因里 9 个已 fixed in code (#1/5-11/13)，3 个由用户手工解决 (#2/3/4)，1 个 partial (#12)，1 个完整线性化等后续 (#14)。
