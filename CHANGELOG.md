@@ -202,6 +202,55 @@ D 系列首项 ship：新增 `read_doc_markdown` 工具，用 `feishu-docx` 把 
 - `getWikiNode(nodeToken, _spaceId)` — `spaceId` parameter position swapped; retained only for backward-compatibility of any external caller. The endpoint itself ignores `space_id`.
 - `create_doc_block` no longer requires `children` — callers who use the new `image_path` or `image_token` shortcut omit it. One of `children` / `image_path` / `image_token` must be provided.
 
+## [1.3.2] - 2026-04-17
+
+主线：以"真用户身份"补两个 longstanding gap —— 用户消息的 @-mention 现在真能通知到人 + 用户身份创建的 docx / bitable 资源现在真归你（不是 app）。
+
+### Fixed
+- **@-mentions 作为用户发送时不通知**：飞书 Web bundle 反向工程发现 `RichText` 需要 `atIds[]` (field 6) 注册 AT element ids，没有这个字段后端会把 `user_id` 清空。`proto/lark.proto::RichText` 扩字段（`atIds` / `anchorIds` / `imageIds` 等），加上真正的 `AtProperty` / `AnchorProperty` message。Live 测试：bot-API 回读现在保留 `user_id` + `user_name`（之前两个都空字符串）。
+- **`create_doc` / `create_bitable` 创建后归属错乱**：所有 docx / bitable / drive 操作改走 UAT-first → app fallback（新 helper `_uatREST` + `_asUserOrApp`）。修复 1770032（docx forbidden）+ 91403（bitable forbidden）—— 之前 UAT 创建的资源用 app 路径打开会 403，因为根本不是 UAT 创的。
+
+### Added
+- **`ats: [{userId, name}]` 参数**给 `send_as_user` / `send_to_user` / `send_to_group` / `send_post_as_user`：在 TEXT 消息里 splice @-mention（marker `@<name>`）；在 POST/RichText 消息里 `sendPost` 把 AT elem ids 汇到 `richText.atIds`，AT 编码用 `AtProperty`。
+- **`_formatMessage` surface `mentions[]`**：`im.message` payload 里 mentions 数组现在被 `read_messages` / `read_p2p_messages` 透传出来，供下游用 mention 的 name 直接 narrate 而不用再查 contact API。
+
+### Changed
+- Docs synced：`CLAUDE.md` / `skills/feishu-user-plugin/references/CLAUDE.md` / `.claude-plugin/plugin.json` 全部更新 @-mention 用法 + UAT-first 行为说明。
+- Removed redundant per-resource as-user wrappers：`createDocAsUser` / `createBitableAsUser` / `createFolderAsUser` 删除，被 `_asUserOrApp` 统一替代。
+
+## [1.3.1] - 2026-04-17
+
+主线：MCP 稳定性 root fix + 用户身份创建 + Codex 双客户端支持 + 工具表收敛（81 → 66，去 calendar/tasks 这种 app 权限未开通的伪能力）。
+
+### Fixed
+- **MCP 中途掉线（root cause #1）**：Lark SDK 的 logger 默认写 stdout 污染了 JSON-RPC channel。`src/index.js` 启动把 SDK logger 改写到 stderr（PR #2 by [@ZYAH111](https://github.com/ZYAH111)）。
+- **uncaughtException / unhandledRejection 兜底**：MCP server 不再因为单个 tool handler 抛错而整个 crash —— 进程级 handler 把错误吐到 stderr，server 继续接 next request。
+- **config 写入 race**：`atomicWrite(tmp + rename)` 替代直接 fs.writeFile，防止 Claude Code spawn 多 MCP server 时并发改 `~/.claude.json` 互相覆盖。
+
+### Added
+- **UAT-first creation**：`create_doc` / `create_bitable` / `create_folder` 现在用 `LARK_USER_ACCESS_TOKEN` 走 UAT 路径创建，资源归用户而非 app。
+- **Codex TOML 支持**：`npx feishu-user-plugin setup --client codex|both` 写 `~/.codex/config.toml::mcp_servers`。新增 `scripts/mcp_stdio_bridge.js` 适配 Codex 协议差异。
+- **3-layer 版本确认**：CLAUDE.md 规则 + `prepublishOnly` script + CI tag check，三层保护防版本号 drift。
+- **5 个新 bitable 工具**：`get_bitable_meta`、`copy_bitable_app`、`update_bitable_table`、`create_bitable_view`、`delete_bitable_view`。
+
+### Changed
+- **工具数 81 → 66**：移除 calendar(5) + tasks(5) 工具 —— 飞书 app 权限管理后台对应 scope 未开通，工具调用 100% 失败。后续在 v1.3.4 重新加回时 app 权限已申请。
+- **合并 pin/unpin → `pin_message(action='pin'|'unpin')`**，`add/remove_members → manage_members(action=...)`。
+- **吸收单 record CRUD 到 batch tools**：`create_bitable_record` → `batch_create_bitable_records(records=[<one>])` 等。
+- **OAuth scopes**：加 `docx:document`、`drive:drive` write 权限。
+
+## [1.3.0] - 2026-04-03
+
+主线：tool surface 一次性扩张 46 → 76（+30）—— bot messaging 全套、docx block 编辑、calendar / tasks / drive 操作首次纳入。
+
+### Added
+- **IM 域（13 工具）**：`send_message_as_bot`、`delete_message`、`update_message`、`add_reaction`、`delete_reaction`、`pin_message`、`unpin_message`、`create_group`、`update_group`、`list_members`、`add_members`、`remove_members`。
+- **Docx block 编辑（3 工具）**：`create_doc_block`、`update_doc_block`、`delete_doc_blocks` —— 飞书 docx 的原子编辑单元。
+- **Bitable（2 工具）**：`get_bitable_record`（按 record_id 取一条）、`delete_bitable_table`。
+- **Drive 操作（3 工具）**：`copy_file`、`move_file`、`delete_file`。
+- **Calendar（5 工具）**：`list_calendars`、`create_calendar_event`、`list_calendar_events`、`delete_calendar_event`、`get_freebusy`。（v1.3.1 因 scope 未开通暂时下线，v1.3.4 加回。）
+- **Tasks（5 工具）**：`create_task`、`get_task`、`list_tasks`、`update_task`、`complete_task`。（v1.3.1 因 scope 未开通暂时下线，v1.3.7 v2 API 重做。）
+
 ## [1.3.3] - 2026-04-20
 
 ### Fixed
