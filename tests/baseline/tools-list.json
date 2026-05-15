@@ -1872,6 +1872,65 @@
     }
   },
   {
+    "name": "search_messages",
+    "description": "[User UAT, v1.3.12] Search the user's IM history by keyword. Wraps Feishu `POST /open-apis/search/v2/message`. Requires UAT with the `search:message` scope (re-run `npx feishu-user-plugin oauth` after v1.3.12 SCOPES update). Feishu does NOT expose a bot-path search; if you only have app credentials this tool will error.\n\nReturns `{items, pageToken, hasMore}` where each item is a `{message_id, chat_id, ...}` pointer — call `read_messages(chat_id)` or `read_p2p_messages(chat_id)` to fetch the full message bodies if needed. The pointer-only return keeps the response token-light when searching across many chats.\n\nFilter knobs (all optional):\n- `chat_ids`: only search inside these chats (oc_xxx)\n- `from_ids`: messages sent by these users (ou_xxx / union_id)\n- `at_user_ids`: messages that @-mention these users\n- `message_types`: e.g. `[\"text\", \"post\"]`\n- `from_types`: e.g. `[\"user\", \"anonymous\"]`",
+    "inputSchema": {
+      "properties": {
+        "at_user_ids": {
+          "description": "Restrict to messages that @-mention these user ids",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "chat_ids": {
+          "description": "Restrict to these oc_xxx chats",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "from_ids": {
+          "description": "Restrict to messages from these user ids (ou_xxx / union_id)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "from_types": {
+          "description": "Filter by sender types (e.g. [\"user\",\"anonymous\"])",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "message_types": {
+          "description": "Filter by message types (e.g. [\"text\",\"post\",\"image\",\"file\",\"interactive\"])",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "page_size": {
+          "description": "Items per page (default 20, max 100)",
+          "type": "number"
+        },
+        "page_token": {
+          "description": "Pagination cursor from a previous page",
+          "type": "string"
+        },
+        "query": {
+          "description": "Search keyword. Plain text; Feishu handles tokenization.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "search_wiki",
     "description": "[Official API] Search Wiki nodes by keyword.",
     "inputSchema": {

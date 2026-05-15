@@ -3,13 +3,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-green.svg)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-purple.svg)](https://modelcontextprotocol.io)
-[![Tools](https://img.shields.io/badge/Tools-84-orange.svg)](docs/TOOLS.md)
+[![Tools](https://img.shields.io/badge/Tools-85-orange.svg)](docs/TOOLS.md)
 [![npm](https://img.shields.io/npm/v/feishu-user-plugin.svg)](https://www.npmjs.com/package/feishu-user-plugin)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 [中文](README.md) · **English** · [Docs](https://ethanqc.github.io/feishu-user-plugin/en) · [CHANGELOG](CHANGELOG.md) · [npm](https://www.npmjs.com/package/feishu-user-plugin)
 
-Feishu / Lark MCP server covering IM, docs, bitable, wiki, drive, calendar, tasks v2, OKR, and realtime events. **84 tools · 3 auth layers · 9 MCP prompts · MIT licensed · Node ≥18**.
+Feishu / Lark MCP server covering IM, docs, bitable, wiki, drive, calendar, tasks v2, OKR, and realtime events. **85 tools · 3 auth layers · 9 MCP prompts · MIT licensed · Node ≥18**.
 
 Works with Claude Code, Codex, Cursor, Windsurf, VS Code, Claude Desktop, OpenClaw, and any MCP-compatible client.
 

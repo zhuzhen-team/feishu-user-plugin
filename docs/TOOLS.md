@@ -1,4 +1,4 @@
-# 工具引用（84 tools）
+# 工具引用（85 tools）
 
 > **谁该读**：在本仓写新工具的开发者、在仓内干活的 AI agent、想知道某工具具体能力的高级用户。  
 > **何时读**：写新工具前对照域分布、调用某工具不确定参数、查跨域 caveat / 已知错误码。
@@ -10,7 +10,7 @@
 - [User Identity — Messaging（cookie protobuf，8 tools）](#user-identity--messagingcookie-protobuf8-tools)
 - [User Identity — Contacts & Info（5 tools）](#user-identity--contacts--info5-tools)
 - [User OAuth UAT — P2P Chat（2 tools）](#user-oauth-uat--p2p-chat2-tools)
-- [Official API — IM（15 tools）](#official-api--im15-tools)
+- [Official API — IM（16 tools）](#official-api--im16-tools)
 - [Official API — Docs（7 tools）](#official-api--docs7-tools)
 - [Official API — Bitable（5 tools，v1.3.7 整合）](#official-api--bitable5-toolsv137-整合)
 - [Official API — Wiki（9 tools）](#official-api--wiki9-tools)
@@ -43,7 +43,7 @@
 - `list_user_chats` 仅返回**群聊**（飞书 API 限制）。P2P 列表请走 `search_contacts` → `create_p2p_chat`
 - docx / bitable / drive / wiki / OKR / calendar / tasks 的 create+edit 默认 UAT-first —— UAT 优先、bot fallback，被迫走 bot 时返回里带 ⚠ warning。资源 ownership 与 caller 一致
 
-## Official API — IM（15 tools）
+## Official API — IM（16 tools）
 `list_chats` / `read_messages` / `send_message_as_bot` / `reply_message` / `forward_message` / `delete_message` / `update_message` / `add_reaction` / `delete_reaction` / `pin_message` / `create_group` / `update_group` / `list_members` / `manage_members` / `download_message_resource`
 
 - `read_messages` 解析 chat 名 → bot 群列表 → `im.chat.search` → cookie `search_contacts`。外部群自动 fallback 到 UAT。`merge_forward` 自动展开；text 消息会抽取 `urls[]` + `feishuDocs[]`（用 `expand_merge_forward=false` 关闭）

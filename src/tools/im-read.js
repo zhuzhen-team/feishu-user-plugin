@@ -160,6 +160,24 @@ const schemas = [
       required: ['chat_id'],
     },
   },
+  {
+    name: 'search_messages',
+    description: '[User UAT, v1.3.12] Search the user\'s IM history by keyword. Wraps Feishu `POST /open-apis/search/v2/message`. Requires UAT with the `search:message` scope (re-run `npx feishu-user-plugin oauth` after v1.3.12 SCOPES update). Feishu does NOT expose a bot-path search; if you only have app credentials this tool will error.\n\nReturns `{items, pageToken, hasMore}` where each item is a `{message_id, chat_id, ...}` pointer — call `read_messages(chat_id)` or `read_p2p_messages(chat_id)` to fetch the full message bodies if needed. The pointer-only return keeps the response token-light when searching across many chats.\n\nFilter knobs (all optional):\n- `chat_ids`: only search inside these chats (oc_xxx)\n- `from_ids`: messages sent by these users (ou_xxx / union_id)\n- `at_user_ids`: messages that @-mention these users\n- `message_types`: e.g. `["text", "post"]`\n- `from_types`: e.g. `["user", "anonymous"]`',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search keyword. Plain text; Feishu handles tokenization.' },
+        page_size: { type: 'number', description: 'Items per page (default 20, max 100)' },
+        page_token: { type: 'string', description: 'Pagination cursor from a previous page' },
+        chat_ids: { type: 'array', items: { type: 'string' }, description: 'Restrict to these oc_xxx chats' },
+        from_ids: { type: 'array', items: { type: 'string' }, description: 'Restrict to messages from these user ids (ou_xxx / union_id)' },
+        at_user_ids: { type: 'array', items: { type: 'string' }, description: 'Restrict to messages that @-mention these user ids' },
+        message_types: { type: 'array', items: { type: 'string' }, description: 'Filter by message types (e.g. ["text","post","image","file","interactive"])' },
+        from_types: { type: 'array', items: { type: 'string' }, description: 'Filter by sender types (e.g. ["user","anonymous"])' },
+      },
+      required: ['query'],
+    },
+  },
 ];
 
 const handlers = {
@@ -265,6 +283,21 @@ const handlers = {
     }
 
     return text(`Cannot resolve "${args.chat_id}" to a chat ID.\nSearched: bot's group list, im.chat.search API, and user contacts (search_contacts).\nTry: provide the oc_xxx or numeric chat ID directly.`);
+  },
+
+  async search_messages(args, ctx) {
+    const official = ctx.getOfficialClient();
+    const result = await official.searchMessages({
+      query: args.query,
+      pageSize: args.page_size,
+      pageToken: args.page_token,
+      chatIds: args.chat_ids,
+      fromIds: args.from_ids,
+      atUserIds: args.at_user_ids,
+      messageTypes: args.message_types,
+      fromTypes: args.from_types,
+    });
+    return json(result);
   },
 };
 

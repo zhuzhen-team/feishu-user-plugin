@@ -358,5 +358,9 @@ main().catch(console.error).finally(() => {
     console.error('via-user: FAIL', e);
     process.exitCode = 1;
   });
+  require('./test-search-messages').run().catch(e => {
+    console.error('search-messages: FAIL', e);
+    process.exitCode = 1;
+  });
   require('./test-display-label');  // standalone — runs on require, exits non-zero on fail
 });

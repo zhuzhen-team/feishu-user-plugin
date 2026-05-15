@@ -10,7 +10,7 @@ All-in-one 飞书 plugin for Claude Code，覆盖三层鉴权：
 - **官方 API**（应用凭证）：读群消息、操作 docs / tables / wiki / drive / contacts，上传文件
 - **用户 OAuth UAT**（user_access_token）：读 P2P 私聊历史，列用户所有 chat
 
-84 个工具 + 9 个 MCP prompts。
+85 个工具 + 9 个 MCP prompts。
 
 ## MCP Prompts（v1.3.7+）
 
@@ -30,7 +30,7 @@ All-in-one 飞书 plugin for Claude Code，覆盖三层鉴权：
 
 每个 prompt 接受单一 `arguments` 自由文本（与 Claude Code skill 的 `$ARGUMENTS` 约定一致）。`status` 无参数。
 
-## 工具大类（84 tools）
+## 工具大类（85 tools）
 
 每个工具的具体参数说明在 MCP `inputSchema.description`（运行时可见）。工具列表 + 跨域 caveat + 用法 patterns 见 **[docs/TOOLS.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/TOOLS.md)**。
 
@@ -39,7 +39,7 @@ All-in-one 飞书 plugin for Claude Code，覆盖三层鉴权：
 - 用户身份消息（cookie protobuf，8）：`send_to_user` / `send_to_group` / `send_as_user` / `send_image_as_user` / `send_file_as_user` / `send_post_as_user` / `send_card_as_user` / `batch_send`
 - 用户身份联系人（cookie，5）：`search_contacts` / `create_p2p_chat` / `get_chat_info` / `get_user_info` / `get_login_status`
 - UAT P2P 读取（2）：`read_p2p_messages` / `list_user_chats`
-- 官方 API IM（15）、Docs（7）、Bitable（5）、Wiki（9）、Drive（5）、OKR（6）、Calendar（8）、Tasks v2（7）
+- 官方 API IM（16）、Docs（7）、Bitable（5）、Wiki（9）、Drive（5）、OKR（6）、Calendar（8）、Tasks v2（7）
 - 插件层 诊断 / 多 profile（4）+ 实时事件（2）
 
 ## 必需环境变量

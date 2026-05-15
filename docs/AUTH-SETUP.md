@@ -123,6 +123,7 @@ crontab -e
 | 标识 / refresh | `offline_access`、`auth:user.id:read` |
 | 读消息（含群 / P2P） | `im:message`、`im:message:readonly`、`im:chat`、`im:chat:readonly` |
 | 消息附件下载 | `im:resource` |
+| 搜索消息（v1.3.12 `search_messages`） | `search:message` |
 | 联系人解析 | `contact:user.base:readonly`、`contact:user.id:readonly`、`contact:contact.base:readonly` |
 | Docx | `docx:document`、`docs:document.media:upload`、`docs:document.media:download` |
 | Drive | `drive:drive`、`drive:file:upload` |

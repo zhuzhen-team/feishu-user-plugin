@@ -436,4 +436,44 @@ module.exports = {
       return tryUAT('user', klass.reason);
     }
   },
+
+  // --- Message search (v1.3.12, B.5) ---
+  //
+  // Wraps POST /open-apis/search/v2/message. UAT-only (Feishu doesn't expose
+  // bot path; probed 2026-05-15 — bot returns 99991668 "user access token not
+  // support"). Requires the `search:message` OAuth scope; without it the API
+  // returns 99991679 (permission_violations.subject="search:message"). Caller
+  // should re-run `npx feishu-user-plugin oauth` after adding the scope.
+  //
+  // Returns the raw shape from Feishu: { items: [{ message_id, ... }], page_token, has_more }.
+  // Items are message-id pointers — call read_messages / read_p2p_messages
+  // with the parent chat_id to fetch full bodies if needed.
+  async searchMessages({ query, fromIds, chatIds, messageTypes, atUserIds, fromTypes, pageSize = 20, pageToken } = {}) {
+    if (!query || typeof query !== 'string') {
+      throw new Error('searchMessages: query (search keyword string) is required');
+    }
+    if (!this.hasUAT) {
+      throw new Error('search_messages requires UAT (Feishu does not expose a bot-path search). Run: npx feishu-user-plugin oauth');
+    }
+    const body = { query };
+    if (pageSize) body.page_size = pageSize;
+    if (pageToken) body.page_token = pageToken;
+    if (Array.isArray(fromIds) && fromIds.length) body.from_ids = fromIds;
+    if (Array.isArray(chatIds) && chatIds.length) body.chat_ids = chatIds;
+    if (Array.isArray(messageTypes) && messageTypes.length) body.message_type_list = messageTypes;
+    if (Array.isArray(atUserIds) && atUserIds.length) body.at_chatter_ids = atUserIds;
+    if (Array.isArray(fromTypes) && fromTypes.length) body.from_types = fromTypes;
+    const data = await this._uatREST('POST', '/open-apis/search/v2/message', { body });
+    if (data.code === 99991679) {
+      throw new Error(`search_messages: UAT lacks the search:message scope. Re-run \`npx feishu-user-plugin oauth\` after the v1.3.12 SCOPES update.`);
+    }
+    if (data.code !== 0) {
+      throw new Error(`search_messages failed (code=${data.code}): ${data.msg}`);
+    }
+    return {
+      items: data.data?.items || [],
+      pageToken: data.data?.page_token || null,
+      hasMore: !!data.data?.has_more,
+    };
+  },
 };
