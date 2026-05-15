@@ -252,8 +252,11 @@ const handlers = {
     };
     // v1.3.12: via_user opt-in routing override. true=skip bot (UAT only),
     // false=skip UAT (bot only / no fallback), undefined=default auto-fallback.
+    // Set `via: 'user'` explicitly so readMessagesWithFallback labels the
+    // response data.via = 'user' (distinguishing intentional UAT route from
+    // the auto-fallback case where 'bot' is the default label).
     const routingOpts = {};
-    if (args.via_user === true) routingOpts.skipBot = true;
+    if (args.via_user === true) { routingOpts.skipBot = true; routingOpts.via = 'user'; }
     else if (args.via_user === false) routingOpts.skipUat = true;
 
     // Get userClient for name resolution fallback (best-effort)

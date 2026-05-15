@@ -400,7 +400,16 @@ module.exports = {
     };
 
     if (skipBot) {
-      return tryUAT(via || 'contacts', 'contacts_resolved_external');
+      // Two reasons we skipBot:
+      //   Path B (im-read.js): via='contacts' — chat was found only via
+      //   cookie search_contacts, bot definitely can't see it. Reason
+      //   field surfaces this to the LLM as "contacts_resolved_external".
+      //   v1.3.12 via_user=true: caller explicitly opted for UAT. No
+      //   failure happened; no reason needed.
+      if (via === 'contacts') {
+        return tryUAT('contacts', 'contacts_resolved_external');
+      }
+      return tryUAT(via && via !== 'bot' ? via : 'user');
     }
 
     // Attempt 1 — bot identity.
