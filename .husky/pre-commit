@@ -1,5 +1,17 @@
 bash scripts/sync-claude-md.sh
 
+# gitleaks: scan only the staged diff for the 5 LARK_* secret patterns
+# (per .gitleaks.toml). Skips when binary missing locally — CI re-runs the
+# scan in .github/workflows/validate.yml.
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --no-banner --redact --config .gitleaks.toml || {
+    echo "[hook] gitleaks: secret pattern in staged diff — fix, or run with --no-verify if false positive"
+    exit 1
+  }
+else
+  echo "[hook] gitleaks not installed locally — skipping (CI still scans; \`brew install gitleaks\` to enable)"
+fi
+
 # Version check only when relevant files staged
 if git diff --cached --name-only | grep -qE "(^|/)package\.json$|(^|/)plugin\.json$|(^|/)SKILL\.md$"; then
   node scripts/check-version.js || exit 1

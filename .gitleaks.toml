@@ -1,0 +1,60 @@
+# gitleaks config for feishu-user-plugin
+#
+# Catches accidental commits of any of the 5 LARK_* credentials. The
+# patterns trigger on env-var name + assignment to a non-trivial value,
+# which is precise enough to ignore docs / examples / fixture placeholders
+# but tight enough to catch a real `.env` checked in by mistake.
+#
+# All rules extend gitleaks' default ruleset (gh PATs, AWS keys, etc.).
+
+title = "feishu-user-plugin"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "lark-app-secret"
+description = "Feishu/Lark APP_SECRET (32-char alphanumeric paired with LARK_APP_SECRET)"
+regex = '''LARK_APP_SECRET\s*[=:]\s*["']?[A-Za-z0-9]{20,40}["']?'''
+tags = ["secret", "feishu"]
+
+[[rules]]
+id = "lark-cookie"
+description = "Feishu/Lark web session cookie (must contain a session= component to flag)"
+regex = '''LARK_COOKIE\s*[=:]\s*["'][^"']*\bsession=[A-Za-z0-9._-]{20,}[^"']*["']'''
+tags = ["secret", "feishu"]
+
+[[rules]]
+id = "lark-user-access-token"
+description = "Feishu/Lark user_access_token (UAT)"
+regex = '''LARK_USER_ACCESS_TOKEN\s*[=:]\s*["']?(u-[A-Za-z0-9_-]{40,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})["']?'''
+tags = ["secret", "feishu"]
+
+[[rules]]
+id = "lark-refresh-token"
+description = "Feishu/Lark refresh_token"
+regex = '''LARK_USER_REFRESH_TOKEN\s*[=:]\s*["']?ur-[A-Za-z0-9_-]{40,}["']?'''
+tags = ["secret", "feishu"]
+
+[allowlist]
+description = "Doc/example/fixture paths where these patterns occur with placeholder values"
+paths = [
+  '''\.env\.example$''',
+  '''\.mcp\.json\.example$''',
+  '''docs/AUTH-SETUP\.md$''',
+  '''docs/COOKIE-PROTOBUF-CAPTURES\.md$''',
+  '''docs/CREDENTIALS-FORMAT\.md$''',
+  '''docs/TROUBLESHOOTING\.md$''',
+  '''README\.md$''',
+  '''README\.en\.md$''',
+  '''tests/fixtures/''',
+  '''scripts/test-uat-race.*\.js$''',
+  '''\.gitleaks\.toml$''',
+]
+regexes = [
+  '''<your-app-secret>''',
+  '''<your-cookie>''',
+  '''<placeholder>''',
+  '''xxxxx+''',
+  '''YOUR_[A-Z_]+''',
+]
