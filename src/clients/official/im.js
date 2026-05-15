@@ -382,7 +382,10 @@ module.exports = {
   //
   // Throws a single, wrapped error if BOTH paths fail or if UAT is absent and
   // the bot failed; the message points the user at `npx feishu-user-plugin oauth`.
-  async readMessagesWithFallback(chatId, options, userClient, { skipBot = false, via = 'bot' } = {}) {
+  async readMessagesWithFallback(chatId, options, userClient, { skipBot = false, skipUat = false, via = 'bot' } = {}) {
+    if (skipBot && skipUat) {
+      throw new Error('readMessagesWithFallback: cannot set both skipBot and skipUat — at least one identity path must be allowed');
+    }
     const tryUAT = async (viaLabel, reason) => {
       if (!this.hasUAT) {
         const hint = 'To read external / private groups, configure UAT via: npx feishu-user-plugin oauth';
@@ -422,6 +425,12 @@ module.exports = {
         }
       }
 
+      // v1.3.12: when caller passes via_user=false (skipUat=true), surface
+      // the bot error instead of silently falling through to UAT. The user
+      // explicitly opted out of cross-identity fallback.
+      if (skipUat) {
+        throw new Error(`Bot path failed and via_user=false specified: ${botErr.message}`);
+      }
       // Fall through to UAT — if UAT is missing, tryUAT throws the user-friendly
       // "run npx feishu-user-plugin oauth" error instead of the raw Feishu payload.
       return tryUAT('user', klass.reason);

@@ -1735,6 +1735,10 @@
         "start_time": {
           "description": "Start timestamp in seconds (optional)",
           "type": "string"
+        },
+        "via_user": {
+          "description": "v1.3.12 — explicit identity override. `true` skips the bot path and reads directly via UAT (use when the chat is yours / external and you know bot has no access). `false` skips UAT fallback and surfaces the bot error instead of cross-identity hop (use when you specifically want the bot view). Omit for default auto-fallback (bot first, UAT on failure).",
+          "type": "boolean"
         }
       },
       "required": [

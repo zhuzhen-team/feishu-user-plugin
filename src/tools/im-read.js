@@ -155,6 +155,7 @@ const schemas = [
         end_time: { type: 'string', description: 'End timestamp in seconds (optional)' },
         sort_type: { type: 'string', enum: ['ByCreateTimeDesc', 'ByCreateTimeAsc'], description: 'Sort order (default: ByCreateTimeDesc = newest first)' },
         expand_merge_forward: { type: 'boolean', description: 'Auto-expand merge_forward placeholders into their child messages (default true). Children carry parentMessageId; use that id (not the child id) with download_message_resource (kind=image or file).' },
+        via_user: { type: 'boolean', description: 'v1.3.12 — explicit identity override. `true` skips the bot path and reads directly via UAT (use when the chat is yours / external and you know bot has no access). `false` skips UAT fallback and surfaces the bot error instead of cross-identity hop (use when you specifically want the bot view). Omit for default auto-fallback (bot first, UAT on failure).' },
       },
       required: ['chat_id'],
     },
@@ -231,6 +232,12 @@ const handlers = {
       sortType: args.sort_type,
       expandMergeForward: args.expand_merge_forward !== false,
     };
+    // v1.3.12: via_user opt-in routing override. true=skip bot (UAT only),
+    // false=skip UAT (bot only / no fallback), undefined=default auto-fallback.
+    const routingOpts = {};
+    if (args.via_user === true) routingOpts.skipBot = true;
+    else if (args.via_user === false) routingOpts.skipUat = true;
+
     // Get userClient for name resolution fallback (best-effort)
     let uc = null;
     try { uc = await ctx.getUserClient(); } catch (_) {}
@@ -238,12 +245,17 @@ const handlers = {
     // Path A — chat_id that resolves inside bot's / official search scope.
     const resolvedChatId = await chatIdMapper.resolveToOcId(args.chat_id, official);
     if (resolvedChatId) {
-      return json(await official.readMessagesWithFallback(resolvedChatId, msgOpts, uc));
+      return json(await official.readMessagesWithFallback(resolvedChatId, msgOpts, uc, routingOpts));
     }
 
     // Path B — external group discovered only via cookie search_contacts.
     // When we got here the bot definitely can't see it, so skip bot entirely
-    // and go straight to UAT with a `contacts` via label.
+    // and go straight to UAT with a `contacts` via label. If user explicitly
+    // set via_user=false (bot-only), short-circuit with a clear error rather
+    // than silently routing through UAT anyway.
+    if (args.via_user === false) {
+      return text(`Cannot find "${args.chat_id}" via bot, and via_user=false explicitly opts out of UAT fallback. Either omit via_user or set via_user=true.`);
+    }
     if (official.hasUAT) {
       if (!uc) try { uc = await ctx.getUserClient(); } catch (_) {}
       const contactChatId = await chatIdMapper.resolveViaContacts(args.chat_id, uc);
