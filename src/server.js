@@ -582,7 +582,7 @@ async function main() {
   }
 }
 
-module.exports = { main, TOOLS, HANDLERS };
+module.exports = { main, TOOLS, HANDLERS, buildCtx };
 
 if (require.main === module) {
   main().catch((err) => { console.error('Fatal:', err); process.exit(1); });

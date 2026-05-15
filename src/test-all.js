@@ -362,5 +362,6 @@ main().catch(console.error).finally(() => {
     console.error('search-messages: FAIL', e);
     process.exitCode = 1;
   });
+  require('./test-cli-tool').run();
   require('./test-display-label');  // standalone — runs on require, exits non-zero on fail
 });
