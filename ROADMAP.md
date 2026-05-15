@@ -4,39 +4,11 @@
 >
 > 战略定位：聚焦官方做不到 / 做不好的差异化（cookie + protobuf 用户身份路径 + 文档生态 + 实时事件 SSOT + 多 profile 自动切换 + MCP 协议原生）。明确**不再扩展**与官方重叠的业务系统域（mail / approval / attendance / hr / minutes 等）。详见 [docs/COMPARISON.md](./docs/COMPARISON.md)。
 
-## v1.3.12 待办
+## v1.3.13+ 待办
 
-### Protobuf 阶段二
+（暂空，等下一个 release 周期定）
 
-- [ ] **B.5 `search_messages`** —— 先试 UAT `/open-apis/im/v1/messages/search`，飞书未暴露则反向 cookie 路径
-
-### 形态扩展（双形态）
-
-- [ ] **CLI 化**（学 cso1z `feishu-tool` 的轻量模式）
-  - 设计：`npx feishu-user-plugin tool <tool-name> '<json-args>'` 复用 MCP 工具实现，零额外 argparse / schema 设计
-  - 配套子命令：`tool list`（列 84 工具）+ `tool help <name>`（看 schema）
-  - 实现成本：~50 行 src/cli.js 扩展（dispatch 到现有 HANDLERS）
-  - 新增 docs/CLI.md 文档
-  - 价值：扩大用户面（脚本 / cron / 调试 / 演示 / 非 AI 用户）+ 飞书生态搜索覆盖
-
-### 可发现度改造
-
-- [ ] **README h1 / repo description / GitHub topics 加 cli/mcp 关键词**
-  - README h1 加"飞书 MCP 服务器 + CLI 工具"
-  - repo description 加 `cli` / `mcp` 字样
-  - GitHub topics 补 `feishu-mcp` / `feishu-cli` / `mcp-server` / `cli`
-  - SEO 目标：搜"飞书 mcp" / "飞书 cli" / "飞书 plugin" 首页能见到本仓
-
-### 工程质量
-
-- [ ] **CHANGELOG 回填 v1.3.0 - v1.3.2**：CHANGELOG 当前最早 entry 是 v1.3.3，缺 v1.3.0/v1.3.1/v1.3.2。从 `git log v1.3.0...v1.3.2 --oneline` + 对应 commit message 重写每版 entry，参考 v1.3.6+ 已有的 `### Added / Changed / Fixed` 风格。原 issue #61（v1.3.3-v1.3.5 已 substantial，不需补）。
-- [ ] **客户端兼容性测试**：在 Cursor / Windsurf / OpenClaw 各跑 `/send` `/status` 两条 prompt，写测试报告。原 issue #64。
-- [ ] **gitleaks 防 cookie 误提交**：仓根加 `.gitleaks.toml`（学 [larksuite/cli](https://github.com/larksuite/cli) 的配置），接进 `.husky/pre-commit` + `.github/workflows/validate.yml`。防意外把 `LARK_COOKIE` / `LARK_APP_SECRET` / UAT 提交进 git
-
-### 战略性微调
-
-- [ ] **`via` 参数全工具一致化**：当前 `read_messages` / `read_p2p_messages` 有 `via: bot|user|contacts`；写工具有 `via_profile`。统一所有 user-identity 工具暴露 `via_user: true` 切换显式 cookie / UAT 路径（参考 lark-cli `--as user / --as bot`）
-- [ ] **工具调用结果 JSON schema 一致化**：所有 `send_*_as_user` 工具返回 `{ok, viaUser, fallbackWarning?, messageId?}` 统一形状
+v1.3.12 主线（4 个架构 root cause 修复 + `search_messages` + CLI 化 + SEO + 工程质量 + 战略性微调）已全部 ship — 见 [CHANGELOG.md v1.3.12 entry](./CHANGELOG.md)。
 
 ## 已调研但暂不实施
 
