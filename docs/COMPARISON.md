@@ -116,7 +116,7 @@
 | 维度 | 本仓 | lark-cli |
 |------|------|----------|
 | MCP 协议原生 | ✓ | ✗ —— 通过 npx skills 桥接 |
-| AI Agent 设计 | 9 MCP prompts + 84 工具 schema | 24 structured skills + 200+ commands |
+| AI Agent 设计 | 9 MCP prompts + 85 工具 schema | 24 structured skills + 200+ commands |
 | 三层架构 | 不显式（但 `manage_*` 是 shortcut 层） | 显式三层：Shortcut(`+create`) → API command → Raw API（2500+ endpoint 直通） |
 | Output format | MCP 协议固定 JSON | json / pretty / table / ndjson / csv 多格式 |
 | Pagination 控制 | 工具自行管 | `--page-all` / `--page-limit` / `--page-delay` 标准化 |

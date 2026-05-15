@@ -4,6 +4,57 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.12] - 2026-05-15
+
+主线：4 个 architectural root cause（A scope drift / B silent fallback / C LLM-unfriendly 数据 / D hot-reload 缺失）一次性收口 + 1 个新工具 `search_messages`（B.5 Protobuf 阶段二）+ CLI 工具模式（`tool` 子命令，复用 85 工具）+ SEO 改造（README h1 + repo description + 4 GitHub topics）+ 5 项工程质量（gitleaks 防 secret 误提交 / CHANGELOG 回填 v1.3.0-v1.3.2 / 客户端兼容矩阵 / 战略性微调 ×2）。工具数 84 → 85。
+
+### Added
+
+- **`search_messages` 工具（v1.3.12 B.5, UAT-only）**：包 `POST /open-apis/search/v2/message`。Probe 2026-05-15 确认飞书暴露该 endpoint，需 OAuth scope `search:message`（同期加入 `src/oauth.js` SCOPES + `docs/AUTH-SETUP.md` 表）。Filter 支持 `chat_ids` / `from_ids` / `at_user_ids` / `message_types` / `from_types` + 分页。返回 `{items, pageToken, hasMore}` 的 message-id 指针（不是 full bodies）—— 跨多群搜索时 response token 友好；caller 再调 `read_messages(chat_id)` 拿 full content。99991679 error 给明确 scope 指引（"re-run npx feishu-user-plugin oauth"）。
+- **CLI 工具模式 `npx feishu-user-plugin tool …`（v1.3.12 形态扩展）**：复用 `src/server.js` HANDLERS + 新 export 的 `buildCtx()`，CLI 跟 MCP 走同一代码同一 ctx 装配。3 个子命令：`tool list`（列 85 工具名）/ `tool help <name>`（schema + description）/ `tool <name> '<json-args>'`（dispatch + 输出 response text 到 stdout）。新 `docs/CLI.md` 文档（用法 / cron / pipeline / 已知限制）。`src/logger.js` stdout guard 从 module-load side-effect 改成 opt-in `installStdoutGuard()`，CLI 模式不调它 → 结构化输出走真 stdout 供 `jq` / shell pipe 用；MCP server 模式（`src/index.js`）依旧首行调用 guard。
+- **IdentityState 状态机 + `withIdentityFallback`（v1.3.12 root cause B）**：新模块 `src/auth/identity-state.js` —— 6 态枚举（VALID_USER / UAT_EXPIRED / UAT_REVOKED / UAT_MISSING_SCOPE / BOT_ONLY / NO_CREDENTIALS）+ `resolveIdentity(client)` 30s cache + `withIdentityFallback({client, uatFn, botFn, label})` 返回 `{data, via, viaReason, identity, fallbackWarning}`。`asUserOrApp` 内部 routes 过去；外部 shape 完全不变（`_viaUser` / `_fallbackWarning` / `.uatSummary` / `.appError` alias 都保留），15+ callsite 在 calendar / docs / bitable / wiki / okr / tasks / drive / im 无感升级。失败时 UAT 端返回 20064 → `UAT_REVOKED`、99991668 → `UAT_MISSING_SCOPE`、99991663 → `UAT_EXPIRED`，bot 端 fallback 时给 LLM 一行明确的 `viaReason` 而非静默吞错。
+- **CredentialsMonitor hot-reload（v1.3.12 root cause D）**：新模块 `src/auth/credentials-monitor.js` —— factory `createCredentialsMonitor({path?})`，每个 tool-call entry 跑 `sync()`，stat mtime + 对 active profile 的 UAT / refresh / cookie 字段 hash 比对。Diff 触发 4 hook 之一：`onUatChange(env)` reload `officialClient._uat/_uatRefresh/_uatExpires` + invalidate identity cache；`onCookieChange(env)`（暂 no-op，userClient 下次自然 re-init）；`onProfileSwitch({from,to,env})` flip in-memory `currentProfile` + null client + clear resolver wiki cache；`onCacheInvalidate(env)` 清 identity-state cache。取代了 v1.3.9 的 `_syncActiveProfileFromDisk`（只看 active 字段）+ 取代了"重启 Claude Code 才能 reload UAT"的人工补救。`switch_profile` handler 改调 `credMonitor.sync()` 让 cross-process 同步走统一 baseline。
+- **LRUCache 跨切面 helper（v1.3.12 root cause D 配套）**：`src/utils.js` 新 class，max + ttlMs（默认 500 / 10 min）。完整 Map-shaped API：`set`/`get`/`has`/`delete`/`clear` + `Symbol.iterator` + `entries`/`keys`/`values` generators（自动跳过 expired）。替代 `_userNameCache` / `_appNameCache` 之前的 unbounded `new Map()`。Negative-cache sentinel（v1.3.12 self-review followup）：失败 lookup 写 null sentinel 防止下次 read_messages 重发 N 个 API 调用。
+- **PID liveness check for ws-owner lock（v1.3.12 root cause D 配套）**：`src/events/lockfile.js::acquireLongLived` 在 mtime fresh 时也读 body pid + `process.kill(pid, 0)`：ESRCH 立即 steal（之前要等 60s mtime 超时）。`src/events/owner.js::readOwnerInfo` 综合 `alive = mtimeFresh && pidAlive` —— SIGKILL'd owner 的 lock 在下个 30s takeover poll 就被回收。malformed body / 缺 pid 字段 fall back to mtime-only check（向后兼容）。
+- **scope drift CI guard（v1.3.12 root cause A）**：`scripts/check-scopes.js` 从 `src/oauth.js` SCOPES 提 token list + 跟 `docs/AUTH-SETUP.md` 校对每条 scope 都 mentioned + banlist 已知错名（`calendar:calendar.event:write` / `okr:okr.content:write`）。修正 4 个 calendar scope（write → create / update / delete / reply）+ okr write → writeonly + 加 `im:resource` / `contact:contact.base:readonly` / `search:message`。完整 30 OAuth + 1 tenant-only 表落地 `docs/AUTH-SETUP.md`。CI `.github/workflows/validate.yml` 每个 PR 跑 check-scopes。
+- **`displayLabel` + sender semantics pack（v1.3.12 root cause C）**：`read_messages` / `read_p2p_messages` 每条消息新增 `displayLabel`（如 `周宇` / `[Bot] Claude聊天助手` / `[Bot] (cli_xxx)` / `[匿名]` / `[系统]` / `[已撤回] 怪兽`）+ `senderIdType` / `senderTenantKey` / `isExternal` / `isRecalled` / `isThreadReply`。merge_forward children 加 `forwardedFromChatName`（im.js best-effort getChatInfo on each `originChatId`）。`_populateSenderNames` 新 Step 0 mention-name harvest（零 API 成本）+ Step 1 lazy self tenant_key resolve + Step 4 fill new fields。新 method `getAppName(cli_xxx)` 用 tenant-side `application:application:self_manage` scope 解析 bot 显示名（免审 scope，自助开通）。
+- **gitleaks 防 cookie 误提交**：`.gitleaks.toml` 4 rules（`LARK_APP_SECRET` / `LARK_COOKIE` / `LARK_USER_ACCESS_TOKEN` / `LARK_USER_REFRESH_TOKEN`）+ allowlist 文档示例 / 测试 fixture。`.husky/pre-commit` 装了就跑（macOS `brew install gitleaks`），CI 工作流自 curl install gitleaks v8.30.1 binary。verified clean across 266 commits / 3.76 MB。
+- **client compat matrix `docs/CLIENT-COMPAT.md`**：7 个 MCP 客户端 × 9 prompts × 85 tools 兼容表 + 已知 client-specific caveat（Codex 不支持 Claude Code skill；VS Code key 是 `servers` 不是 `mcpServers`；Cursor / Windsurf prompt UI 还在迭代等）+ 3 步复测 procedure（`/status` + `/send` + `list_chats`）。
+- **`docs/ARCHITECTURE-NOTES.md` reference 永久化**：B / D 设计文档（5 态枚举 / 30s cache / 4 hook registry）作为实施 reference 永久保留 + 给未来类似 root cause 留 reusable pattern。14 根因清单全表 ⏸→✅。
+- **CHANGELOG v1.3.0 / v1.3.1 / v1.3.2 entries 回填**：从 `git log --format='%H %ci %s' v1.3.0..v1.3.2` + tag commit body 重建 3 个 entry，跟 v1.3.6+ 同结构。CHANGELOG 现在从 v1.3.0 起连续。
+
+### Changed
+
+- **`send_*_as_user` 8 工具统一返回 shape**：`{ok, viaUser, description?, status?, messageId?, fallbackWarning?}`（pre-v1.3.12 是 plain text "Text sent as user to oc_xxx"，LLM / 脚本要 regex）。`sendResult` 接受 options form `sendResult(r, {desc, viaUser, fallbackWarning})`，back-compat 旧 `sendResult(r, descString)`。`send_card_as_user` 标 `viaUser: false`（cookie 不发卡片，仅 bot）。
+- **`read_messages` 加 `via_user: boolean`**：`true` skip bot 直接 UAT；`false` skip UAT fallback bot-only（之前没此选项）；undefined = 现有 auto-fallback。`readMessagesWithFallback` 加 `skipUat` 配套（与 `skipBot` 互斥）。Path B (cookie search_contacts 解析) 在 `via_user=false` 时短路报错而非继续走 UAT。
+- **`withUAT` retry 集合扩展**：在 `classifyError(thrown).action === 'retry'` 时一次性重试（同 UAT），coverage 涵盖 ECONNRESET / fetch timeout / JSON parse error。原 99991668 / 99991663 / 99991677 refresh-and-retry 路径不变。
+- **FAILURE_MAP 扩展**：加 20064 (uat_revoked, symmetry-only — 真触发在 identity-state)、91403 (bot_cross_tenant)、1254000/1/301/400 (upload_transient)。TRANSIENT_PATTERNS 加 JSON parse error 识别，`classifyError` 输出独立 reason `response_parse_error` 让监控可区分。
+- **`_userNameCache` / `_appNameCache` Map → LRUCache**：500 / 10min（用户）+ 100 / 10min（app）。原 unbounded Map 在长跑 server 上无限增长 + 永不过期，rename 的用户名字一周后还显示旧的。
+- **README h1 + repo description + GitHub topics 加 cli/mcp**：h1 「飞书 MCP 服务器 + CLI 工具」+ description 加"CLI tool" + topics 加 `cli` / `feishu-cli` / `mcp-server` / `feishu-mcp`。
+- **工具数 84 → 85**：仅加 `search_messages`，其他都是已有 schema 改 description / field（不算 schema 新增）。
+
+### Fixed
+
+- **`Promise.allSettled` 不读 status 导致 sender 解析失败被静默吞**（root cause #8）：`_populateSenderNames` 现读每个 result.status，rejected ids 进 stderr `[feishu-user-plugin] sender name lookup failed for N/M ids: ou_xxx(<reason>)...`。同一份 fix 同时对 user 路径 + app 路径生效。
+- **解析失败的 sender id 不 cache 导致下次 read_messages 重复 API call**（pre-existing perf bug, v1.3.12 self-review followup）：`_populateSenderNames` 在每个 Promise.allSettled 后给未解析的 id 写 null sentinel。同 LRU TTL 10 min 给 rename 的 sender 一个 re-resolve 窗口。
+- **oauth.js race condition (PR #45 P2)**：`saveToken` 在 OAuth callback 时不再重读 `getActiveProfileName()`，而是用 module-init 时 captured 的 `RESOLVED_PROFILE`。原 race：OAuth 期间另一进程 `switch_profile` 切了 active，token 会写错 profile。
+- **`oauth.js::getAppInfo` silent catch 99991672**：原 `try {...} catch {}` 完全不报；改成 stderr warn 指明缺 tenant-side `application:application:self_manage` scope + 影响 `displayLabel`。新 `scripts/verify-app-name.js` 一次性诊断脚本可手动验证 scope 已开（exit 0 / 1 / 2 三种状态）。
+- **server.js `onUatChange` 直接裸写 client 内部字段**（v1.3.12 self-review followup）：改调 `loadUATFromEnv(officialClient, env)` helper（已存在，statup 用同一个）。`loadUATFromEnv` 扩展为支持 clear-on-empty（env 无 token → 主动 nil 内存里的 stale token）。
+- **`LRUCache` 缺 `Symbol.iterator`**（v1.3.12 self-review followup）：原注释说 "API-compatible with the old Map" 但 spread / for-of 会 TypeError。加 iterator + entries/keys/values generators（自动跳过 expired）。
+
+### Test scenarios
+
+- 重启后跑 `read_messages` 看每条消息有 `displayLabel` + bot 消息形如 `[Bot] Claude聊天助手`（非 cli_xxx）+ recall 消息有 `[已撤回] ` 前缀 + cross-tenant 有 `isExternal: true`
+- 跑 `npx feishu-user-plugin oauth`，**不重启**，下次 `get_login_status` UAT 应立即 Valid（D2 CredentialsMonitor onUatChange hook 工作）
+- 在 Lark Desktop / shell 操作让 multiple MCP server 进程并发 → 它们的 in-memory UAT 通过 credentials.json 自动同步（D2 + B identity refine）
+- 模拟 SIGKILL'd MCP server（kill -9 持有 ws-owner.lock 的进程）→ 另一进程在 30s 内 takeover（D4 PID liveness check）
+- `gitleaks detect --config .gitleaks.toml`：跑过 266 commits / 3.76 MB，0 leaks
+- `npx feishu-user-plugin tool list`：返回 85 tool names exit 0
+- `npx feishu-user-plugin tool get_login_status '{}'`：返回 status 文本到 stdout
+- `npx feishu-user-plugin tool search_messages '{"query":"周报"}'`：需 user 先 `npx oauth` 拿 `search:message` scope；之后 dispatch 该 endpoint 返回 items
+- `node scripts/verify-app-name.js` 当前 APP 已开 self_manage scope → 输出 `OK — app name resolves to "Claude聊天助手"`
+- `node src/test-all.js` 跑 19 个 fixture-based unit test 全 pass（含 v1.3.12 新加的 9 个：test-error-codes / test-identity-state / test-with-uat-retry / test-populate-sender-names / test-credentials-monitor / test-lru-cache / test-lockfile-pid / test-negative-cache / test-send-shape / test-via-user / test-search-messages / test-cli-tool）
+
 ## [1.3.11] - 2026-05-09
 
 主线：Lark Desktop 多账号无感切换 — 在 Feishu Desktop 切账号，MCP 在 ~15 s 内自动跟到对应 profile。同期完成三项上架基建：MCP Registry CI 自动 publish 在 v1.3.11 头号 release 已自动跑通（`registry.modelcontextprotocol.io` 现 isLatest=1.3.11）；Anthropic `.mcpb` 包 + `PRIVACY.md` 与 Cursor `.cursor-plugin/plugin.json` 仓库材料就绪、已上 npm，剩余只待用户去外部平台填表单。工具数 84 不变。
@@ -201,6 +252,55 @@ D 系列首项 ship：新增 `read_doc_markdown` 工具，用 `feishu-docx` 把 
 - Tool count 67 → **74** (+7: `get_wiki_node`, `list_user_okrs`, `get_okrs`, `list_okr_periods`, `list_calendars`, `list_calendar_events`, `get_calendar_event`).
 - `getWikiNode(nodeToken, _spaceId)` — `spaceId` parameter position swapped; retained only for backward-compatibility of any external caller. The endpoint itself ignores `space_id`.
 - `create_doc_block` no longer requires `children` — callers who use the new `image_path` or `image_token` shortcut omit it. One of `children` / `image_path` / `image_token` must be provided.
+
+## [1.3.2] - 2026-04-17
+
+主线：以"真用户身份"补两个 longstanding gap —— 用户消息的 @-mention 现在真能通知到人 + 用户身份创建的 docx / bitable 资源现在真归你（不是 app）。
+
+### Fixed
+- **@-mentions 作为用户发送时不通知**：飞书 Web bundle 反向工程发现 `RichText` 需要 `atIds[]` (field 6) 注册 AT element ids，没有这个字段后端会把 `user_id` 清空。`proto/lark.proto::RichText` 扩字段（`atIds` / `anchorIds` / `imageIds` 等），加上真正的 `AtProperty` / `AnchorProperty` message。Live 测试：bot-API 回读现在保留 `user_id` + `user_name`（之前两个都空字符串）。
+- **`create_doc` / `create_bitable` 创建后归属错乱**：所有 docx / bitable / drive 操作改走 UAT-first → app fallback（新 helper `_uatREST` + `_asUserOrApp`）。修复 1770032（docx forbidden）+ 91403（bitable forbidden）—— 之前 UAT 创建的资源用 app 路径打开会 403，因为根本不是 UAT 创的。
+
+### Added
+- **`ats: [{userId, name}]` 参数**给 `send_as_user` / `send_to_user` / `send_to_group` / `send_post_as_user`：在 TEXT 消息里 splice @-mention（marker `@<name>`）；在 POST/RichText 消息里 `sendPost` 把 AT elem ids 汇到 `richText.atIds`，AT 编码用 `AtProperty`。
+- **`_formatMessage` surface `mentions[]`**：`im.message` payload 里 mentions 数组现在被 `read_messages` / `read_p2p_messages` 透传出来，供下游用 mention 的 name 直接 narrate 而不用再查 contact API。
+
+### Changed
+- Docs synced：`CLAUDE.md` / `skills/feishu-user-plugin/references/CLAUDE.md` / `.claude-plugin/plugin.json` 全部更新 @-mention 用法 + UAT-first 行为说明。
+- Removed redundant per-resource as-user wrappers：`createDocAsUser` / `createBitableAsUser` / `createFolderAsUser` 删除，被 `_asUserOrApp` 统一替代。
+
+## [1.3.1] - 2026-04-17
+
+主线：MCP 稳定性 root fix + 用户身份创建 + Codex 双客户端支持 + 工具表收敛（81 → 66，去 calendar/tasks 这种 app 权限未开通的伪能力）。
+
+### Fixed
+- **MCP 中途掉线（root cause #1）**：Lark SDK 的 logger 默认写 stdout 污染了 JSON-RPC channel。`src/index.js` 启动把 SDK logger 改写到 stderr（PR #2 by [@ZYAH111](https://github.com/ZYAH111)）。
+- **uncaughtException / unhandledRejection 兜底**：MCP server 不再因为单个 tool handler 抛错而整个 crash —— 进程级 handler 把错误吐到 stderr，server 继续接 next request。
+- **config 写入 race**：`atomicWrite(tmp + rename)` 替代直接 fs.writeFile，防止 Claude Code spawn 多 MCP server 时并发改 `~/.claude.json` 互相覆盖。
+
+### Added
+- **UAT-first creation**：`create_doc` / `create_bitable` / `create_folder` 现在用 `LARK_USER_ACCESS_TOKEN` 走 UAT 路径创建，资源归用户而非 app。
+- **Codex TOML 支持**：`npx feishu-user-plugin setup --client codex|both` 写 `~/.codex/config.toml::mcp_servers`。新增 `scripts/mcp_stdio_bridge.js` 适配 Codex 协议差异。
+- **3-layer 版本确认**：CLAUDE.md 规则 + `prepublishOnly` script + CI tag check，三层保护防版本号 drift。
+- **5 个新 bitable 工具**：`get_bitable_meta`、`copy_bitable_app`、`update_bitable_table`、`create_bitable_view`、`delete_bitable_view`。
+
+### Changed
+- **工具数 81 → 66**：移除 calendar(5) + tasks(5) 工具 —— 飞书 app 权限管理后台对应 scope 未开通，工具调用 100% 失败。后续在 v1.3.4 重新加回时 app 权限已申请。
+- **合并 pin/unpin → `pin_message(action='pin'|'unpin')`**，`add/remove_members → manage_members(action=...)`。
+- **吸收单 record CRUD 到 batch tools**：`create_bitable_record` → `batch_create_bitable_records(records=[<one>])` 等。
+- **OAuth scopes**：加 `docx:document`、`drive:drive` write 权限。
+
+## [1.3.0] - 2026-04-03
+
+主线：tool surface 一次性扩张 46 → 76（+30）—— bot messaging 全套、docx block 编辑、calendar / tasks / drive 操作首次纳入。
+
+### Added
+- **IM 域（13 工具）**：`send_message_as_bot`、`delete_message`、`update_message`、`add_reaction`、`delete_reaction`、`pin_message`、`unpin_message`、`create_group`、`update_group`、`list_members`、`add_members`、`remove_members`。
+- **Docx block 编辑（3 工具）**：`create_doc_block`、`update_doc_block`、`delete_doc_blocks` —— 飞书 docx 的原子编辑单元。
+- **Bitable（2 工具）**：`get_bitable_record`（按 record_id 取一条）、`delete_bitable_table`。
+- **Drive 操作（3 工具）**：`copy_file`、`move_file`、`delete_file`。
+- **Calendar（5 工具）**：`list_calendars`、`create_calendar_event`、`list_calendar_events`、`delete_calendar_event`、`get_freebusy`。（v1.3.1 因 scope 未开通暂时下线，v1.3.4 加回。）
+- **Tasks（5 工具）**：`create_task`、`get_task`、`list_tasks`、`update_task`、`complete_task`。（v1.3.1 因 scope 未开通暂时下线，v1.3.7 v2 API 重做。）
 
 ## [1.3.3] - 2026-04-20
 

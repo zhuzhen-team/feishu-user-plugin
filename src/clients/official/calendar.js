@@ -68,7 +68,9 @@ module.exports = {
   },
 
   // --- Calendar write (v1.3.7) ---
-  // Requires `calendar:calendar.event:write` scope on app + UAT.
+  // Requires the 4 verb-specific scopes on app + UAT:
+  //   calendar:calendar.event:create / update / delete / reply
+  // Feishu has no umbrella `:write` scope — using it 422-rejects OAuth.
 
   async createCalendarEvent(calendarId, eventData) {
     if (!calendarId) throw new Error('createCalendarEvent: calendarId is required');

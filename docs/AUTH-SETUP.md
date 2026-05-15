@@ -114,16 +114,42 @@ crontab -e
 
 ## OAuth Scopes（重跑 `npx feishu-user-plugin oauth` 时）
 
-v1.3.4+ 工具需要的额外 scope：
+`src/oauth.js::SCOPES` 与本表的 scope 名列表必须完全一致 —— CI 的 `scripts/check-scopes.js` 会校验，漏一个就 fail。增删 scope 时**同 commit** 改本表。
 
-| 功能 | 启用的 scope（应用 + OAuth） |
+### 基础 OAuth scope（v1.3.4 之前已稳定）
+
+| 功能 | scope（应用 + OAuth 都要勾） |
 |------|------------------------------|
-| OKR 读 | `okr:okr:readonly`、`okr:period:read` |
-| OKR 进度写（v1.3.7：create / delete_okr_progress_record） | `okr:okr.content:write` |
-| 日历读 | `calendar:calendar:readonly`、`calendar:calendar.event:read` |
-| 日历写（v1.3.7：create / update / delete / respond_calendar_event） | `calendar:calendar.event:write` |
-| Tasks v2（v1.3.7：list / get / create / update / complete / delete_task、manage_task_members） | `task:task` |
-| Docx / Bitable / Drive 媒体上传（`uploadMedia`、`upload_drive_file`、`upload_bitable_attachment`、`manage_doc_block(action=create, image_path|file_path|...)`） | `drive:drive`、`drive:file:upload`、`docs:document.media:upload`、`sheets:spreadsheet`（仅 sheet 上传需要） |
-| Wiki 挂载（`move_docs_to_wiki`） | `wiki:wiki`（edit scope，readonly 不够） |
+| 标识 / refresh | `offline_access`、`auth:user.id:read` |
+| 读消息（含群 / P2P） | `im:message`、`im:message:readonly`、`im:chat`、`im:chat:readonly` |
+| 消息附件下载 | `im:resource` |
+| 搜索消息（v1.3.12 `search_messages`） | `search:message` |
+| 联系人解析 | `contact:user.base:readonly`、`contact:user.id:readonly`、`contact:contact.base:readonly` |
+| Docx | `docx:document`、`docs:document.media:upload`、`docs:document.media:download` |
+| Drive | `drive:drive`、`drive:file:upload` |
+| Bitable | `bitable:app` |
+| Sheets 上传 | `sheets:spreadsheet` |
+| Wiki | `wiki:wiki:readonly`、`wiki:wiki`（edit scope，移动文档/挂载用） |
 
-工具返回 `access_denied` 或错误码 `99991672`（scope 未授权）—— scope 在应用或 UAT 上缺失。重跑 `npx feishu-user-plugin oauth` 让 UAT 拿到最新 scope 列表（在 `src/oauth.js` 定义）。
+### v1.3.4+ 增量 scope
+
+| 功能 | scope |
+|------|-------|
+| OKR 读 | `okr:okr:readonly`、`okr:okr.period:readonly`、`okr:okr.content:readonly` |
+| OKR 进度写（v1.3.7：`create_okr_progress_record` / `delete_okr_progress_record`） | `okr:okr.content:writeonly`（Feishu catalog 是 `:writeonly`，不是 `:write` —— `check-scopes.js` 把后者列入 banlist） |
+| 日历读 | `calendar:calendar:readonly`、`calendar:calendar.event:read` |
+| 日历写（v1.3.7：`create_calendar_event` / `update_calendar_event` / `delete_calendar_event` / `respond_calendar_event`） | `calendar:calendar.event:create`、`calendar:calendar.event:update`、`calendar:calendar.event:delete`、`calendar:calendar.event:reply`（Feishu 把"写"拆 4 个动词；用 `:write` 总词 OAuth 端会 422-reject 整次 authorize） |
+| Tasks v2（v1.3.7：list / get / create / update / complete / delete_task、`manage_task_members`） | `task:task` |
+
+### 应用身份额外 scope（仅在应用控制台开，不走 OAuth）
+
+下面这类 scope 必须在 Feishu 开放平台「应用控制台 → 权限管理 → 应用身份」侧开通（不是 OAuth user scope），UAT 拿不到，**只在 app_access_token 上生效**。
+
+| scope | 用途 |
+|-------|------|
+| `application:application:self_manage`（免审权限，无需管理员审核） | `LarkOfficialClient.getAppName()` —— 把 bot 自身的 `cli_xxx` 解析成应用显示名，`displayLabel` 形如 `[Bot] Claude聊天助手`；没开则退化为 `[Bot] (cli_xxx)` |
+
+### 报错快查
+
+- 工具返回 `access_denied` 或 `99991672`（scope 未授权）—— scope 在应用或 UAT 上缺失。重跑 `npx feishu-user-plugin oauth` 让 UAT 拿到最新 scope 列表
+- OAuth authorize 端 HTTP 422 + `scope <name> 有误` —— scope 名错（飞书 catalog 找不到）。`scripts/check-scopes.js` 内置 banlist 已经 guard 了已知错名（`:write` 系列），加新 scope 时 SCOPES + 本表必须同步

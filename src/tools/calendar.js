@@ -4,7 +4,7 @@
 // get_calendar_event, plus the v1.3.7 write tools:
 //   create_calendar_event / update_calendar_event / delete_calendar_event
 //   respond_calendar_event / get_freebusy
-// All UAT-first. Write tools require `calendar:calendar.event:write` scope.
+// All UAT-first. Write tools require `calendar:calendar.event:{create,update,delete,reply}` scope.
 
 const { json, text } = require('./_registry');
 
@@ -53,7 +53,7 @@ const schemas = [
   },
   {
     name: 'create_calendar_event',
-    description: `[Official API + UAT, v1.3.7] Create a new calendar event. Requires \`calendar:calendar.event:write\` scope (re-run \`npx feishu-user-plugin oauth\` after enabling). The current identity (UAT-first) must have writer or owner permission on the calendar.\n\nTime fields: ${TIME_NOTE}`,
+    description: `[Official API + UAT, v1.3.7] Create a new calendar event. Requires \`calendar:calendar.event:create\` scope (re-run \`npx feishu-user-plugin oauth\` after enabling). The current identity (UAT-first) must have writer or owner permission on the calendar.\n\nTime fields: ${TIME_NOTE}`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -75,7 +75,7 @@ const schemas = [
   },
   {
     name: 'update_calendar_event',
-    description: '[Official API + UAT, v1.3.7] Patch fields on an existing calendar event. Pass only the fields you want to change. Requires `calendar:calendar.event:write` scope.',
+    description: '[Official API + UAT, v1.3.7] Patch fields on an existing calendar event. Pass only the fields you want to change. Requires `calendar:calendar.event:update` scope.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -98,7 +98,7 @@ const schemas = [
   },
   {
     name: 'delete_calendar_event',
-    description: '[Official API + UAT, v1.3.7] Delete a calendar event. Requires `calendar:calendar.event:write` scope.',
+    description: '[Official API + UAT, v1.3.7] Delete a calendar event. Requires `calendar:calendar.event:delete` scope.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -112,7 +112,7 @@ const schemas = [
   },
   {
     name: 'respond_calendar_event',
-    description: '[Official API + UAT, v1.3.7] Respond to an event invitation. The current identity must be in the event\'s attendee list. Requires `calendar:calendar.event:write` scope.',
+    description: '[Official API + UAT, v1.3.7] Respond to an event invitation. The current identity must be in the event\'s attendee list. Requires `calendar:calendar.event:reply` scope.',
     inputSchema: {
       type: 'object',
       properties: {

@@ -33,6 +33,9 @@ switch (cmd) {
     }
     break;
   }
+  case 'tool':
+    runTool();
+    break;
   case 'migrate':
     migrate();
     break;
@@ -60,6 +63,10 @@ Commands:
   migrate     One-time consolidation: copy creds from harness configs into
               ~/.feishu-user-plugin/credentials.json (single source of truth).
               Dry-run by default. Add --confirm to actually write.
+  tool        Invoke any MCP tool from the shell (v1.3.12):
+              \`tool list\`                — list all tool names
+              \`tool help <name>\`         — print schema for <name>
+              \`tool <name> '<json-args>'\` — invoke <name>, print response
   help        Show this help
 
 Setup options:
@@ -104,6 +111,86 @@ Auto-renewal (optional):
   Add to crontab to keep tokens alive even when Claude Code is closed:
   crontab -e → add: 0 */4 * * * npx feishu-user-plugin keepalive --all >> /tmp/feishu-keepalive.log 2>&1
 `);
+}
+
+// `tool` subcommand — invoke any MCP tool from the shell (v1.3.12).
+//
+// Usage:
+//   npx feishu-user-plugin tool list
+//   npx feishu-user-plugin tool help <name>
+//   npx feishu-user-plugin tool <name> '<json-args>'
+//
+// Reuses src/server.js's HANDLERS + buildCtx, so behaviour is identical to
+// calling the tool from an MCP client. Output: tool's content[0].text
+// (which is JSON for most tools — pipe through `jq` if you like).
+async function runTool() {
+  const { TOOLS, HANDLERS, buildCtx } = require('./server');
+  const sub = process.argv[3];
+
+  if (!sub || sub === '--help' || sub === '-h') {
+    console.log(`Usage:
+  npx feishu-user-plugin tool list
+      List all ${TOOLS.length} registered tool names.
+  npx feishu-user-plugin tool help <name>
+      Print the inputSchema for <name>.
+  npx feishu-user-plugin tool <name> '<json-args>'
+      Invoke <name> with the given JSON args, print response text to stdout.
+
+Examples:
+  npx feishu-user-plugin tool list
+  npx feishu-user-plugin tool help send_as_user
+  npx feishu-user-plugin tool get_login_status '{}'
+  npx feishu-user-plugin tool search_messages '{"query":"周报","page_size":5}'
+`);
+    process.exit(sub ? 0 : 2);
+  }
+
+  if (sub === 'list') {
+    for (const t of TOOLS) {
+      console.log(t.name);
+    }
+    return;
+  }
+
+  if (sub === 'help') {
+    const name = process.argv[4];
+    if (!name) { console.error('Usage: tool help <name>'); process.exit(2); }
+    const t = TOOLS.find((x) => x.name === name);
+    if (!t) { console.error(`Unknown tool: ${name}. Try \`tool list\`.`); process.exit(2); }
+    console.log(`# ${t.name}\n`);
+    console.log(t.description || '(no description)');
+    console.log('\n## inputSchema\n');
+    console.log(JSON.stringify(t.inputSchema || {}, null, 2));
+    return;
+  }
+
+  // Dispatch path: sub is the tool name, argv[4] is the JSON args.
+  const name = sub;
+  const handler = HANDLERS[name];
+  if (!handler) { console.error(`Unknown tool: ${name}. Try \`tool list\`.`); process.exit(2); }
+
+  const jsonArgs = process.argv[4] || '{}';
+  let args;
+  try { args = JSON.parse(jsonArgs); }
+  catch (e) {
+    console.error(`tool ${name}: failed to parse JSON args (${e.message}). Pass a single quoted JSON string, e.g. '{"key":"value"}'.`);
+    process.exit(2);
+  }
+
+  try {
+    const ctx = buildCtx();
+    const result = await handler(args, ctx);
+    const text = result?.content?.[0]?.text;
+    if (typeof text === 'string') {
+      console.log(text);
+    } else {
+      console.log(JSON.stringify(result, null, 2));
+    }
+    if (result?.isError) process.exit(1);
+  } catch (e) {
+    console.error(`tool ${name}: ${e.message}`);
+    process.exit(1);
+  }
 }
 
 function migrate() {

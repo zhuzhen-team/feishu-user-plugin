@@ -27,7 +27,7 @@ GitHub Pages 用户向 landing：
 
 | 文档 | 说明 |
 |------|------|
-| [TOOLS.md](./TOOLS.md) | 84 tools 详细 + 跨域 caveat + 用法 patterns |
+| [TOOLS.md](./TOOLS.md) | 85 tools 详细 + 跨域 caveat + 用法 patterns |
 | [REFACTOR-NOTES.md](./REFACTOR-NOTES.md) | post-v1.3.7 文件职责矩阵 + 决策树（"新代码放哪"） |
 | [CREDENTIALS-FORMAT.md](./CREDENTIALS-FORMAT.md) | `~/.feishu-user-plugin/credentials.json` schema |
 | [TESTING-METHODOLOGY.md](./TESTING-METHODOLOGY.md) | sandbox 约定 / smoke baseline / 回归 playbook |

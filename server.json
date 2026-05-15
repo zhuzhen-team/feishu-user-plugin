@@ -1,8 +1,8 @@
 {
   "name": "feishu-user-plugin",
   "display_name": "Feishu User Plugin for Claude Code",
-  "description": "All-in-one Feishu MCP server for Claude Code & Codex — 84 tools across 3 auth layers (cookie / app / OAuth). Send as you, read groups, manage docs / bitable / wiki / drive / calendar / tasks / OKR.",
-  "version": "1.3.11",
+  "description": "All-in-one Feishu MCP server + CLI tool for Claude Code / Codex / Cursor / scripts — 85 tools across 3 auth layers (cookie / app / OAuth). Send as you, read groups, manage docs / bitable / wiki / drive / calendar / tasks",
+  "version": "1.3.12",
   "icon": "https://www.feishu.cn/favicon.ico",
   "repository": {
     "type": "git",
@@ -61,19 +61,19 @@
     },
     {
       "name": "create_calendar_event",
-      "description": "Create a new calendar event. Requires `calendar:calendar.event:write` scope (re-run `npx feishu-user-plugin oauth` after enabling). The current identity (UAT-first) must have writer or owner permissio"
+      "description": "Create a new calendar event. Requires `calendar:calendar.event:create` scope (re-run `npx feishu-user-plugin oauth` after enabling). The current identity (UAT-first) must have writer or owner permissi"
     },
     {
       "name": "update_calendar_event",
-      "description": "Patch fields on an existing calendar event. Pass only the fields you want to change. Requires `calendar:calendar.event:write` scope."
+      "description": "Patch fields on an existing calendar event. Pass only the fields you want to change. Requires `calendar:calendar.event:update` scope."
     },
     {
       "name": "delete_calendar_event",
-      "description": "Delete a calendar event. Requires `calendar:calendar.event:write` scope."
+      "description": "Delete a calendar event. Requires `calendar:calendar.event:delete` scope."
     },
     {
       "name": "respond_calendar_event",
-      "description": "Respond to an event invitation. The current identity must be in the event's attendee list. Requires `calendar:calendar.event:write` scope."
+      "description": "Respond to an event invitation. The current identity must be in the event's attendee list. Requires `calendar:calendar.event:reply` scope."
     },
     {
       "name": "get_freebusy",
@@ -186,6 +186,10 @@
     {
       "name": "read_messages",
       "description": "Read message history from any group. Accepts oc_xxx ID, numeric ID, or chat name (auto-searched). Auto-falls back to UAT for external groups the bot cannot access. Returns newest messages first by def"
+    },
+    {
+      "name": "search_messages",
+      "description": "Search the user's IM history by keyword. Wraps Feishu `POST /open-apis/search/v2/message`. Requires UAT with the `search:message` scope (re-run `npx feishu-user-plugin oauth` after v1.3.12 SCOPES upda"
     },
     {
       "name": "send_message_as_bot",

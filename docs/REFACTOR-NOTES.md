@@ -19,9 +19,12 @@ src/
 ├── index.js                     # ~6 行 —— shebang + logger + server.main()
 ├── server.js                    # MCP bootstrap、ctx 装配、请求 dispatch
 ├── logger.js                    # 全局 stdout guard + Lark SDK stderr logger
-├── utils.js                     # fetchWithTimeout、request-id helper
+├── utils.js                     # fetchWithTimeout、request-id helper、LRUCache
+│                                #   (v1.3.12 — bounded TTL cache, Map-shaped)
 ├── resolver.js                  # wiki node / 飞书 URL → native token
-├── error-codes.js               # classifyError（fallback 路由用）
+├── error-codes.js               # classifyError（fallback 路由用）。FAILURE_MAP
+│                                #   分类 bot-side 错误码；UAT-side 错误码（20064
+│                                #   invalid_grant 等）的分类在 auth/identity-state.js
 ├── doc-blocks.js                # docx block 构造器
 ├── oauth.js / oauth-auto.js     # OAuth CLI 流程 + Playwright helper
 ├── cli.js                       # `npx feishu-user-plugin <cmd>` 入口
@@ -29,18 +32,37 @@ src/
 ├── config.js                    # MCP-config discovery + atomic 持久化
 │                                #   （延迟拆分到 config/ → Phase B）
 ├── auth/
-│   └── credentials.js           # 单一可信源凭证 API。
-│                                #   读 ~/.feishu-user-plugin/credentials.json
-│                                #   （atomic、0600）。v1.3.6 用户在跑
-│                                #   `migrate` 之前 fallback 到 legacy
-│                                #   process.env / mcpServers discovery。
+│   ├── credentials.js           # 单一可信源凭证 API。
+│   │                            #   读 ~/.feishu-user-plugin/credentials.json
+│   │                            #   （atomic、0600）。v1.3.6 用户在跑
+│   │                            #   `migrate` 之前 fallback 到 legacy
+│   │                            #   process.env / mcpServers discovery。
+│   ├── uat.js                   # UAT lifecycle：refresh、cross-process lock、
+│   │                            #   asUserOrApp / withUAT / uatREST（v1.3.8）
+│   ├── cookie.js                # Cookie heartbeat scheduler（v1.3.8）
+│   ├── identity-state.js        # IdentityState 5 态枚举 + resolveIdentity
+│   │                            #   + withIdentityFallback（v1.3.12 — 取代
+│   │                            #   asUserOrApp 的 silent fallback；带 30s
+│   │                            #   cache + via_reason / identity refine）
+│   ├── credentials-monitor.js   # createCredentialsMonitor 工厂 + sync() poller
+│   │                            #   + onUatChange / onCookieChange /
+│   │                            #   onProfileSwitch / onCacheInvalidate hook
+│   │                            #   registry（v1.3.12 — 取代"重启 Claude Code
+│   │                            #   才能 reload"模式）
+│   ├── profile-router.js        # 跨 profile auto-switch on 91403 / 1254301 /
+│   │                            #   1254000 / 99991672 / HTTP 403（v1.3.8）
+│   └── lark-desktop.js          # Lark Desktop account hash 检测 + 自动 profile
+│                                #   切换（v1.3.11）
 ├── clients/
 │   ├── user.js                  # Cookie + protobuf 用户身份 client
 │   └── official/
-│       ├── base.js              # 构造函数、UAT lifecycle、_safeSDKCall、
+│       ├── base.js              # 构造函数、UAT lifecycle delegates、_safeSDKCall、
 │       │                        #   _asUserOrApp、_uatREST、_populateSenderNames、
+│       │                        #   _computeDisplayLabel、getAppName、
+│       │                        #   _resolveSelfTenantKey（C v1.3.12）、
 │       │                        #   _formatMessage、_normalizeTimestamp、
-│       │                        #   verifyApp、_getAppToken
+│       │                        #   verifyApp、_getAppToken。_userNameCache /
+│       │                        #   _appNameCache 用 LRUCache（v1.3.12）
 │       ├── index.js             # 把 base + 域 mixin 合到 prototype
 │       ├── im.js                # 20 个 IM 方法含 readMessagesWithFallback
 │       ├── docs.js              # 12 个 docx + block-edit 方法
@@ -52,6 +74,16 @@ src/
 │       ├── okr.js               # 3 个 OKR read 方法
 │       ├── contacts.js          # findUserByIdentity、getUserById
 │       └── groups.js            # createChat/updateChat + 成员操作
+├── events/                      # v1.3.9 — 实时事件子系统（WS owner / event log）
+│   ├── index.js                 # createWSServer 工厂 + module barrel
+│   ├── lockfile.js              # 通用 EXCL+mtime 锁。v1.3.12 加 PID liveness：
+│   │                            #   acquireLongLived 在 mtime fresh 时也读 body
+│   │                            #   pid + process.kill(pid,0)，ESRCH 立即 steal
+│   ├── owner.js                 # ws-owner.lock 抢占 + 心跳。alive = mtime
+│   │                            #   fresh ∧ pid alive（v1.3.12 conjunction）
+│   ├── cursor.js                # events.cursor.json drain + mutex
+│   ├── event-log.js             # events.jsonl append + 软/硬上限 rotate
+│   └── ws-*.js                  # WebSocket client 包装、event 处理
 └── tools/
     ├── _registry.js             # text/json/sendResult 响应构造器 + ctx 契约
     ├── bitable.js               # 19 个 bitable handler

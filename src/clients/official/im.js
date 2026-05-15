@@ -329,6 +329,22 @@ module.exports = {
       return f;
     });
     await this._populateSenderNames(children, userClient);
+    // Best-effort: surface the origin chat NAME for each child so the LLM doesn't
+    // misread the children as native messages of the current chat. A single
+    // merge_forward usually has 1 origin chat → 1 API call. Failures are silent
+    // (bot may not be in the origin chat) and the field is simply absent.
+    const originChatIds = [...new Set(children.map(c => c.originChatId).filter(Boolean))];
+    const chatNameMap = new Map();
+    await Promise.allSettled(originChatIds.map(async (cid) => {
+      try {
+        const info = await this.getChatInfo(cid);
+        if (info?.name) chatNameMap.set(cid, info.name);
+      } catch {}
+    }));
+    for (const c of children) {
+      const name = c.originChatId && chatNameMap.get(c.originChatId);
+      if (name) c.forwardedFromChatName = name;
+    }
     return children;
   },
 
@@ -366,7 +382,10 @@ module.exports = {
   //
   // Throws a single, wrapped error if BOTH paths fail or if UAT is absent and
   // the bot failed; the message points the user at `npx feishu-user-plugin oauth`.
-  async readMessagesWithFallback(chatId, options, userClient, { skipBot = false, via = 'bot' } = {}) {
+  async readMessagesWithFallback(chatId, options, userClient, { skipBot = false, skipUat = false, via = 'bot' } = {}) {
+    if (skipBot && skipUat) {
+      throw new Error('readMessagesWithFallback: cannot set both skipBot and skipUat — at least one identity path must be allowed');
+    }
     const tryUAT = async (viaLabel, reason) => {
       if (!this.hasUAT) {
         const hint = 'To read external / private groups, configure UAT via: npx feishu-user-plugin oauth';
@@ -381,7 +400,16 @@ module.exports = {
     };
 
     if (skipBot) {
-      return tryUAT(via || 'contacts', 'contacts_resolved_external');
+      // Two reasons we skipBot:
+      //   Path B (im-read.js): via='contacts' — chat was found only via
+      //   cookie search_contacts, bot definitely can't see it. Reason
+      //   field surfaces this to the LLM as "contacts_resolved_external".
+      //   v1.3.12 via_user=true: caller explicitly opted for UAT. No
+      //   failure happened; no reason needed.
+      if (via === 'contacts') {
+        return tryUAT('contacts', 'contacts_resolved_external');
+      }
+      return tryUAT(via && via !== 'bot' ? via : 'user');
     }
 
     // Attempt 1 — bot identity.
@@ -406,9 +434,55 @@ module.exports = {
         }
       }
 
+      // v1.3.12: when caller passes via_user=false (skipUat=true), surface
+      // the bot error instead of silently falling through to UAT. The user
+      // explicitly opted out of cross-identity fallback.
+      if (skipUat) {
+        throw new Error(`Bot path failed and via_user=false specified: ${botErr.message}`);
+      }
       // Fall through to UAT — if UAT is missing, tryUAT throws the user-friendly
       // "run npx feishu-user-plugin oauth" error instead of the raw Feishu payload.
       return tryUAT('user', klass.reason);
     }
+  },
+
+  // --- Message search (v1.3.12, B.5) ---
+  //
+  // Wraps POST /open-apis/search/v2/message. UAT-only (Feishu doesn't expose
+  // bot path; probed 2026-05-15 — bot returns 99991668 "user access token not
+  // support"). Requires the `search:message` OAuth scope; without it the API
+  // returns 99991679 (permission_violations.subject="search:message"). Caller
+  // should re-run `npx feishu-user-plugin oauth` after adding the scope.
+  //
+  // Returns the raw shape from Feishu: { items: [{ message_id, ... }], page_token, has_more }.
+  // Items are message-id pointers — call read_messages / read_p2p_messages
+  // with the parent chat_id to fetch full bodies if needed.
+  async searchMessages({ query, fromIds, chatIds, messageTypes, atUserIds, fromTypes, pageSize = 20, pageToken } = {}) {
+    if (!query || typeof query !== 'string') {
+      throw new Error('searchMessages: query (search keyword string) is required');
+    }
+    if (!this.hasUAT) {
+      throw new Error('search_messages requires UAT (Feishu does not expose a bot-path search). Run: npx feishu-user-plugin oauth');
+    }
+    const body = { query };
+    if (pageSize) body.page_size = pageSize;
+    if (pageToken) body.page_token = pageToken;
+    if (Array.isArray(fromIds) && fromIds.length) body.from_ids = fromIds;
+    if (Array.isArray(chatIds) && chatIds.length) body.chat_ids = chatIds;
+    if (Array.isArray(messageTypes) && messageTypes.length) body.message_type_list = messageTypes;
+    if (Array.isArray(atUserIds) && atUserIds.length) body.at_chatter_ids = atUserIds;
+    if (Array.isArray(fromTypes) && fromTypes.length) body.from_types = fromTypes;
+    const data = await this._uatREST('POST', '/open-apis/search/v2/message', { body });
+    if (data.code === 99991679) {
+      throw new Error(`search_messages: UAT lacks the search:message scope. Re-run \`npx feishu-user-plugin oauth\` after the v1.3.12 SCOPES update.`);
+    }
+    if (data.code !== 0) {
+      throw new Error(`search_messages failed (code=${data.code}): ${data.msg}`);
+    }
+    return {
+      items: data.data?.items || [],
+      pageToken: data.data?.page_token || null,
+      hasMore: !!data.data?.has_more,
+    };
   },
 };

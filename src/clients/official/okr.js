@@ -57,7 +57,8 @@ module.exports = {
   },
 
   // --- OKR progress record write (v1.3.7) ---
-  // Requires `okr:okr.content:write` (or wider okr:okr) on the OAuth.
+  // Requires `okr:okr.content:writeonly` (or wider okr:okr) on the OAuth.
+  // Note: Feishu uses `:writeonly` (one word), not `:write`.
 
   async createOkrProgressRecord({ targetId, targetType, content, sourceTitle, sourceUrl, sourceUrlPc, sourceUrlMobile, progressRate, userIdType = 'open_id' }) {
     if (!targetId) throw new Error('createOkrProgressRecord: target_id is required (the key_result_id or objective_id)');

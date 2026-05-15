@@ -1,5 +1,5 @@
 const lark = require('@larksuiteoapi/node-sdk');
-const { fetchWithTimeout } = require('../../utils');
+const { fetchWithTimeout, LRUCache } = require('../../utils');
 const { stderrLogger } = require('../../logger');
 const uatLifecycle = require('../../auth/uat');
 
@@ -11,7 +11,13 @@ class LarkOfficialClient {
     this._uat = null;
     this._uatRefresh = null;
     this._uatExpires = 0;
-    this._userNameCache = new Map(); // open_id → display name
+    // v1.3.12: bounded caches with TTL. Pre-v1.3.12 these were plain Maps that
+    // grew without bound and never expired, so a week-old server would carry
+    // stale display names. 500 entries / 10min covers the common chat-volume
+    // working set without keeping cold entries forever.
+    this._userNameCache = new LRUCache({ max: 500, ttlMs: 600_000 }); // open_id → display name
+    this._appNameCache = new LRUCache({ max: 100, ttlMs: 600_000 });  // app_id (cli_xxx) → app name
+    this._selfTenantKey = null;      // populated lazily on first message read
   }
 
   // --- UAT (User Access Token) Management ---
@@ -109,20 +115,58 @@ class LarkOfficialClient {
   }
 
   async _populateSenderNames(items, userClient) {
-    // Collect unique sender IDs that aren't cached
-    const unknownIds = new Set();
+    // Step 0: harvest mention name data — Feishu IM API ships mentions[].name
+    // alongside each message body, so we get (id, name) pairs for any user
+    // who got @-mentioned without spending a contact API call.
     for (const item of items) {
-      if (item.senderId && !this._userNameCache.has(item.senderId)) {
-        unknownIds.add(item.senderId);
+      if (Array.isArray(item.mentions)) {
+        for (const m of item.mentions) {
+          if (m.id && m.name && !this._userNameCache.has(m.id)) {
+            this._userNameCache.set(m.id, m.name);
+          }
+        }
       }
     }
-    // Parallel resolve via official contact API (instead of sequential N calls)
-    if (unknownIds.size > 0) {
-      await Promise.allSettled([...unknownIds].map(id => this.getUserById(id)));
+
+    // Step 1: lazy-resolve our own tenant_key so we can flag isExternal senders.
+    if (this._selfTenantKey === null) {
+      await this._resolveSelfTenantKey().catch(() => {});
     }
-    // Fallback: resolve remaining unknowns via cookie-based user identity client
+
+    // Step 2: collect unique unknown user / app ids
+    const unknownUserIds = new Set();
+    const unknownAppIds = new Set();
+    for (const item of items) {
+      if (!item.senderId) continue;
+      if (item.senderType === 'app') {
+        if (!this._appNameCache.has(item.senderId)) unknownAppIds.add(item.senderId);
+      } else if (!this._userNameCache.has(item.senderId)) {
+        unknownUserIds.add(item.senderId);
+      }
+    }
+
+    // Step 3: parallel resolve users via contact API.
+    // v1.3.12: read result.status so failed lookups don't disappear silently.
+    // The 2026-05 incident had ~100% lookup failure for weeks (UAT revoked +
+    // tenant scope gap) and senderName=null without any breadcrumb in stderr.
+    if (unknownUserIds.size > 0) {
+      const userIds = [...unknownUserIds];
+      const results = await Promise.allSettled(userIds.map(id => this.getUserById(id)));
+      const failed = [];
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].status === 'rejected') {
+          failed.push({ id: userIds[i], reason: results[i].reason?.message || String(results[i].reason) });
+        }
+      }
+      if (failed.length) {
+        const sample = failed.slice(0, 3).map(f => `${f.id}(${f.reason})`).join(', ');
+        const tail = failed.length > 3 ? ` (+${failed.length - 3} more)` : '';
+        console.error(`[feishu-user-plugin] sender name lookup failed for ${failed.length}/${userIds.length} ids: ${sample}${tail}`);
+      }
+    }
+    // Cookie fallback for any user still unknown
     if (userClient) {
-      for (const id of unknownIds) {
+      for (const id of unknownUserIds) {
         if (!this._userNameCache.has(id)) {
           try {
             const name = await userClient.getUserName(id);
@@ -131,12 +175,89 @@ class LarkOfficialClient {
         }
       }
     }
-    // Populate senderName field
-    for (const item of items) {
-      if (item.senderId) {
-        item.senderName = this._userNameCache.get(item.senderId) || null;
+    // Parallel resolve apps (best-effort; usually only self-app appears).
+    // v1.3.12: same Promise.allSettled status-reading fix as the user path.
+    if (unknownAppIds.size > 0) {
+      const appIds = [...unknownAppIds];
+      const results = await Promise.allSettled(appIds.map(id => this.getAppName(id)));
+      const failed = [];
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].status === 'rejected') {
+          failed.push({ id: appIds[i], reason: results[i].reason?.message || String(results[i].reason) });
+        }
+      }
+      if (failed.length) {
+        const sample = failed.slice(0, 3).map(f => `${f.id}(${f.reason})`).join(', ');
+        const tail = failed.length > 3 ? ` (+${failed.length - 3} more)` : '';
+        console.error(`[feishu-user-plugin] app name lookup failed for ${failed.length}/${appIds.length} ids: ${sample}${tail}`);
       }
     }
+
+    // v1.3.12 negative cache: any id we tried to resolve but couldn't gets
+    // a null sentinel under the same LRU+TTL. The 10-min TTL on the cache
+    // gives renamed / newly-joined users a re-resolution window without
+    // dispatching N redundant API calls per read_messages on hot chats.
+    // has(id)==true / get(id)==null lets _computeDisplayLabel fall back to
+    // "(open_id)" exactly the same way as before.
+    for (const id of unknownUserIds) {
+      if (!this._userNameCache.has(id)) this._userNameCache.set(id, null);
+    }
+    for (const id of unknownAppIds) {
+      if (!this._appNameCache.has(id)) this._appNameCache.set(id, null);
+    }
+
+    // Step 4: populate senderName, isExternal, displayLabel
+    for (const item of items) {
+      item.senderName = item.senderId ? (this._userNameCache.get(item.senderId) || null) : null;
+      if (this._selfTenantKey && item.senderTenantKey && item.senderTenantKey !== this._selfTenantKey) {
+        item.isExternal = true;
+      }
+      item.displayLabel = this._computeDisplayLabel(item);
+    }
+  }
+
+  _computeDisplayLabel(item) {
+    const prefix = item.isRecalled ? '[已撤回] ' : '';
+    if (!item.senderId) return prefix + '[系统]';
+    if (item.senderType === 'anonymous') return prefix + '[匿名]';
+    if (item.senderType === 'app') {
+      const appName = this._appNameCache.get(item.senderId);
+      return prefix + `[Bot] ${appName || `(${item.senderId})`}`;
+    }
+    return prefix + (item.senderName || `(${item.senderId})`);
+  }
+
+  async getAppName(appId) {
+    if (this._appNameCache.has(appId)) return this._appNameCache.get(appId);
+    try {
+      const token = await this._getAppToken();
+      const res = await fetchWithTimeout(
+        `https://open.feishu.cn/open-apis/application/v6/applications/${encodeURIComponent(appId)}?lang=zh_cn`,
+        { headers: { 'Authorization': `Bearer ${token}` }, timeoutMs: 10000 },
+      );
+      const data = await res.json();
+      const name = data?.data?.app?.app_name;
+      if (name) {
+        this._appNameCache.set(appId, name);
+        return name;
+      }
+    } catch {
+      // best-effort; null means "couldn't resolve, fall back to id"
+    }
+    return null;
+  }
+
+  async _resolveSelfTenantKey() {
+    if (this._selfTenantKey) return this._selfTenantKey;
+    const res = await fetchWithTimeout('https://open.feishu.cn/open-apis/auth/v3/app_access_token/internal', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ app_id: this.appId, app_secret: this.appSecret }),
+      timeoutMs: 10000,
+    });
+    const data = await res.json();
+    if (data?.tenant_key) this._selfTenantKey = data.tenant_key;
+    return this._selfTenantKey;
   }
 
   // --- Helpers ---
@@ -145,6 +266,10 @@ class LarkOfficialClient {
     if (!m) return null;
     let body = m.body?.content || '';
     try { body = JSON.parse(body); } catch {}
+    // Feishu signals recall by replacing body content with the literal string
+    // "This message was recalled" (not a JSON object). Surface as boolean so
+    // the LLM doesn't have to pattern-match the string.
+    const isRecalled = (typeof body === 'string' && /recalled/i.test(body));
     const out = {
       messageId: m.message_id,
       chatId: m.chat_id,
@@ -155,6 +280,12 @@ class LarkOfficialClient {
       createTime: this._normalizeTimestamp(m.create_time),
       updateTime: this._normalizeTimestamp(m.update_time),
     };
+    // Raw sender metadata — LLM may need id_type (to pick the right
+    // user_id_type for contact API) or tenant_key (to know cross-tenant).
+    if (m.sender?.id_type) out.senderIdType = m.sender.id_type;
+    if (m.sender?.tenant_key) out.senderTenantKey = m.sender.tenant_key;
+    if (isRecalled) out.isRecalled = true;
+    if (m.parent_id) out.isThreadReply = true;
     if (Array.isArray(m.mentions) && m.mentions.length > 0) out.mentions = m.mentions;
     if (m.upper_message_id) out.upperMessageId = m.upper_message_id;
     if (m.root_id) out.rootId = m.root_id;

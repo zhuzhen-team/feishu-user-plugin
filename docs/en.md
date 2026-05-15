@@ -1,13 +1,13 @@
 ---
 title: feishu-user-plugin · Feishu / Lark MCP Server for Claude Code & Codex
-description: All-in-one Feishu / Lark MCP server. 84 tools, 3 auth layers, send messages as your user identity. Open source MIT.
+description: All-in-one Feishu / Lark MCP server. 85 tools, 3 auth layers, send messages as your user identity. Open source MIT.
 keywords: Feishu MCP, Lark MCP, Claude Code Feishu, Claude Code Lark, Codex Feishu, MCP server, send as user, Feishu AI agent, Lark agent
 lang: en
 ---
 
 # feishu-user-plugin
 
-Feishu / Lark MCP server covering IM, docs, bitable, wiki, drive, calendar, tasks v2, OKR, realtime events. **84 tools · 3 auth layers · 9 MCP prompts · MIT licensed · Node ≥18**.
+Feishu / Lark MCP server covering IM, docs, bitable, wiki, drive, calendar, tasks v2, OKR, realtime events. **85 tools · 3 auth layers · 9 MCP prompts · MIT licensed · Node ≥18**.
 
 [GitHub](https://github.com/EthanQC/feishu-user-plugin){: .btn .btn-primary }
 [npm](https://www.npmjs.com/package/feishu-user-plugin){: .btn }

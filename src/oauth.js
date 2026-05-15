@@ -33,11 +33,18 @@ const TARGET_PROFILE = _parseTargetProfile();
 const _hasCanonical = !!credentialsModule.readCanonical();
 let creds;
 let profileLabel;
+// v1.3.12 (PR #45 P2): capture targetName at module init, NOT at OAuth
+// callback time. If we re-read getActiveProfileName() inside saveToken (as
+// the v1.3.6 code did), a concurrent `switch_profile` or Lark Desktop
+// account flip between "open browser for authorize" and "callback fires"
+// would write tokens to the WRONG profile silently. The whole oauth flow
+// is anchored to the profile name resolved here.
+let RESOLVED_PROFILE = null;
 if (_hasCanonical) {
-  const targetName = TARGET_PROFILE || credentialsModule.getActiveProfileName();
+  RESOLVED_PROFILE = TARGET_PROFILE || credentialsModule.getActiveProfileName();
   try {
-    creds = credentialsModule.getActiveProfileEnv(targetName);
-    profileLabel = `credentials.json::profiles[${targetName}]`;
+    creds = credentialsModule.getActiveProfileEnv(RESOLVED_PROFILE);
+    profileLabel = `credentials.json::profiles[${RESOLVED_PROFILE}]`;
   } catch (e) {
     console.error(`OAuth target profile error: ${e.message}`);
     console.error(`Available: ${credentialsModule.listProfileNames().join(', ')}`);
@@ -67,10 +74,25 @@ const REDIRECT_URI = `http://127.0.0.1:${PORT}/callback`;
 //   sheets:spreadsheet                     for sheet_image / sheet_file media uploads
 //   drive:file:upload                      narrower scope for drive/v1/files/upload_all (independent of drive:drive)
 // v1.3.7 additions:
-//   calendar:calendar.event:write          create/update/delete/respond calendar events
+//   calendar:calendar.event:{create,update,delete,reply}   calendar write — Feishu splits
+//                                          "write" into 4 verbs. Using the umbrella name
+//                                          `calendar:calendar.event:write` makes the
+//                                          OAuth authorize endpoint 422-reject the whole
+//                                          request. scripts/check-scopes.js bans it.
 //   task:task                              full Task v2 read+write
-//   okr:okr.content:write                  create/delete OKR progress records
-const SCOPES = 'offline_access auth:user.id:read im:message im:message:readonly im:chat im:chat:readonly contact:user.base:readonly contact:user.id:readonly docx:document drive:drive drive:file:upload bitable:app wiki:wiki:readonly wiki:wiki okr:okr:readonly okr:okr.period:readonly okr:okr.content:readonly okr:okr.content:write calendar:calendar:readonly calendar:calendar.event:read calendar:calendar.event:write docs:document.media:download docs:document.media:upload sheets:spreadsheet task:task';
+//   okr:okr.content:writeonly              create/delete OKR progress records.
+//                                          Note: Feishu uses `:writeonly` (one word),
+//                                          not `:write` (check-scopes.js banlist).
+// v1.3.12 additions:
+//   contact:contact.base:readonly          broader contact lookup (员工通讯录基本信息)
+//   im:resource                            user-side image/file download from messages
+//   search:message                         search_messages tool — search the user's IM
+//                                          history (POST /open-apis/search/v2/message,
+//                                          UAT-only; Feishu does NOT expose bot path).
+//
+// To add a scope: edit this line + add a row in docs/AUTH-SETUP.md scope table.
+// scripts/check-scopes.js enforces both in CI.
+const SCOPES = 'offline_access auth:user.id:read im:message im:message:readonly im:chat im:chat:readonly im:resource search:message contact:user.base:readonly contact:user.id:readonly contact:contact.base:readonly docx:document drive:drive drive:file:upload bitable:app wiki:wiki:readonly wiki:wiki okr:okr:readonly okr:okr.period:readonly okr:okr.content:readonly okr:okr.content:writeonly calendar:calendar:readonly calendar:calendar.event:read calendar:calendar.event:create calendar:calendar.event:update calendar:calendar.event:delete calendar:calendar.event:reply docs:document.media:download docs:document.media:upload sheets:spreadsheet task:task';
 
 if (!APP_ID || !APP_SECRET) {
   console.error('Missing LARK_APP_ID or LARK_APP_SECRET.');
@@ -89,7 +111,10 @@ async function getAppInfo() {
       body: JSON.stringify({ app_id: APP_ID, app_secret: APP_SECRET }),
     });
     const tokenData = await tokenRes.json();
-    if (!tokenData.app_access_token) return null;
+    if (!tokenData.app_access_token) {
+      console.error(`[oauth] app_access_token request returned no token: ${JSON.stringify(tokenData)}`);
+      return null;
+    }
 
     // Get app info — try the direct app query first, fall back to underauditlist
     let appName = null;
@@ -100,6 +125,15 @@ async function getAppInfo() {
     appName = directData?.data?.app?.app_name;
 
     if (!appName) {
+      // v1.3.12: 99991672 specifically means "no permission to read application
+      // info" — caused by missing tenant-side scope `application:application:self_manage`
+      // (no admin review required, see docs/AUTH-SETUP.md). Without it the
+      // sender displayLabel for bot messages falls back to "[Bot] (cli_xxx)".
+      if (directData?.code === 99991672) {
+        console.error(`[oauth] App name resolve failed (code=99991672): need application:application:self_manage scope (tenant-side, 免审). displayLabel will fall back to '[Bot] (cli_xxx)'`);
+      } else if (directData?.code && directData.code !== 0) {
+        console.error(`[oauth] App name resolve failed: code=${directData.code} msg=${directData.msg}`);
+      }
       const listRes = await fetch('https://open.feishu.cn/open-apis/application/v6/applications/underauditlist?lang=zh_cn&page_size=1', {
         headers: { 'Authorization': `Bearer ${tokenData.app_access_token}` },
       });
@@ -108,7 +142,8 @@ async function getAppInfo() {
     }
 
     return { appName, tenantKey: tokenData.tenant_key };
-  } catch {
+  } catch (e) {
+    console.error(`[oauth] App name lookup threw: ${e.message}`);
     return null;
   }
 }
@@ -155,8 +190,9 @@ function saveToken(tokenData) {
 
   let ok = false;
   if (_hasCanonical) {
-    const targetName = TARGET_PROFILE || credentialsModule.getActiveProfileName();
-    ok = credentialsModule.persistProfileUpdate(targetName, updates);
+    // Use the profile name captured at module init, not whatever
+    // credentials.json::active is *now*. See PR #45 race condition fix.
+    ok = credentialsModule.persistProfileUpdate(RESOLVED_PROFILE, updates);
     if (ok) console.log(`Tokens written to ${profileLabel}`);
   } else {
     ok = legacyConfig.persistToConfig(updates);

@@ -98,7 +98,7 @@
   },
   {
     "name": "create_calendar_event",
-    "description": "[Official API + UAT, v1.3.7] Create a new calendar event. Requires `calendar:calendar.event:write` scope (re-run `npx feishu-user-plugin oauth` after enabling). The current identity (UAT-first) must have writer or owner permission on the calendar.\n\nTime fields: A time object: {timestamp:\"<unix-seconds>\", timezone?:\"Asia/Shanghai\"} OR {date:\"YYYY-MM-DD\"} for all-day events.",
+    "description": "[Official API + UAT, v1.3.7] Create a new calendar event. Requires `calendar:calendar.event:create` scope (re-run `npx feishu-user-plugin oauth` after enabling). The current identity (UAT-first) must have writer or owner permission on the calendar.\n\nTime fields: A time object: {timestamp:\"<unix-seconds>\", timezone?:\"Asia/Shanghai\"} OR {date:\"YYYY-MM-DD\"} for all-day events.",
     "inputSchema": {
       "properties": {
         "attendee_ability": {
@@ -422,7 +422,7 @@
   },
   {
     "name": "delete_calendar_event",
-    "description": "[Official API + UAT, v1.3.7] Delete a calendar event. Requires `calendar:calendar.event:write` scope.",
+    "description": "[Official API + UAT, v1.3.7] Delete a calendar event. Requires `calendar:calendar.event:delete` scope.",
     "inputSchema": {
       "properties": {
         "calendar_id": {
@@ -1705,7 +1705,7 @@
   },
   {
     "name": "read_messages",
-    "description": "[Official API + UAT fallback] Read message history from any group. Accepts oc_xxx ID, numeric ID, or chat name (auto-searched). Auto-falls back to UAT for external groups the bot cannot access. Returns newest messages first by default, with sender names resolved. Auto-expands merge_forward messages into their child messages (with original sender / time / content preserved) by default — disable with expand_merge_forward=false. Text messages have URLs extracted into `urls`; Feishu doc links are additionally surfaced as `feishuDocs` so agents can feed them straight into read_doc / get_doc_blocks.",
+    "description": "[Official API + UAT fallback] Read message history from any group. Accepts oc_xxx ID, numeric ID, or chat name (auto-searched). Auto-falls back to UAT for external groups the bot cannot access. Returns newest messages first by default, with sender names resolved. Auto-expands merge_forward messages into their child messages (with original sender / time / content preserved) by default — disable with expand_merge_forward=false. Text messages have URLs extracted into `urls`; Feishu doc links are additionally surfaced as `feishuDocs` so agents can feed them straight into read_doc / get_doc_blocks.\n\n**Sender semantics (v1.3.12)**: each message has a `displayLabel` (e.g. `周宇`, `[Bot] Claude聊天助手`, `[匿名]`, `[系统]`, `[已撤回] 怪兽`) — prefer it over raw `senderId` when narrating who-said-what. Also surfaced: `senderType` (user|app|anonymous), `senderIdType` (open_id|union_id|user_id), `senderTenantKey`, `isExternal` (cross-tenant), `isRecalled`, `isThreadReply` (parent_id present). **merge_forward children** carry `originChatId` (the chat the conversation came from, NOT the chat you queried) and best-effort `forwardedFromChatName` — do NOT treat children as native messages of the current group.",
     "inputSchema": {
       "properties": {
         "chat_id": {
@@ -1735,6 +1735,10 @@
         "start_time": {
           "description": "Start timestamp in seconds (optional)",
           "type": "string"
+        },
+        "via_user": {
+          "description": "v1.3.12 — explicit identity override. `true` skips the bot path and reads directly via UAT (use when the chat is yours / external and you know bot has no access). `false` skips UAT fallback and surfaces the bot error instead of cross-identity hop (use when you specifically want the bot view). Omit for default auto-fallback (bot first, UAT on failure).",
+          "type": "boolean"
         }
       },
       "required": [
@@ -1745,7 +1749,7 @@
   },
   {
     "name": "read_p2p_messages",
-    "description": "[User UAT] Read P2P (direct message) chat history using user_access_token. Works for chats the bot cannot access. Returns newest messages first by default. Auto-expands merge_forward messages into their child messages by default — disable with expand_merge_forward=false. Requires OAuth setup.",
+    "description": "[User UAT] Read P2P (direct message) chat history using user_access_token. Works for chats the bot cannot access. Returns newest messages first by default. Auto-expands merge_forward messages into their child messages by default — disable with expand_merge_forward=false. Requires OAuth setup.\n\n**Sender semantics (v1.3.12)**: each message has a `displayLabel` (e.g. `周宇`, `[Bot] Claude聊天助手`, `[匿名]`, `[系统]`, `[已撤回] 怪兽`) — prefer it over raw `senderId` when narrating who-said-what. Also surfaced: `senderType` (user|app|anonymous), `senderIdType` (open_id|union_id|user_id), `senderTenantKey`, `isExternal` (cross-tenant), `isRecalled`, `isThreadReply` (parent_id present).",
     "inputSchema": {
       "properties": {
         "chat_id": {
@@ -1806,7 +1810,7 @@
   },
   {
     "name": "respond_calendar_event",
-    "description": "[Official API + UAT, v1.3.7] Respond to an event invitation. The current identity must be in the event's attendee list. Requires `calendar:calendar.event:write` scope.",
+    "description": "[Official API + UAT, v1.3.7] Respond to an event invitation. The current identity must be in the event's attendee list. Requires `calendar:calendar.event:reply` scope.",
     "inputSchema": {
       "properties": {
         "calendar_id": {
@@ -1858,6 +1862,65 @@
       "properties": {
         "query": {
           "description": "Search keyword",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "search_messages",
+    "description": "[User UAT, v1.3.12] Search the user's IM history by keyword. Wraps Feishu `POST /open-apis/search/v2/message`. Requires UAT with the `search:message` scope (re-run `npx feishu-user-plugin oauth` after v1.3.12 SCOPES update). Feishu does NOT expose a bot-path search; if you only have app credentials this tool will error.\n\nReturns `{items, pageToken, hasMore}` where each item is a `{message_id, chat_id, ...}` pointer — call `read_messages(chat_id)` or `read_p2p_messages(chat_id)` to fetch the full message bodies if needed. The pointer-only return keeps the response token-light when searching across many chats.\n\nFilter knobs (all optional):\n- `chat_ids`: only search inside these chats (oc_xxx)\n- `from_ids`: messages sent by these users (ou_xxx / union_id)\n- `at_user_ids`: messages that @-mention these users\n- `message_types`: e.g. `[\"text\", \"post\"]`\n- `from_types`: e.g. `[\"user\", \"anonymous\"]`",
+    "inputSchema": {
+      "properties": {
+        "at_user_ids": {
+          "description": "Restrict to messages that @-mention these user ids",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "chat_ids": {
+          "description": "Restrict to these oc_xxx chats",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "from_ids": {
+          "description": "Restrict to messages from these user ids (ou_xxx / union_id)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "from_types": {
+          "description": "Filter by sender types (e.g. [\"user\",\"anonymous\"])",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "message_types": {
+          "description": "Filter by message types (e.g. [\"text\",\"post\",\"image\",\"file\",\"interactive\"])",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "page_size": {
+          "description": "Items per page (default 20, max 100)",
+          "type": "number"
+        },
+        "page_token": {
+          "description": "Pagination cursor from a previous page",
+          "type": "string"
+        },
+        "query": {
+          "description": "Search keyword. Plain text; Feishu handles tokenization.",
           "type": "string"
         }
       },
@@ -2193,7 +2256,7 @@
   },
   {
     "name": "update_calendar_event",
-    "description": "[Official API + UAT, v1.3.7] Patch fields on an existing calendar event. Pass only the fields you want to change. Requires `calendar:calendar.event:write` scope.",
+    "description": "[Official API + UAT, v1.3.7] Patch fields on an existing calendar event. Pass only the fields you want to change. Requires `calendar:calendar.event:update` scope.",
     "inputSchema": {
       "properties": {
         "attendee_ability": {

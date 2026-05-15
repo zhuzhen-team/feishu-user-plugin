@@ -107,7 +107,7 @@ const schemas = [
   },
   {
     name: 'read_p2p_messages',
-    description: '[User UAT] Read P2P (direct message) chat history using user_access_token. Works for chats the bot cannot access. Returns newest messages first by default. Auto-expands merge_forward messages into their child messages by default — disable with expand_merge_forward=false. Requires OAuth setup.',
+    description: '[User UAT] Read P2P (direct message) chat history using user_access_token. Works for chats the bot cannot access. Returns newest messages first by default. Auto-expands merge_forward messages into their child messages by default — disable with expand_merge_forward=false. Requires OAuth setup.\n\n**Sender semantics (v1.3.12)**: each message has a `displayLabel` (e.g. `周宇`, `[Bot] Claude聊天助手`, `[匿名]`, `[系统]`, `[已撤回] 怪兽`) — prefer it over raw `senderId` when narrating who-said-what. Also surfaced: `senderType` (user|app|anonymous), `senderIdType` (open_id|union_id|user_id), `senderTenantKey`, `isExternal` (cross-tenant), `isRecalled`, `isThreadReply` (parent_id present).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -145,7 +145,7 @@ const schemas = [
   },
   {
     name: 'read_messages',
-    description: '[Official API + UAT fallback] Read message history from any group. Accepts oc_xxx ID, numeric ID, or chat name (auto-searched). Auto-falls back to UAT for external groups the bot cannot access. Returns newest messages first by default, with sender names resolved. Auto-expands merge_forward messages into their child messages (with original sender / time / content preserved) by default — disable with expand_merge_forward=false. Text messages have URLs extracted into `urls`; Feishu doc links are additionally surfaced as `feishuDocs` so agents can feed them straight into read_doc / get_doc_blocks.',
+    description: '[Official API + UAT fallback] Read message history from any group. Accepts oc_xxx ID, numeric ID, or chat name (auto-searched). Auto-falls back to UAT for external groups the bot cannot access. Returns newest messages first by default, with sender names resolved. Auto-expands merge_forward messages into their child messages (with original sender / time / content preserved) by default — disable with expand_merge_forward=false. Text messages have URLs extracted into `urls`; Feishu doc links are additionally surfaced as `feishuDocs` so agents can feed them straight into read_doc / get_doc_blocks.\n\n**Sender semantics (v1.3.12)**: each message has a `displayLabel` (e.g. `周宇`, `[Bot] Claude聊天助手`, `[匿名]`, `[系统]`, `[已撤回] 怪兽`) — prefer it over raw `senderId` when narrating who-said-what. Also surfaced: `senderType` (user|app|anonymous), `senderIdType` (open_id|union_id|user_id), `senderTenantKey`, `isExternal` (cross-tenant), `isRecalled`, `isThreadReply` (parent_id present). **merge_forward children** carry `originChatId` (the chat the conversation came from, NOT the chat you queried) and best-effort `forwardedFromChatName` — do NOT treat children as native messages of the current group.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -155,8 +155,27 @@ const schemas = [
         end_time: { type: 'string', description: 'End timestamp in seconds (optional)' },
         sort_type: { type: 'string', enum: ['ByCreateTimeDesc', 'ByCreateTimeAsc'], description: 'Sort order (default: ByCreateTimeDesc = newest first)' },
         expand_merge_forward: { type: 'boolean', description: 'Auto-expand merge_forward placeholders into their child messages (default true). Children carry parentMessageId; use that id (not the child id) with download_message_resource (kind=image or file).' },
+        via_user: { type: 'boolean', description: 'v1.3.12 — explicit identity override. `true` skips the bot path and reads directly via UAT (use when the chat is yours / external and you know bot has no access). `false` skips UAT fallback and surfaces the bot error instead of cross-identity hop (use when you specifically want the bot view). Omit for default auto-fallback (bot first, UAT on failure).' },
       },
       required: ['chat_id'],
+    },
+  },
+  {
+    name: 'search_messages',
+    description: '[User UAT, v1.3.12] Search the user\'s IM history by keyword. Wraps Feishu `POST /open-apis/search/v2/message`. Requires UAT with the `search:message` scope (re-run `npx feishu-user-plugin oauth` after v1.3.12 SCOPES update). Feishu does NOT expose a bot-path search; if you only have app credentials this tool will error.\n\nReturns `{items, pageToken, hasMore}` where each item is a `{message_id, chat_id, ...}` pointer — call `read_messages(chat_id)` or `read_p2p_messages(chat_id)` to fetch the full message bodies if needed. The pointer-only return keeps the response token-light when searching across many chats.\n\nFilter knobs (all optional):\n- `chat_ids`: only search inside these chats (oc_xxx)\n- `from_ids`: messages sent by these users (ou_xxx / union_id)\n- `at_user_ids`: messages that @-mention these users\n- `message_types`: e.g. `["text", "post"]`\n- `from_types`: e.g. `["user", "anonymous"]`',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search keyword. Plain text; Feishu handles tokenization.' },
+        page_size: { type: 'number', description: 'Items per page (default 20, max 100)' },
+        page_token: { type: 'string', description: 'Pagination cursor from a previous page' },
+        chat_ids: { type: 'array', items: { type: 'string' }, description: 'Restrict to these oc_xxx chats' },
+        from_ids: { type: 'array', items: { type: 'string' }, description: 'Restrict to messages from these user ids (ou_xxx / union_id)' },
+        at_user_ids: { type: 'array', items: { type: 'string' }, description: 'Restrict to messages that @-mention these user ids' },
+        message_types: { type: 'array', items: { type: 'string' }, description: 'Filter by message types (e.g. ["text","post","image","file","interactive"])' },
+        from_types: { type: 'array', items: { type: 'string' }, description: 'Filter by sender types (e.g. ["user","anonymous"])' },
+      },
+      required: ['query'],
     },
   },
 ];
@@ -231,6 +250,15 @@ const handlers = {
       sortType: args.sort_type,
       expandMergeForward: args.expand_merge_forward !== false,
     };
+    // v1.3.12: via_user opt-in routing override. true=skip bot (UAT only),
+    // false=skip UAT (bot only / no fallback), undefined=default auto-fallback.
+    // Set `via: 'user'` explicitly so readMessagesWithFallback labels the
+    // response data.via = 'user' (distinguishing intentional UAT route from
+    // the auto-fallback case where 'bot' is the default label).
+    const routingOpts = {};
+    if (args.via_user === true) { routingOpts.skipBot = true; routingOpts.via = 'user'; }
+    else if (args.via_user === false) routingOpts.skipUat = true;
+
     // Get userClient for name resolution fallback (best-effort)
     let uc = null;
     try { uc = await ctx.getUserClient(); } catch (_) {}
@@ -238,12 +266,17 @@ const handlers = {
     // Path A — chat_id that resolves inside bot's / official search scope.
     const resolvedChatId = await chatIdMapper.resolveToOcId(args.chat_id, official);
     if (resolvedChatId) {
-      return json(await official.readMessagesWithFallback(resolvedChatId, msgOpts, uc));
+      return json(await official.readMessagesWithFallback(resolvedChatId, msgOpts, uc, routingOpts));
     }
 
     // Path B — external group discovered only via cookie search_contacts.
     // When we got here the bot definitely can't see it, so skip bot entirely
-    // and go straight to UAT with a `contacts` via label.
+    // and go straight to UAT with a `contacts` via label. If user explicitly
+    // set via_user=false (bot-only), short-circuit with a clear error rather
+    // than silently routing through UAT anyway.
+    if (args.via_user === false) {
+      return text(`Cannot find "${args.chat_id}" via bot, and via_user=false explicitly opts out of UAT fallback. Either omit via_user or set via_user=true.`);
+    }
     if (official.hasUAT) {
       if (!uc) try { uc = await ctx.getUserClient(); } catch (_) {}
       const contactChatId = await chatIdMapper.resolveViaContacts(args.chat_id, uc);
@@ -253,6 +286,21 @@ const handlers = {
     }
 
     return text(`Cannot resolve "${args.chat_id}" to a chat ID.\nSearched: bot's group list, im.chat.search API, and user contacts (search_contacts).\nTry: provide the oc_xxx or numeric chat ID directly.`);
+  },
+
+  async search_messages(args, ctx) {
+    const official = ctx.getOfficialClient();
+    const result = await official.searchMessages({
+      query: args.query,
+      pageSize: args.page_size,
+      pageToken: args.page_token,
+      chatIds: args.chat_ids,
+      fromIds: args.from_ids,
+      atUserIds: args.at_user_ids,
+      messageTypes: args.message_types,
+      fromTypes: args.from_types,
+    });
+    return json(result);
   },
 };
 

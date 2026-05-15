@@ -1,15 +1,15 @@
-# feishu-user-plugin
+# feishu-user-plugin —— 飞书 MCP 服务器 + CLI 工具
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-green.svg)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-purple.svg)](https://modelcontextprotocol.io)
-[![Tools](https://img.shields.io/badge/Tools-84-orange.svg)](docs/TOOLS.md)
+[![Tools](https://img.shields.io/badge/Tools-85-orange.svg)](docs/TOOLS.md)
 [![npm](https://img.shields.io/npm/v/feishu-user-plugin.svg)](https://www.npmjs.com/package/feishu-user-plugin)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 **中文** · [English](README.en.md) · [Docs](https://ethanqc.github.io/feishu-user-plugin/) · [CHANGELOG](CHANGELOG.md) · [npm](https://www.npmjs.com/package/feishu-user-plugin)
 
-飞书 / Lark MCP 服务器，覆盖 IM、文档、多维表格、知识库、云空间、日历、任务 v2、OKR、实时事件。**84 工具 · 3 层鉴权 · 9 MCP prompts · MIT licensed · Node ≥18**。
+飞书 / Lark MCP 服务器，覆盖 IM、文档、多维表格、知识库、云空间、日历、任务 v2、OKR、实时事件。**85 工具 · 3 层鉴权 · 9 MCP prompts · MIT licensed · Node ≥18**。
 
 兼容 Claude Code、Codex、Cursor、Windsurf、VS Code、Claude Desktop、OpenClaw 等 MCP 客户端。
 

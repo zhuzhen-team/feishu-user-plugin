@@ -43,10 +43,93 @@ function fetchWithTimeout(url, init = {}) {
   return fetch(url, { ...rest, signal: rest.signal || controller.signal }).finally(() => clearTimeout(timer));
 }
 
+// LRU cache with TTL. Replaces unbounded `new Map()` in base.js for
+// _userNameCache / _appNameCache (v1.3.12). Insertion order in a JS Map gives
+// us LRU for free — re-insertion (delete + set) moves a key to "newest".
+class LRUCache {
+  constructor({ max = 500, ttlMs = 600_000 } = {}) {
+    if (!Number.isFinite(max) || max <= 0) throw new Error('LRUCache: max must be positive');
+    if (!Number.isFinite(ttlMs) || ttlMs <= 0) throw new Error('LRUCache: ttlMs must be positive');
+    this._max = max;
+    this._ttlMs = ttlMs;
+    this._map = new Map(); // key → { value, expiresAt }
+  }
+
+  _isExpired(entry) {
+    return entry.expiresAt <= Date.now();
+  }
+
+  get(key) {
+    const entry = this._map.get(key);
+    if (!entry) return undefined;
+    if (this._isExpired(entry)) {
+      this._map.delete(key);
+      return undefined;
+    }
+    // Bump recency: re-insert to move to tail.
+    this._map.delete(key);
+    this._map.set(key, entry);
+    return entry.value;
+  }
+
+  has(key) {
+    const entry = this._map.get(key);
+    if (!entry) return false;
+    if (this._isExpired(entry)) {
+      this._map.delete(key);
+      return false;
+    }
+    return true;
+  }
+
+  set(key, value) {
+    // If the key exists, delete first so re-insert puts it at the tail.
+    if (this._map.has(key)) this._map.delete(key);
+    this._map.set(key, { value, expiresAt: Date.now() + this._ttlMs });
+    while (this._map.size > this._max) {
+      const oldest = this._map.keys().next().value;
+      this._map.delete(oldest);
+    }
+  }
+
+  delete(key) { return this._map.delete(key); }
+
+  clear() { this._map.clear(); }
+
+  get size() { return this._map.size; }
+
+  // Map-compatible iteration. Skips expired entries so callers don't observe
+  // stale data via spread / for-of. Order follows the underlying Map's
+  // insertion order (= LRU recency order, oldest first).
+  *entries() {
+    for (const [key, entry] of this._map) {
+      if (this._isExpired(entry)) continue;
+      yield [key, entry.value];
+    }
+  }
+
+  *keys() {
+    for (const [key, entry] of this._map) {
+      if (this._isExpired(entry)) continue;
+      yield key;
+    }
+  }
+
+  *values() {
+    for (const [, entry] of this._map) {
+      if (this._isExpired(entry)) continue;
+      yield entry.value;
+    }
+  }
+
+  [Symbol.iterator]() { return this.entries(); }
+}
+
 module.exports = {
   generateRequestId,
   generateCid,
   parseCookie,
   formatCookie,
   fetchWithTimeout,
+  LRUCache,
 };

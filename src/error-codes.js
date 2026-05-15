@@ -26,6 +26,28 @@ const FAILURE_MAP = {
   // Chat does not exist (from the bot's POV — may still be accessible to user).
   19001:  { action: 'uat', reason: 'bot_chat_not_found' },
 
+  // UAT revoked — refresh_token explicitly invalid_grant (user revoked OAuth
+  // or 30-day window elapsed). The live trigger for this code lives in
+  // identity-state.js::_classifyUatFailure (UAT REST throws / returns 20064);
+  // this entry exists for *symmetry* — should a bot-side surface ever return
+  // 20064 (it shouldn't, bot uses app_access_token not refresh_token), the
+  // fallback caller would route to UAT once and surface revocation.
+  20064: { action: 'uat', reason: 'uat_revoked' },
+  // Cross-tenant bot block — bot lives in tenant A, target resource is in
+  // tenant B. Will never be granted. Distinct from 240001 (which is the
+  // older code form for the same shape); both surface in production.
+  91403: { action: 'uat', reason: 'bot_cross_tenant' },
+
+  // Upload pipeline transient errors — the Feishu upload gateway is
+  // intermittently flaky; one retry after a moment usually clears.
+  // 1254000 / 1254001 are generic upload failures, 1254301 is multipart
+  // size mismatch (rare race when the body is being computed concurrently),
+  // 1254400 is "upload service busy" the gateway returns under load.
+  1254000: { action: 'retry', reason: 'upload_transient' },
+  1254001: { action: 'retry', reason: 'upload_transient' },
+  1254301: { action: 'retry', reason: 'upload_transient' },
+  1254400: { action: 'retry', reason: 'upload_transient' },
+
   // Rate limited — Feishu throttles, try once more after a brief pause.
   42101:  { action: 'retry', reason: 'bot_rate_limited' },
   // Frequency control variants occasionally observed.
@@ -41,7 +63,20 @@ const TRANSIENT_PATTERNS = [
   /ETIMEDOUT/i,
   /fetch timeout after/i, // from utils.fetchWithTimeout
   /socket hang up/i,
+  /Unexpected end of JSON input/i,
+  /Unexpected token .* in JSON/i,
 ];
+
+// Recognise res.json() parse failures so withUAT widens retry to them too.
+// The Feishu gateway occasionally returns a truncated body that crashes
+// JSON.parse — classifying the SyntaxError as transient lets the wrapper
+// recover with a single retry instead of bubbling a cryptic parse error.
+function _isJsonParseError(err) {
+  if (!err) return false;
+  if (err.name === 'SyntaxError') return true;
+  const msg = err.message || '';
+  return /Unexpected end of JSON input/i.test(msg) || /Unexpected token .* in JSON/i.test(msg);
+}
 
 /**
  * Classify an error thrown by a bot-API path.
@@ -64,6 +99,11 @@ function classifyError(errOrCode) {
 
   if (code != null && FAILURE_MAP[code]) {
     return { ...FAILURE_MAP[code], code };
+  }
+  // res.json() parse failures get a dedicated reason so logs disambiguate
+  // them from generic network flakes (different remediation in monitoring).
+  if (errOrCode && typeof errOrCode === 'object' && _isJsonParseError(errOrCode)) {
+    return { action: 'retry', reason: 'response_parse_error', code };
   }
   for (const re of TRANSIENT_PATTERNS) {
     if (re.test(msg)) return { action: 'retry', reason: 'bot_network_error', code };

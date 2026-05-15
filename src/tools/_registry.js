@@ -26,6 +26,29 @@ const json = (o) => {
   return text(warn + JSON.stringify(o, null, 2));
 };
 
-const sendResult = (r, desc) => text(r.success ? desc : `Send failed (status: ${r.status})`);
+// sendResult — unified shape for send_*_as_user tools (v1.3.12).
+// Returns JSON inside an MCP text block:
+//   { ok, viaUser, description?, status?, messageId?, fallbackWarning? }
+//
+// `r` is the raw response from a Lark client:
+//   - LarkUserClient.send*  → { success: bool, status: number }
+//   - LarkOfficialClient.sendMessageAsBot → { messageId: string }
+//
+// Back-compat signature: `sendResult(r, desc)` still works (desc treated as
+// description). New callers can pass `sendResult(r, { desc, viaUser: false,
+// fallbackWarning })`.
+const sendResult = (r, descOrOpts) => {
+  const opts = typeof descOrOpts === 'string' ? { desc: descOrOpts } : (descOrOpts || {});
+  const { desc, viaUser = true, fallbackWarning } = opts;
+  const out = {
+    ok: !!(r && (r.success || r.messageId)),
+    viaUser,
+  };
+  if (desc) out.description = desc;
+  if (r?.messageId) out.messageId = r.messageId;
+  if (r && typeof r.status !== 'undefined') out.status = r.status;
+  if (fallbackWarning) out.fallbackWarning = fallbackWarning;
+  return json(out);
+};
 
 module.exports = { text, json, sendResult };

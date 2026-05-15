@@ -7,7 +7,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { acquireLongLived } = require('./lockfile');
+const { acquireLongLived, _isProcessAlive } = require('./lockfile');
 
 const OWNER_LOCK_FILENAME = 'ws-owner.lock';
 const HEARTBEAT_INTERVAL_MS = 15_000;
@@ -43,6 +43,12 @@ function tryClaim(dir, { info = {}, force = false } = {}) {
 }
 
 // Read current owner info without modifying anything.
+//
+// v1.3.12: `alive` is now the conjunction of mtime-fresh AND pid-alive. The
+// non-owner poll in server.js calls readOwnerInfo every 30s; under the old
+// definition a SIGKILL'd owner kept the lock looking alive until the 60s
+// stale window elapsed. With the pid check, takeover happens on the next
+// poll after the crash regardless of mtime.
 function readOwnerInfo(dir) {
   const lockPath = _ownerLockPath(dir);
   let body = null;
@@ -53,13 +59,16 @@ function readOwnerInfo(dir) {
   } catch (_) {}
   if (!body) return { exists: false };
   const ageSec = mtimeMs ? Math.floor((Date.now() - mtimeMs) / 1000) : null;
+  const mtimeFresh = ageSec !== null && ageSec * 1000 < STALE_MS;
+  const pidAlive = typeof body.pid === 'number' ? _isProcessAlive(body.pid) : true;
   return {
     exists: true,
     pid: body.pid,
     start_time: body.start_time,
     mtimeMs,
     last_heartbeat_age_seconds: ageSec,
-    alive: ageSec !== null && ageSec * 1000 < STALE_MS,
+    pid_alive: pidAlive,
+    alive: mtimeFresh && pidAlive,
   };
 }
 

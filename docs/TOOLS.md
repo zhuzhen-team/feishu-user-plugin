@@ -1,4 +1,4 @@
-# 工具引用（84 tools）
+# 工具引用（85 tools）
 
 > **谁该读**：在本仓写新工具的开发者、在仓内干活的 AI agent、想知道某工具具体能力的高级用户。  
 > **何时读**：写新工具前对照域分布、调用某工具不确定参数、查跨域 caveat / 已知错误码。
@@ -10,7 +10,7 @@
 - [User Identity — Messaging（cookie protobuf，8 tools）](#user-identity--messagingcookie-protobuf8-tools)
 - [User Identity — Contacts & Info（5 tools）](#user-identity--contacts--info5-tools)
 - [User OAuth UAT — P2P Chat（2 tools）](#user-oauth-uat--p2p-chat2-tools)
-- [Official API — IM（15 tools）](#official-api--im15-tools)
+- [Official API — IM（16 tools）](#official-api--im16-tools)
 - [Official API — Docs（7 tools）](#official-api--docs7-tools)
 - [Official API — Bitable（5 tools，v1.3.7 整合）](#official-api--bitable5-toolsv137-整合)
 - [Official API — Wiki（9 tools）](#official-api--wiki9-tools)
@@ -43,7 +43,7 @@
 - `list_user_chats` 仅返回**群聊**（飞书 API 限制）。P2P 列表请走 `search_contacts` → `create_p2p_chat`
 - docx / bitable / drive / wiki / OKR / calendar / tasks 的 create+edit 默认 UAT-first —— UAT 优先、bot fallback，被迫走 bot 时返回里带 ⚠ warning。资源 ownership 与 caller 一致
 
-## Official API — IM（15 tools）
+## Official API — IM（16 tools）
 `list_chats` / `read_messages` / `send_message_as_bot` / `reply_message` / `forward_message` / `delete_message` / `update_message` / `add_reaction` / `delete_reaction` / `pin_message` / `create_group` / `update_group` / `list_members` / `manage_members` / `download_message_resource`
 
 - `read_messages` 解析 chat 名 → bot 群列表 → `im.chat.search` → cookie `search_contacts`。外部群自动 fallback 到 UAT。`merge_forward` 自动展开；text 消息会抽取 `urls[]` + `feishuDocs[]`（用 `expand_merge_forward=false` 关闭）
@@ -85,14 +85,14 @@
 ## Official API — OKR（6 tools）
 `list_user_okrs` / `get_okrs` / `list_okr_periods` / `create_okr_progress_record` / `list_okr_progress_records` / `delete_okr_progress_record`
 
-- 写需要 `okr:okr.content:write` scope
+- 写需要 `okr:okr.content:writeonly` scope
 - `list_okr_progress_records` 从 `get_okrs` 提取 triples（飞书无 native list 接口）
 - 飞书开放 API 不暴露 OKR 本体 CRUD（仅暴露读 + 进展记录写）
 
 ## Official API — Calendar（8 tools）
 `list_calendars` / `list_calendar_events` / `get_calendar_event` / `create_calendar_event` / `update_calendar_event` / `delete_calendar_event` / `respond_calendar_event` / `get_freebusy`
 
-- 写需要 `calendar:calendar.event:write` scope
+- 写需要 `calendar:calendar.event:{create,update,delete,reply}` scope
 - 读 UAT-first（primary + 共享 + 订阅）；bot 只能看到自己被显式邀请的日历
 
 ## Official API — Tasks v2（7 tools，v1.3.7 新域）
@@ -154,7 +154,7 @@
 
 `user_id` 必填 —— 用自己的 open_id（从 `get_login_status` / `search_contacts`）读自己 OKR，或同事的 open_id（受权限限制）。
 
-写（v1.3.7，需要 `okr:okr.content:write` scope）：
+写（v1.3.7，需要 `okr:okr.content:writeonly` scope）：
 
 4. `create_okr_progress_record(target_id, target_type=1|2, content_text, source_title?, source_url?, progress_percent?)` —— `target_type` 1 表 objective，2 表 key result。`content_text` 自动包成飞书要求的 block 格式；要更复杂载荷（list / mention / docs link / gallery）直接传 `content`
 5. `list_okr_progress_records(okr_id)` —— 从 `get_okrs` 提取 `{progress_id, target_id, target_type}` triples
@@ -165,7 +165,7 @@
 1. `list_calendars` —— 拿日历列表，`type=primary` 是个人日历
 2. `list_calendar_events(calendar_id, start_time=<unix_sec>, end_time=<unix_sec>)` —— 列时间窗口内事件
 3. `get_calendar_event(calendar_id, event_id)` —— 完整详情（参与人 / 地点 / 附件 / 会议链接）
-4. `create_calendar_event(calendar_id, summary, start_time, end_time, ...)` —— `start_time` / `end_time` 是对象：`{timestamp:"<unix-seconds>", timezone?:"Asia/Shanghai"}` 或 `{date:"YYYY-MM-DD"}`（全天）。v1.3.7+ 需要 `calendar:calendar.event:write` scope
+4. `create_calendar_event(calendar_id, summary, start_time, end_time, ...)` —— `start_time` / `end_time` 是对象：`{timestamp:"<unix-seconds>", timezone?:"Asia/Shanghai"}` 或 `{date:"YYYY-MM-DD"}`（全天）。v1.3.7+ 需要 `calendar:calendar.event:{create,update,delete,reply}` scope
 5. `update_calendar_event(calendar_id, event_id, ...patch)` —— 只传要改的字段
 6. `delete_calendar_event(calendar_id, event_id, need_notification?)` —— 传 `meeting_chat_id` 同时解散关联会议群
 7. `respond_calendar_event(calendar_id, event_id, rsvp_status=accept|decline|tentative)` —— 用当前 UAT 身份 RSVP
