@@ -294,7 +294,7 @@ const handlers = {
   },
   async send_card_as_user(args, ctx) {
     const r = await ctx.getOfficialClient().sendMessageAsBot(args.chat_id, 'interactive', args.card);
-    return text(`Card sent (bot): ${r.messageId}`);
+    return sendResult(r, { desc: 'Card sent via bot (cookie channel rejects interactive)', viaUser: false });
   },
 };
 
