@@ -36,7 +36,18 @@ jobs:
         run: node scripts/check-changelog.js
 
       - run: npm install
-      - run: npm publish
+      # Skip npm publish if this exact version is already on the registry.
+      # v1.3.12 hit this: MCP Registry step failed AFTER npm publish succeeded,
+      # so the v1.3.12 npm package was live but the workflow as a whole failed.
+      # Re-pushing the tag (to retry MCP Registry) would 403 here without the skip.
+      - name: npm publish (idempotent)
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if npm view "feishu-user-plugin@$PKG_VERSION" version >/dev/null 2>&1; then
+            echo "feishu-user-plugin@$PKG_VERSION already on npm — skipping publish"
+          else
+            npm publish
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
