@@ -1,7 +1,7 @@
 {
   "name": "feishu-user-plugin",
   "display_name": "Feishu User Plugin for Claude Code",
-  "description": "All-in-one Feishu MCP server for Claude Code & Codex — 84 tools across 3 auth layers (cookie / app / OAuth). Send as you, read groups, manage docs / bitable / wiki / drive / calendar / tasks / OKR.",
+  "description": "All-in-one Feishu MCP server + CLI tool for Claude Code / Codex / Cursor / scripts — 85 tools across 3 auth layers (cookie / app / OAuth). Send as you, read groups, manage docs / bitable / wiki / drive / calendar / tasks",
   "version": "1.3.11",
   "icon": "https://www.feishu.cn/favicon.ico",
   "repository": {
@@ -186,6 +186,10 @@
     {
       "name": "read_messages",
       "description": "Read message history from any group. Accepts oc_xxx ID, numeric ID, or chat name (auto-searched). Auto-falls back to UAT for external groups the bot cannot access. Returns newest messages first by def"
+    },
+    {
+      "name": "search_messages",
+      "description": "Search the user's IM history by keyword. Wraps Feishu `POST /open-apis/search/v2/message`. Requires UAT with the `search:message` scope (re-run `npx feishu-user-plugin oauth` after v1.3.12 SCOPES upda"
     },
     {
       "name": "send_message_as_bot",
