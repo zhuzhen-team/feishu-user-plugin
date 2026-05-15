@@ -133,6 +133,7 @@ CI（`validate.yml`）每个 PR 跑 diff 校验两文件同步。
 | 错误诊断 / 故障排查 | [docs/TROUBLESHOOTING.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/TROUBLESHOOTING.md) |
 | 发版流程 + team-skills 同步 + 公告规则 | [docs/RELEASING.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/RELEASING.md) |
 | 文件职责矩阵 / 新增工具放哪 | [docs/REFACTOR-NOTES.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/REFACTOR-NOTES.md) |
+| MCP 客户端兼容矩阵 + 测试方法 | [docs/CLIENT-COMPAT.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/CLIENT-COMPAT.md) |
 | 凭证文件 schema | [docs/CREDENTIALS-FORMAT.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/CREDENTIALS-FORMAT.md) |
 | 测试方法论 | [docs/TESTING-METHODOLOGY.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/TESTING-METHODOLOGY.md) |
 | Cookie protobuf 抓包记录 | [docs/COOKIE-PROTOBUF-CAPTURES.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/COOKIE-PROTOBUF-CAPTURES.md) |
