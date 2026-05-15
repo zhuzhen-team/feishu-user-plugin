@@ -1,13 +1,13 @@
 ---
 title: feishu-user-plugin · 飞书 MCP 服务器（Claude Code / Codex）
-description: 飞书 MCP 服务器，让 Claude Code、Codex、Cursor、Windsurf 等 MCP 客户端以用户身份操作飞书。84 工具，3 层鉴权。MIT 协议。
+description: 飞书 MCP 服务器，让 Claude Code、Codex、Cursor、Windsurf 等 MCP 客户端以用户身份操作飞书。85 工具，3 层鉴权。MIT 协议。
 keywords: 飞书 MCP, Feishu MCP, Lark MCP, 飞书 Claude Code, Claude Code 飞书, 飞书插件, send as user, 用户身份发飞书, 飞书 AI agent
 lang: zh-CN
 ---
 
 # feishu-user-plugin
 
-飞书 / Lark MCP 服务器，覆盖 IM、文档、多维表格、知识库、云空间、日历、任务 v2、OKR、实时事件。**84 tools · 3 auth layers · 9 MCP prompts · MIT licensed · Node ≥18**。
+飞书 / Lark MCP 服务器，覆盖 IM、文档、多维表格、知识库、云空间、日历、任务 v2、OKR、实时事件。**85 tools · 3 auth layers · 9 MCP prompts · MIT licensed · Node ≥18**。
 
 [GitHub](https://github.com/EthanQC/feishu-user-plugin){: .btn .btn-primary }
 [npm](https://www.npmjs.com/package/feishu-user-plugin){: .btn }
