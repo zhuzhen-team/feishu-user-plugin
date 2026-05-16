@@ -1,4 +1,4 @@
-// src/test-lru-cache.js — unit test for src/utils/lru-cache.js.
+// src/test-lru-cache.js — unit test for the LRUCache class exported by src/utils.js.
 //
 // Replaces the v1.3.12 `new Map()` _userNameCache / _appNameCache. Pre-fix the
 // caches grew unboundedly across the server's lifetime (one entry per unique

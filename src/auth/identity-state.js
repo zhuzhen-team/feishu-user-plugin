@@ -150,7 +150,12 @@ async function withIdentityFallback({ client, uatFn, botFn, label }) {
       uatErr = e;
     }
     if (uatResp && uatResp.code === 0) {
-      const data = { ...uatResp };
+      // Preserve the legacy _viaUser marker that 15+ _asUserOrApp callers read
+      // via `res._viaUser`. Without this flag, calendar/docs/bitable/wiki/okr/
+      // tasks/drive write tools labelled UAT-owned resources as viaUser:false,
+      // making users believe a bot created them. Caught by Codex review on
+      // PR #103 (P1 — set _viaUser on successful UAT results).
+      const data = { ...uatResp, _viaUser: true };
       return { data, via: 'uat', identity };
     }
     const cls = _classifyUatFailure(uatResp, uatErr);
