@@ -4,6 +4,57 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.13] - 2026-05-16
+
+紧急 patch — v1.3.12 release 后 Codex + Copilot PR #103 review 发现 1 P1 + 2 P2 + 5 polish，followup 又跑 5-agent 全仓 audit 找出 2 P1 (security) + 多个 doc/compliance 漂移。本版集中修复全部 issue + 把 fixture-based unit tests 拉进 CI gate。
+
+> **包含 v1.3.12 全部能力**（4 个 architectural root cause 收口 + `search_messages` UAT-only 工具 + CLI 工具模式 + SEO 改造 + 工程质量 + 战略性微调，85 工具）+ 以下修复。建议跳过 v1.3.12 直接升 v1.3.13。
+
+### Security
+
+- **oauth.js token leak（P1）**：`exchangeCode()` 之前会 `console.log('Token exchange raw response:', raw.slice(0, 500))` —— 完整 access_token + refresh_token 进 stderr。`saveToken()` 失败 fallback 路径还会 `console.error('  ${k}=${v}')` 把整个 token 字符串 dump 出来。改成只 log HTTP status + body 长度；fallback 用 `slice(0,6)…(N chars)` redact pattern（同 credentials.js migrate 风格）。
+
+### Fixed
+
+- **P1 — UAT-success 路径错标 viaUser:false（影响 v1.3.12 全部 UAT 写工具）**：`src/auth/identity-state.js` withIdentityFallback UAT 成功路径返回 shallow clone of response，但漏 set `_viaUser: true`。15+ `_asUserOrApp` callsites (calendar/docs/bitable/wiki/okr/tasks/drive) 读 `res._viaUser` 决定显示，没设的话全部 v1.3.12 UAT-owned 写显示 `viaUser:false` + 无 fallbackWarning，用户误以为 bot 创建。Fix：shallow-clone 时加 `_viaUser: true`，加 test-identity-state 断言 pin contract。
+
+- **P2 — credentials hot-reload 启动期空窗**：server.js main() 现在启动时调一次 `credMonitor.sync()`（在 verifyApp() 拿 officialClient 之后）。Pre-fix 第一次 sync 永远 silent baselining；server boot 跟 first tool call 之间用户跑 oauth 的话，会被错认为初始 baseline，hook 不 fire。
+
+- **P2 — cookie rotation 不 hot-reload**：server.js 现注册 `onCookieChange` hook 把 userClient 设 null。Pre-fix monitor detect LARK_COOKIE 变化但 server.js 没 hook，rotation 后 cookie-based 工具 (send_to_user / search_contacts / get_login_status / send_as_user / batch_send) 继续用 stale cookie 直到重启。
+
+- **read_messages via_user=true 错标 via='bot'**：`readMessagesWithFallback` 的 skipBot 分支默认 `via='bot'`，Path B (cookie 解析) 标 `via='contacts'` + reason='contacts_resolved_external'。via_user=true 显式调用混进了 contacts_resolved_external reason。Fix：handler 显式 pass `via: 'user'`；readMessagesWithFallback skipBot 分支按 `via === 'contacts'` 显式判断。
+
+### Changed
+
+- **observability — _populateSenderNames 加 unresolved id log**：getUserById / getAppName 失败时 return null 而 **不** reject，原 Promise.allSettled rejection log 漏掉这种 case。现在每个 batch 后单独 log 未解析 ids: `sender name unresolved (cached null) for N id(s): ou_xxx, ...`（与 v1.3.12 的 negative-cache sentinel 配合）。
+
+### CI / Process
+
+- **validate.yml 加 `npm test` + `check-changelog.js`**：之前 14 个 fixture-based unit tests 不在 PR gate 里，任何破坏它们的 PR 都能进 main；CHANGELOG section 缺失也不挡。现在两者都是 PR check 的一部分。
+- **test-lark-desktop.js 接入 npm test**：原是孤儿 standalone script，现在 export run() 被 test-all.js require。
+
+### Docs
+
+- CLAUDE.md 删除 stale "未实现:search_messages"（v1.3.12 已实装），换成"已删除"段（md ↔ wiki 双向同步 + Mermaid → 画板 都已删）。
+- CLAUDE.md 工具大类计数 reconcile 到 85：Drive 5 → 4，加 "跨域 Uploads (3)" 行，"插件层 4" → "多 profile 3" + 实时事件 2。
+- docs/REFACTOR-NOTES.md tools/ 子树补 tasks.js + events.js（v1.3.7 / v1.3.9 加但 doc 一直漏）；smoke 契约 "当前 84" → "当前 85"；events/ 子树第 layout 段已在 v1.3.12 加入。
+- docs/TOOLS.md IM section 工具列表补 `search_messages`；Drive section 拆成 Drive 4 + Uploads 3 跟实际 src/tools/ 一致。
+- docs/COMPARISON.md / CONTRIBUTING.md / .github/pull_request_template.md：84 → 85；COMPARISON.md "本仓：最新 v1.3.11" → v1.3.12。
+
+### 其他 polish
+
+- docs/CLIENT-COMPAT.md（v1.3.12 加的）：标题 "5 客户端" → "7 客户端"；Tools 列 ✓ 84 → ✓ 85；`feishu-user-plugin-1.3.11.mcpb` 改成 version-agnostic placeholder。
+- scripts/verify-app-name.js：错误 URL 插入实际 appId（之前是 `<appId>` 字面）。
+- src/test-lru-cache.js：fix stale header 引用 `src/utils/lru-cache.js` → `src/utils.js`。
+
+### Test scenarios
+
+- `npm test`：14 个 fixture-based test 全 pass（包含 v1.3.13 加的 `test-lark-desktop` wiring + identity-state `_viaUser=true` 断言）
+- `node scripts/verify-app-name.js`：当前 APP self_manage scope 已开 → 输出 `OK — app name resolves to "Claude聊天助手"`；错误路径打印的修复 URL 含实际 cli_xxx appId
+- 重启 Claude Code / Codex 后跑任何 UAT-owned 写工具（如 `create_doc` / `create_bitable` / `create_calendar_event` / `update_task`）→ 响应里 `viaUser:true`（而非 v1.3.12 的 `viaUser:false`）
+- 跑 `npx feishu-user-plugin oauth` 后**不重启**，下次 `get_login_status` 立即 Valid（hot-reload 启动期空窗已修）
+- 改 credentials.json 里的 LARK_COOKIE 字段后**不重启**，下次 cookie 工具如 `send_to_user` 会用新 cookie（onCookieChange hook 已注册）
+
 ## [1.3.12] - 2026-05-15
 
 主线：4 个 architectural root cause（A scope drift / B silent fallback / C LLM-unfriendly 数据 / D hot-reload 缺失）一次性收口 + 1 个新工具 `search_messages`（B.5 Protobuf 阶段二）+ CLI 工具模式（`tool` 子命令，复用 85 工具）+ SEO 改造（README h1 + repo description + 4 GitHub topics）+ 5 项工程质量（gitleaks 防 secret 误提交 / CHANGELOG 回填 v1.3.0-v1.3.2 / 客户端兼容矩阵 / 战略性微调 ×2）。工具数 84 → 85。

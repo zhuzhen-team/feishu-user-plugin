@@ -44,7 +44,9 @@
 - docx / bitable / drive / wiki / OKR / calendar / tasks 的 create+edit 默认 UAT-first —— UAT 优先、bot fallback，被迫走 bot 时返回里带 ⚠ warning。资源 ownership 与 caller 一致
 
 ## Official API — IM（16 tools）
-`list_chats` / `read_messages` / `send_message_as_bot` / `reply_message` / `forward_message` / `delete_message` / `update_message` / `add_reaction` / `delete_reaction` / `pin_message` / `create_group` / `update_group` / `list_members` / `manage_members` / `download_message_resource`
+`list_chats` / `read_messages` / `search_messages` / `send_message_as_bot` / `reply_message` / `forward_message` / `delete_message` / `update_message` / `add_reaction` / `delete_reaction` / `pin_message` / `create_group` / `update_group` / `list_members` / `manage_members` / `download_message_resource`
+
+- `search_messages`（v1.3.12, B.5）UAT-only：包 `POST /open-apis/search/v2/message`，需 OAuth scope `search:message`（飞书 bot path 不暴露搜索）。Filter 支持 `chat_ids` / `from_ids` / `at_user_ids` / `message_types` / `from_types` + 分页。返回 message-id 指针（不是 full bodies），跨多群搜索时 response token 友好
 
 - `read_messages` 解析 chat 名 → bot 群列表 → `im.chat.search` → cookie `search_contacts`。外部群自动 fallback 到 UAT。`merge_forward` 自动展开；text 消息会抽取 `urls[]` + `feishuDocs[]`（用 `expand_merge_forward=false` 关闭）
 - `update_message` 仅支持 `msg_type=text|interactive`（飞书限制；调 API 前就会被拒绝）
@@ -76,8 +78,9 @@
 - `update_wiki_node` 只能 patch `title`（飞书 wiki API 不接收内容编辑 —— 内容走 docx / bitable / sheet 工具）
 - `delete_wiki_node` 只删 wiki 节点指针；底层 drive 资源需另外 `manage_drive_file(action=delete)` 删
 
-## Official API — Drive（5 tools）
-`list_files` / `create_folder` / `manage_drive_file(action=copy|move|delete)` / `upload_image` / `upload_file` / `upload_drive_file`
+## Official API — Drive（4 tools）+ Uploads 辅助（3 tools）
+`list_files` / `create_folder` / `manage_drive_file(action=copy|move|delete)` / `upload_drive_file` — Drive 域（4）
+`upload_image` / `upload_file` / `upload_bitable_attachment` — 跨域上传辅助（3，分别用于 cookie 消息 / docx 媒体 / bitable 附件）
 
 - `manage_drive_file` 必传 `type`（`file/folder/docx/sheet/bitable/mindnote/slides`）—— 否则飞书报 1061002 / 1062501
 - `upload_drive_file` 带 `wiki_space_id` 时调 `attachToWiki(obj_type=file)` 把上传作为 Wiki 节点原子放置

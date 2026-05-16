@@ -22,9 +22,15 @@ jobs:
       - run: node scripts/check-tool-count.js
       - run: node scripts/check-scopes.js
       - run: node scripts/sync-server-json.js check
+      - run: node scripts/check-changelog.js
       - name: AGENTS.md is in sync with CLAUDE.md
         run: |
           tail -n +2 CLAUDE.md > /tmp/body.md
           { echo "# feishu-user-plugin — Codex 指令"; cat /tmp/body.md; } > /tmp/expected_AGENTS.md
           diff /tmp/expected_AGENTS.md AGENTS.md
       - run: npm run smoke
+      # v1.3.13: fixture-based unit tests now run in CI (Reviewer D P2).
+      # test-all.js's `main()` exits early when LARK_COOKIE is absent (CI
+      # has no creds); the bottom `.finally()` requires the 14 fixture
+      # unit tests regardless, so they always run.
+      - run: npm test
