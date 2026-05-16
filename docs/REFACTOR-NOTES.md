@@ -89,9 +89,11 @@ src/
     ├── bitable.js               # 19 个 bitable handler
     ├── messaging-user.js        # 10 个 send_*_as_user + batch_send + send_card_as_user
     ├── messaging-bot.js         # 8 个 bot 端 send/edit/reaction/pin
+    ├── tasks.js                 # 7 个 Tasks v2 handler（v1.3.7）
     ├── docs.js                  # 7 个 docs + block-edit handler
     ├── drive.js                 # 6 个 drive + upload_drive_file handler
-    ├── im-read.js               # 5 个 IM read handler + ChatIdMapper 单例
+    ├── im-read.js               # 6 个 IM read handler + ChatIdMapper 单例
+    │                            #   （含 v1.3.12 `search_messages` UAT-only）
     ├── wiki.js                  # 4 个 wiki read handler
     ├── contacts.js              # 4 个 contact lookup handler
     ├── groups.js                # 4 个 group 管理 handler
@@ -99,6 +101,8 @@ src/
     ├── calendar.js              # 3 个 calendar handler
     ├── okr.js                   # 3 个 OKR handler
     ├── uploads.js               # 3 个 upload handler
+    ├── events.js                # 2 个 WS 实时事件 handler
+    │                            #   （v1.3.9：get_new_events / manage_ws_status）
     └── profile.js               # 2 个 profile 管理 handler
 ```
 
@@ -165,7 +169,7 @@ src/
 
 `scripts/smoke.js` 是回归闸门。它冻结：
 
-- 工具数量（当前 84）
+- 工具数量（当前 85）
 - 每个 schema（排序、规范化）
 - `get_login_status` 响应的 shape
 

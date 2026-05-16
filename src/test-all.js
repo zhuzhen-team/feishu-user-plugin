@@ -363,5 +363,6 @@ main().catch(console.error).finally(() => {
     process.exitCode = 1;
   });
   require('./test-cli-tool').run();
+  require('./test-lark-desktop').run();
   require('./test-display-label');  // standalone — runs on require, exits non-zero on fail
 });

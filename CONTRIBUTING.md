@@ -46,7 +46,7 @@ post-v1.3.7 layout（参考 [docs/REFACTOR-NOTES.md](docs/REFACTOR-NOTES.md) 的
 ```
 feishu-user-plugin/
 ├── src/
-│   ├── index.js                       # MCP server entry (84 tools)
+│   ├── index.js                       # MCP server entry (85 tools)
 │   ├── server.js                      # Tool registry + dispatch
 │   ├── tools/                         # 各域 MCP 工具 schema + handler
 │   │   ├── _registry.js               # ctx 契约（factories / profile / resolveDocId）
@@ -88,7 +88,7 @@ feishu-user-plugin/
 |---|---|---|
 | `CLAUDE.md` staged | 自动同步到 `AGENTS.md`（hook 自己处理，不需要手动） | 看 `bash scripts/sync-claude-md.sh` 是否报错 |
 | `package.json` / `plugin.json` / `SKILL.md` / `.cursor-plugin/plugin.json` staged | 四个文件的 `version` 字段必须一致 | bump 四个一起 |
-| `src/server.js` / `src/tools/*` staged | `npm run smoke` —— 84 工具 schema diff；README "84 tools" 徽章 + SKILL.md `allowed-tools` 列表必须 = `src/server.js TOOLS` | `npm run smoke:baseline` 重写 baseline（**仅当工具增删改是有意的**），然后再 `npm run smoke` |
+| `src/server.js` / `src/tools/*` staged | `npm run smoke` —— 85 工具 schema diff；README "85 tools" 徽章 + SKILL.md `allowed-tools` 列表必须 = `src/server.js TOOLS` | `npm run smoke:baseline` 重写 baseline（**仅当工具增删改是有意的**），然后再 `npm run smoke` |
 | `src/*` staged | smoke test | 同上 |
 
 **别 `--no-verify`**。CI 会再跑一遍，本地跳过没意义。如果 hook 失败，**根因修了再 commit**——不要 `--amend` 上一次的 commit，hook 失败时 commit 没成功，amend 会改写**前一个**已成功的 commit。
@@ -106,7 +106,7 @@ post-v1.3.7 layout 后流程：
 4. **Baseline 更新** —— `npm run smoke:baseline` 写 baseline（**仅当增删改是有意的**），然后 `npm run smoke` 验证
 5. **Lint** —— `node -c <touched-files>`
 6. **更新 CLAUDE.md** —— 工具数 / 工具列表 / 用法说明（CLAUDE.md 是 source of truth；AGENTS.md + 技能引用 CLAUDE.md 由 pre-commit hook 自动派生）
-7. **更新 README.md** —— "84 tools" 徽章 + 工具索引表
+7. **更新 README.md** —— "85 tools" 徽章 + 工具索引表
 8. **更新 ROADMAP.md** —— 完成的 line 直接删除（forward-only，不打勾）
 9. **更新 SKILL.md `allowed-tools` 列表**
 

@@ -39,8 +39,9 @@ All-in-one 飞书 plugin for Claude Code，覆盖三层鉴权：
 - 用户身份消息（cookie protobuf，8）：`send_to_user` / `send_to_group` / `send_as_user` / `send_image_as_user` / `send_file_as_user` / `send_post_as_user` / `send_card_as_user` / `batch_send`
 - 用户身份联系人（cookie，5）：`search_contacts` / `create_p2p_chat` / `get_chat_info` / `get_user_info` / `get_login_status`
 - UAT P2P 读取（2）：`read_p2p_messages` / `list_user_chats`
-- 官方 API IM（16）、Docs（7）、Bitable（5）、Wiki（9）、Drive（5）、OKR（6）、Calendar（8）、Tasks v2（7）
-- 插件层 诊断 / 多 profile（4）+ 实时事件（2）
+- 官方 API IM（16，含 v1.3.12 `search_messages`）、Docs（7）、Bitable（5）、Wiki（9）、Drive（4）、OKR（6）、Calendar（8）、Tasks v2（7）
+- 跨域 Uploads（3）：`upload_image` / `upload_file` / `upload_bitable_attachment`
+- 插件层 多 profile（3）+ 实时事件（2）
 
 ## 必需环境变量
 
@@ -120,7 +121,7 @@ CI（`validate.yml`）每个 PR 跑 diff 校验两文件同步。
 - **协议变化**：cookie + protobuf 层依赖飞书 web 客户端协议，飞书更新可能失效（机器人能力不受影响）
 - **卡片**：cookie 通道发卡片服务端不可用，机器人通道可发
 - **Lark 国际版**：实时事件 WS 不支持
-- **未实现**：`search_messages`、md → wiki 同步（详见 [ROADMAP.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/ROADMAP.md)）
+- **不打算做**：md ↔ 飞书 wiki 双向无损同步（v1.3.4 起多次推迟，v1.3.12 决定不做）；Mermaid / PlantUML → 飞书画板（依赖 md ↔ wiki 主线，一并删）。详见 [ROADMAP.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/ROADMAP.md) 的"已删除"段
 
 更详尽的故障排查与每域工具限制见 [docs/TROUBLESHOOTING.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/TROUBLESHOOTING.md)。
 

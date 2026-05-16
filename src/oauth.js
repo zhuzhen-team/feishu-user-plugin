@@ -163,10 +163,16 @@ async function exchangeCode(code) {
     body: JSON.stringify(body),
   });
   const raw = await tokenRes.text();
-  console.log('Token exchange raw response:', raw.slice(0, 500));
+  // v1.3.13 security followup: don't log the full raw body — it contains the
+  // bare access_token + refresh_token. Log only the http status and a hint of
+  // success/failure; the parsed token never leaves this function except via
+  // saveToken (which writes the file with 0600 perms).
+  console.log(`Token exchange HTTP ${tokenRes.status} (body ${raw.length} bytes)`);
   let tokenData;
   try { tokenData = JSON.parse(raw); } catch (e) {
-    throw new Error(`Response not JSON: ${raw.slice(0, 200)}`);
+    // Parse error path: redact body in the thrown message so an upstream
+    // log line doesn't accidentally surface tokens.
+    throw new Error(`Response not JSON (HTTP ${tokenRes.status}, ${raw.length} bytes): ${raw.slice(0, 100).replace(/[A-Za-z0-9._-]{40,}/g, '<redacted>')}`);
   }
   if (tokenData.error) {
     throw new Error(`${tokenData.error}: ${tokenData.error_description}`);
@@ -199,8 +205,17 @@ function saveToken(tokenData) {
     if (ok) console.log(`Tokens written to ${profileLabel}`);
   }
   if (!ok) {
-    console.error('WARNING: Tokens could not be saved. Copy them manually:');
-    for (const [k, v] of Object.entries(updates)) console.error(`  ${k}=${v}`);
+    // v1.3.13 security followup: never dump full token bytes to stderr.
+    // Caller can find them by re-running OAuth or reading the credentials
+    // file. Show only the field shape so user knows what fields exist.
+    console.error('WARNING: Tokens could not be saved automatically. Re-run `npx feishu-user-plugin oauth` after fixing the config path, or check that `~/.feishu-user-plugin/credentials.json` is writable.');
+    console.error('Fields that would have been written (values redacted):');
+    for (const [k, v] of Object.entries(updates)) {
+      const preview = typeof v === 'string' && v.length > 0
+        ? `${v.slice(0, 6)}…(${v.length} chars)`
+        : '<empty>';
+      console.error(`  ${k}=${preview}`);
+    }
   }
 }
 

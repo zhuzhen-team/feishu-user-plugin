@@ -18,10 +18,10 @@
 
 | 维度 | 本仓 | lark-openapi-mcp |
 |------|------|-------------------|
-| 工具总数 | 84（全 production-ready） | 1271 endpoint，preset.default 默认 enable ~20 |
+| 工具总数 | 85（全 production-ready） | 1271 endpoint，preset.default 默认 enable ~20 |
 | 业务域 | 13 | 60 |
 | 工具命名 | `manage_bitable_record(action=create\|update\|delete\|search\|get)` 高级 action-dispatcher | `bitable.v1.appTableRecord.create` × 5 个独立 tool，机械 1:1 endpoint |
-| 测试覆盖 | 84/84 全有真飞书 API 测过 | 仅 preset 子集，README 注明 "Non-preset APIs ... AI may not perform optimally" |
+| 测试覆盖 | 85/85 全有真飞书 API 测过 | 仅 preset 子集，README 注明 "Non-preset APIs ... AI may not perform optimally" |
 
 工具命名差异对 AI agent 影响很直接：5 个独立的 `record.create` / `record.update` / `record.delete` / `record.batchUpdate` / `record.search` 让 LLM 在选工具时容易混淆；高级 dispatcher `manage_bitable_record(action=...)` 通过参数分发，选择面 1 而不是 5。
 
@@ -81,7 +81,7 @@
 
 ### 维护状态
 
-- 本仓：最新 v1.3.11（2026-05），活跃维护，本月 10+ PR
+- 本仓：最新 v1.3.12（2026-05），活跃维护，本月 10+ PR
 - lark-openapi-mcp：最新提交 2025-08-14，9 个月没动；README 头标 ⚠ Beta
 
 ## 二、覆盖广度差距
