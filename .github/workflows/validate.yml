@@ -23,6 +23,7 @@ jobs:
       - run: node scripts/check-scopes.js
       - run: node scripts/sync-server-json.js check
       - run: node scripts/check-changelog.js
+      - run: node scripts/check-broken-links.js
       - name: AGENTS.md is in sync with CLAUDE.md
         run: |
           tail -n +2 CLAUDE.md > /tmp/body.md

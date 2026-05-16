@@ -31,3 +31,8 @@ fi
 if git diff --cached --name-only | grep -q "^src/"; then
   npm run smoke || { echo "[hook] smoke test failed — fix before committing"; exit 1; }
 fi
+
+# Broken-link check when any .md changed
+if git diff --cached --name-only | grep -q "\.md$"; then
+  node scripts/check-broken-links.js || exit 1
+fi

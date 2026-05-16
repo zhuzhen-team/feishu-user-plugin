@@ -63,7 +63,15 @@
 
 **真实差异化**（不是物理性独家）：
 
-1. **零应用门槛**：cookie 路径不需要"创建飞书自建应用 → 申请 OAuth scope → 等管理员审批"。对个人开发者 / 调研 / 快速试，这门槛是真实成本（企业管理员审批可能数周）
+1. **零应用门槛（仅限用户身份发消息这块）**：cookie 路径不需要"创建飞书自建应用 → 申请 OAuth scope → 等管理员审批"。对个人开发者 / 调研 / 快速试，这门槛是真实成本（企业管理员审批可能数周）。
+
+   ⚠ **重要限定**：8 个 user-identity messaging 工具里只有部分真的零门槛：
+   - **真零应用门槛（5 个）**：`send_to_user` / `send_to_group` / `send_as_user` / `send_post_as_user` / `batch_send`（text/post 模式）—— 仅 cookie
+   - **仍需 LARK_APP_ID（2 个）**：`send_image_as_user` / `send_file_as_user` —— 发送本身走 cookie，但 `image_key` / `file_key` 必须先经 Official API 上传（`upload_image` / `upload_file`）
+   - **服务端禁了 cookie 通道（1 个）**：`send_card_as_user` —— 始终走 bot，需要 `LARK_APP_ID` + `LARK_APP_SECRET`
+
+   此外，本仓的其他能力（`read_messages` 读群消息、`manage_doc_block` 编辑文档、`manage_bitable_record` 操作表格、wiki / drive / calendar / tasks / OKR / 实时事件等）**仍然需要** `LARK_APP_ID` + `LARK_APP_SECRET`（也就是创建自建应用）。
+
 2. **协议路径多样**：cookie + protobuf 不依赖 OpenAPI，飞书改 OpenAPI 时本仓不受影响（反之飞书改 web 协议时本仓挂）
 3. **快速迭代的 wrapper**：本仓的 send 工具支持 `oc_xxx` 自动解析 numeric、merge_forward 自动展开、UAT-first + bot fallback ⚠ warning 等高级 wrapper
 
