@@ -86,6 +86,11 @@ async function run() {
   assert.equal(r1.data.ok, undefined, 'should pass through fields, not double-wrap');
   assert.equal(r1.data.data.ok, true);
   assert.equal(r1.viaReason, undefined, 'no fallback → no via_reason');
+  // PR #103 Codex P1 followup: UAT success must set the legacy _viaUser=true
+  // marker so 15+ _asUserOrApp callsites (calendar/docs/bitable/wiki/okr/tasks
+  // /drive) report viaUser:true. Without this flag downstream code thinks the
+  // resource was created by the bot.
+  assert.equal(r1.data._viaUser, true, 'UAT success path must mark _viaUser=true on response');
 
   // --- 8. withIdentityFallback: UAT returns 20064 → bot fallback, identity refined ---
   let botRan = false;

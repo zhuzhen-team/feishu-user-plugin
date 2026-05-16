@@ -199,11 +199,36 @@ class LarkOfficialClient {
     // dispatching N redundant API calls per read_messages on hot chats.
     // has(id)==true / get(id)==null lets _computeDisplayLabel fall back to
     // "(open_id)" exactly the same way as before.
+    //
+    // PR #103 Copilot followup: getUserById / getAppName return null on
+    // non-zero Feishu codes (e.g. 99991672, scope missing) WITHOUT rejecting,
+    // so the per-batch Promise.allSettled rejection log misses these. Log
+    // the ids that ended without a name as a separate stderr line so failure
+    // shape is observable regardless of whether the underlying lookup
+    // returned null or rejected.
+    const unresolvedUserIds = [];
     for (const id of unknownUserIds) {
-      if (!this._userNameCache.has(id)) this._userNameCache.set(id, null);
+      if (!this._userNameCache.has(id) || this._userNameCache.get(id) === null) {
+        this._userNameCache.set(id, null);
+        unresolvedUserIds.push(id);
+      }
     }
+    if (unresolvedUserIds.length) {
+      const sample = unresolvedUserIds.slice(0, 5).join(', ');
+      const tail = unresolvedUserIds.length > 5 ? ` (+${unresolvedUserIds.length - 5} more)` : '';
+      console.error(`[feishu-user-plugin] sender name unresolved (cached null) for ${unresolvedUserIds.length} id(s): ${sample}${tail}`);
+    }
+    const unresolvedAppIds = [];
     for (const id of unknownAppIds) {
-      if (!this._appNameCache.has(id)) this._appNameCache.set(id, null);
+      if (!this._appNameCache.has(id) || this._appNameCache.get(id) === null) {
+        this._appNameCache.set(id, null);
+        unresolvedAppIds.push(id);
+      }
+    }
+    if (unresolvedAppIds.length) {
+      const sample = unresolvedAppIds.slice(0, 5).join(', ');
+      const tail = unresolvedAppIds.length > 5 ? ` (+${unresolvedAppIds.length - 5} more)` : '';
+      console.error(`[feishu-user-plugin] app name unresolved (cached null) for ${unresolvedAppIds.length} id(s): ${sample}${tail}`);
     }
 
     // Step 4: populate senderName, isExternal, displayLabel

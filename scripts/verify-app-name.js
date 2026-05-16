@@ -51,7 +51,7 @@ async function main() {
   if (info.code === 99991672) {
     console.error('FAIL — code 99991672. The tenant-side scope `application:application:self_manage` is not granted.');
     console.error('Fix:');
-    console.error('  1. Open https://open.feishu.cn/app/<appId>/safe — "应用身份" tab');
+    console.error(`  1. Open https://open.feishu.cn/app/${appId}/safe — "应用身份" tab`);
     console.error('  2. Add scope `application:application:self_manage` (marked 免审权限 — no admin review needed)');
     console.error('  3. Save; no re-publish required');
     console.error('  4. Re-run this script to confirm');

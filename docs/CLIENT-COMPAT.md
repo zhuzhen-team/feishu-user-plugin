@@ -4,17 +4,17 @@
 
 > Last verified: v1.3.12 (2026-05-15)
 
-## 5 客户端 × 9 prompts × 85 tools 矩阵
+## 7 客户端 × 9 prompts × 85 tools 矩阵
 
 | Client | install path | MCP server start | Tools | Prompts (9) | Resources | Notes |
 |--------|--------------|------------------|-------|-------------|-----------|-------|
-| **Claude Code** | `~/.claude.json` mcpServers | ✓ | ✓ 84 | ✓ 9 (Skill + MCP Prompt 双暴露) | — | CI baseline (smoke 跑每个 PR) |
-| **Codex** | `~/.codex/config.toml` mcp_servers | ✓ | ✓ 84 | ✓ 9 (MCP Prompt only — Codex 不支持 Claude Code skill) | — | CI baseline (smoke 跑每个 PR) |
+| **Claude Code** | `~/.claude.json` mcpServers | ✓ | ✓ 85 | ✓ 9 (Skill + MCP Prompt 双暴露) | — | CI baseline (smoke 跑每个 PR) |
+| **Codex** | `~/.codex/config.toml` mcp_servers | ✓ | ✓ 85 | ✓ 9 (MCP Prompt only — Codex 不支持 Claude Code skill) | — | CI baseline (smoke 跑每个 PR) |
 | **Cursor** | `.cursor/mcp.json` (project) / `~/.cursor/mcp.json` (user) | ✓ install-verified | ✓ install-verified | ⚠ MCP prompts/get 协议支持但 Cursor UI 怎么暴露需用户实测 | — | 安装路径 v1.3.11 ship 过 `.cursor-plugin/plugin.json` manifest，Cursor Marketplace 提交材料就绪 |
 | **Windsurf** | `~/.codeium/windsurf/mcp_config.json` | ✓ install-verified | ✓ install-verified | ⚠ 同上（用户实测） | — | 国内访问 Codeium 需要科学上网 |
 | **OpenClaw** | `~/.openclaw/openclaw.json` mcp.servers | ✓ install-verified | ✓ install-verified | ⚠ 同上（用户实测） | — | 字节亲生 AI Agent 框架；本仓和官方 `larksuite/openclaw-lark` 并行（功能不同） |
 | **VS Code (Copilot)** | `.vscode/mcp.json` | ✓ install-verified | ✓ install-verified | ⚠ 同上（用户实测） | — | 注意 key 是 `servers` 不是 `mcpServers` |
-| **Claude Desktop** | `.mcpb` 包安装 | ✓ install-verified | ✓ install-verified | ⚠ 同上（用户实测） | — | v1.3.11 ship 过 `.mcpb/manifest.json`，`node scripts/build-mcpb.js` 产出 `dist/feishu-user-plugin-1.3.11.mcpb` |
+| **Claude Desktop** | `.mcpb` 包安装 | ✓ install-verified | ✓ install-verified | ⚠ 同上（用户实测） | — | v1.3.11 ship 过 `.mcpb/manifest.json`；`node scripts/build-mcpb.js` 产出 `dist/feishu-user-plugin-<version>.mcpb`（当前 release v1.3.12） |
 
 ## 9 个 MCP Prompts 在各客户端的暴露
 

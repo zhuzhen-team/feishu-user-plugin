@@ -332,6 +332,17 @@ credMonitor.onUatChange((env) => {
   console.error('[feishu-user-plugin] UAT reloaded from credentials.json (no restart needed)');
 });
 
+credMonitor.onCookieChange(() => {
+  // Cookie rotation: null the LarkUserClient singleton so the next
+  // getUserClient() call rebuilds it with the fresh cookie from env.
+  // Without this, cookie-based tools (send_to_user / search_contacts /
+  // get_login_status / send_as_user / batch_send) keep using the stale
+  // cookie until restart. PR #103 Codex P2 followup.
+  if (!userClient) return;
+  userClient = null;
+  console.error('[feishu-user-plugin] cookie rotation detected — userClient nulled, rebuilds on next tool call');
+});
+
 credMonitor.onCacheInvalidate(() => {
   if (officialClient) identityState.invalidateIdentity(officialClient);
 });
@@ -567,6 +578,11 @@ async function main() {
       console.error(`[feishu-user-plugin] WARNING: Could not verify APP_ID (${e.message}); network issue or cold start. Proceeding anyway.`);
     }
   }
+
+  // Baseline credMonitor at startup so any credential changes between server
+  // boot and the first tool call fire hooks instead of being silently absorbed
+  // by the first sync()'s baselining branch. PR #103 Codex P2 followup.
+  credMonitor.sync();
 
   // --- Real-time events (v1.3.9 — owner-arbitrated) ---
   if (hasApp) {
