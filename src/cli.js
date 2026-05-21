@@ -248,9 +248,10 @@ async function keepalive() {
       const needSwitch = all && prevActive !== profileName;
       try {
         if (needSwitch) cred.setActiveProfile(profileName);
-        // Set process.env so LarkOfficialClient.loadUAT() picks the right tokens
-        process.env.LARK_USER_ACCESS_TOKEN = env.LARK_USER_ACCESS_TOKEN;
-        process.env.LARK_USER_REFRESH_TOKEN = env.LARK_USER_REFRESH_TOKEN;
+        // v1.3.14 — direct field assignment is the source of truth; do NOT
+        // also set process.env (previous comment claimed LarkOfficialClient
+        // would read process.env, but loadUAT() is dead code and process.env
+        // pollution leaked between iterations of the --all loop).
         const official = new LarkOfficialClient(env.LARK_APP_ID, env.LARK_APP_SECRET);
         official._uat = env.LARK_USER_ACCESS_TOKEN;
         official._uatRefresh = env.LARK_USER_REFRESH_TOKEN;

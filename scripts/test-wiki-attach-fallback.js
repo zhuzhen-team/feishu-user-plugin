@@ -15,6 +15,13 @@ if (!creds.LARK_APP_ID || !creds.LARK_APP_SECRET || !creds.LARK_USER_ACCESS_TOKE
   process.exit(77); // POSIX skip code
 }
 
+// v1.3.14 — `loadUAT()` reads from process.env, but `readCredentials()` reads
+// from canonical store or harness env. Without backfill, the early-skip guard
+// above would pass (creds has the UAT) but loadUAT() below would silently
+// no-op (process.env doesn't), so the test would run with an empty UAT
+// against the mocked-attachToWiki path.
+require('../src/auth/env-backfill').backfillFromCanonical();
+
 (async () => {
   const { LarkOfficialClient } = require('../src/clients/official');
   const client = new LarkOfficialClient(creds.LARK_APP_ID, creds.LARK_APP_SECRET);

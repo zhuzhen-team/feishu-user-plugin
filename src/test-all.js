@@ -4,6 +4,12 @@
  * Sends test messages to "飞书plugin测试群".
  */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+
+// v1.3.14 — backfill process.env from canonical credentials store so
+// `npm test` works for users who moved creds to ~/.feishu-user-plugin/.
+// See src/auth/env-backfill.js for full rationale.
+require('./auth/env-backfill').backfillFromCanonical();
+
 const { LarkUserClient } = require('./clients/user');
 const { LarkOfficialClient } = require('./clients/official');
 
@@ -333,6 +339,11 @@ main().catch(console.error).finally(() => {
     console.error('with-uat-retry: FAIL', e);
     process.exitCode = 1;
   });
+  require('./test-uat-lifecycle').run().catch(e => {
+    console.error('uat-lifecycle: FAIL', e);
+    process.exitCode = 1;
+  });
+  require('./test-cookie-heartbeat').run();
   require('./test-populate-sender-names').run().catch(e => {
     console.error('populate-sender-names: FAIL', e);
     process.exitCode = 1;

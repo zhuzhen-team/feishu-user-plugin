@@ -28,13 +28,36 @@ const path = require('path');
 const os = require('os');
 const { fetchWithTimeout } = require('../utils');
 
+// One-warning-per-malformed-token tracker. Without this, a persistently bad
+// JWT would flood stderr every tool call (getValidUAT calls decode whenever
+// _uatExpires falsy, which it stays at 0 if decode returns 0). 1024-entry cap
+// is conservative — real tokens are rotated rarely; cap prevents OOM in the
+// unlikely event of a malformed-token spray.
+const _warnedMalformedTokens = new Set();
+function _markWarnedMalformedToken(token) {
+  if (typeof token !== 'string' || token.length === 0) return false;
+  const key = require('crypto').createHash('sha256').update(token, 'utf8').digest('hex').slice(0, 16);
+  if (_warnedMalformedTokens.has(key)) return false;
+  if (_warnedMalformedTokens.size >= 1024) _warnedMalformedTokens.clear();
+  _warnedMalformedTokens.add(key);
+  return true;
+}
+
 function decodeTokenExpiry(token) {
   try {
     const payload = token?.split('.')?.[1];
     if (!payload) return 0;
     const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
     return typeof data.exp === 'number' ? data.exp : 0;
-  } catch (_) {
+  } catch (e) {
+    // Log breadcrumb so silently-malformed UATs are observable, but only once
+    // per distinct bad token (hashed). We still return 0 (caller treats 0 as
+    // "never decoded — let refresh path decide") instead of throwing, because
+    // a bad JWT shouldn't crash tool dispatch — the next 99991663/99991668
+    // response will trigger refresh anyway.
+    if (_markWarnedMalformedToken(token)) {
+      console.error(`[feishu-user-plugin] decodeTokenExpiry: malformed JWT payload (${e.message}); will rely on Feishu rejection for refresh trigger`);
+    }
     return 0;
   }
 }
@@ -73,7 +96,12 @@ function adoptPersistedUATIfNewer(client) {
 }
 
 function uatLockPath() {
-  return path.join(os.homedir(), '.claude', 'feishu-uat-refresh.lock');
+  // v1.3.14: moved from ~/.claude/feishu-uat-refresh.lock to canonical
+  // ~/.feishu-user-plugin/ so Codex-only / non-Claude-Code users (whose
+  // ~/.claude/ may not exist) still get cross-process mutual exclusion.
+  // Mixed-version concern is N/A — running two different versions of this
+  // plugin in parallel is not a supported configuration.
+  return path.join(os.homedir(), '.feishu-user-plugin', 'uat-refresh.lock');
 }
 
 async function acquireRefreshLock(lockPath, { staleMs = 30000, pollMs = 200, timeoutMs = 20000 } = {}) {
@@ -105,13 +133,32 @@ function releaseRefreshLock(lockPath) {
 }
 
 async function refreshUAT(client) {
+  // v1.3.14 — Pre-lock cheap path: maybe a peer process already refreshed and
+  // persisted a valid token. Adopt it before paying for the file lock. This
+  // dramatically reduces lock contention in deployments with 10+ concurrent
+  // MCP server processes (one per Claude Code session).
+  let now = Math.floor(Date.now() / 1000);
+  if (adoptPersistedUATIfNewer(client) && client._uatExpires > now + 300) {
+    return client._uat;
+  }
+
   const lockPath = uatLockPath();
   const acquired = await acquireRefreshLock(lockPath);
   if (!acquired) {
-    console.error('[feishu-user-plugin] UAT refresh lock timed out; proceeding without mutual exclusion');
+    // Lock timed out (>20s of contention). Before falling through to an
+    // un-coordinated refresh — which can burn the refresh_token chain on the
+    // Feishu side — give disk one more chance: a peer may have written a
+    // fresh token between our pre-check and now.
+    now = Math.floor(Date.now() / 1000);
+    if (adoptPersistedUATIfNewer(client) && client._uatExpires > now + 300) {
+      return client._uat;
+    }
+    console.error('[feishu-user-plugin] UAT refresh lock timed out; proceeding without mutual exclusion (this may burn refresh_token chain — investigate if it happens often)');
   }
   try {
-    const now = Math.floor(Date.now() / 1000);
+    // Inside the lock: re-check disk one more time. Between acquireRefreshLock
+    // returning and this point, another holder may have released after writing.
+    now = Math.floor(Date.now() / 1000);
     if (adoptPersistedUATIfNewer(client) && client._uatExpires > now + 300) {
       return client._uat;
     }
@@ -128,7 +175,28 @@ async function refreshUAT(client) {
     });
     const data = await res.json();
     const tokenData = data.access_token ? data : data.data;
-    if (!tokenData?.access_token) throw new Error(`UAT refresh failed: ${JSON.stringify(data)}. Run: npx feishu-user-plugin oauth`);
+    if (!tokenData?.access_token) {
+      // v1.3.14 — never dump the raw response body. Some Feishu error paths
+      // echo back portions of the request including refresh_token bytes, and
+      // this message bubbles up to Error.message → MCP content[0].text →
+      // LLM transcript. Surface only the structured error code/msg.
+      const errCode = data?.error ?? data?.code ?? 'unknown';
+      const errMsg = data?.error_description ?? data?.msg ?? '(no error message from Feishu)';
+      // Distinguish refresh_token rejection (must re-oauth) from transient
+      // server-side errors so the identity state machine can flip to
+      // UAT_REVOKED, and withIdentityFallback can give the LLM clear guidance.
+      const isInvalidGrant = errCode === 'invalid_grant' || errCode === 20064;
+      if (isInvalidGrant) {
+        try {
+          const { _refineIdentity, IdentityState } = require('./identity-state');
+          _refineIdentity(client, IdentityState.UAT_REVOKED);
+        } catch (_) { /* identity-state may not be loaded in CLI subcommands; non-fatal */ }
+        const err = new Error('UAT refresh_token rejected by Feishu (invalid_grant). The 7-day refresh chain is broken. Run: npx feishu-user-plugin oauth to re-authorize.');
+        err.uatRevoked = true;
+        throw err;
+      }
+      throw new Error(`UAT refresh failed (code=${errCode}: ${errMsg}). If persistent, run: npx feishu-user-plugin oauth.`);
+    }
     client._uat = tokenData.access_token;
     client._uatRefresh = tokenData.refresh_token || client._uatRefresh;
     const expiresIn = typeof tokenData.expires_in === 'number' && tokenData.expires_in > 0 ? tokenData.expires_in : 7200;
@@ -164,9 +232,15 @@ async function withUAT(client, fn) {
   } catch (err) {
     const cls = classifyError(err);
     if (cls.action === 'retry') {
-      return fn(uat);
+      // v1.3.14 — fall through into the auth-code check below instead of
+      // returning the retry result raw. A token rotated between our first
+      // attempt and the retry (peer process refreshed) can manifest as a
+      // 99991663/99991668 in the retry response, and we want refreshUAT to
+      // run before bubbling that up as a hard failure.
+      data = await fn(uat);
+    } else {
+      throw err;
     }
-    throw err;
   }
 
   if (data.code === 99991668 || data.code === 99991663 || data.code === 99991677) {
@@ -242,4 +316,9 @@ module.exports = {
   asUserOrApp,
   persistUAT,
   adoptPersistedUATIfNewer,
+  // v1.3.14 — exposed for testing (lifecycle + race tests). Not part of the
+  // stable API; do not use outside src/test-* or scripts/test-* harnesses.
+  uatLockPath,
+  acquireRefreshLock,
+  releaseRefreshLock,
 };

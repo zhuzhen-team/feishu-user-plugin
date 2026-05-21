@@ -144,7 +144,7 @@ mcp call manage_ws_status --action claim --force true
 - **协议变化**：cookie + protobuf 层依赖飞书 web 客户端的协议，飞书更新可能失效（机器人能力不受影响）
 - **卡片**：cookie 通道发卡片服务端不可用，机器人通道可发
 - **Lark 国际版**：实时事件 WS 不支持
-- **未实现**：`search_messages`、md → wiki 同步（详见 [ROADMAP.md](ROADMAP.md)）
+- **已删除**：md → wiki 双向同步（飞书 wiki block schema 离散度高，无损往返不现实）、Mermaid → 飞书画板（依赖 wiki 主线一并删）。详见 [ROADMAP.md](ROADMAP.md) 的"已删除"段
 
 ## 文档
 

@@ -84,7 +84,22 @@ function _refineIdentity(client, state) {
 // should keep the original VALID_USER state and just record the via_reason).
 function _classifyUatFailure(uatResp, uatError) {
   if (uatError) {
-    const msg = uatError.message || String(uatError);
+    // v1.3.14 — explicit short-circuit when refreshUAT set `err.uatRevoked`.
+    // Lets refresh-side rejections (invalid_grant from /authen/v2/oauth/token)
+    // flow into the same UAT_REVOKED state as tool-call-side 20064 responses,
+    // and lets `withIdentityFallback` build a clear "请重跑 oauth" warning.
+    if (uatError.uatRevoked) {
+      return {
+        state: IdentityState.UAT_REVOKED,
+        viaReason: 'as user: refresh_token rejected by Feishu (invalid_grant)',
+      };
+    }
+    // v1.3.14 — redact base64-ish tokens (40+ chars of [A-Za-z0-9._-]) in
+    // case an upstream throw site leaked refresh_token or access_token bytes
+    // into the error message. Defense-in-depth on top of uat.js::refreshUAT
+    // which already avoids dumping the raw response body.
+    const rawMsg = uatError.message || String(uatError);
+    const msg = rawMsg.replace(/[A-Za-z0-9._-]{40,}/g, '<redacted>');
     // Network/JSON parse errors don't refine identity — UAT is still presumed
     // valid, we just couldn't reach Feishu this call.
     return { state: null, viaReason: `as user: ${msg}` };
@@ -206,4 +221,5 @@ module.exports = {
   invalidateIdentity,
   _refineIdentity, // exported for D's CredentialsMonitor hook (private API)
   _readInMemoryState, // exported for testing edge cases (private API)
+  _classifyUatFailure, // v1.3.14 — exported for testing redact + uatRevoked wiring
 };

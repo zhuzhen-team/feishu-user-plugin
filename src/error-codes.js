@@ -27,7 +27,8 @@ const FAILURE_MAP = {
   19001:  { action: 'uat', reason: 'bot_chat_not_found' },
 
   // UAT revoked — refresh_token explicitly invalid_grant (user revoked OAuth
-  // or 30-day window elapsed). The live trigger for this code lives in
+  // or the 7-day refresh_token window elapsed without any successful refresh
+  // to roll it forward). The live trigger for this code lives in
   // identity-state.js::_classifyUatFailure (UAT REST throws / returns 20064);
   // this entry exists for *symmetry* — should a bot-side surface ever return
   // 20064 (it shouldn't, bot uses app_access_token not refresh_token), the

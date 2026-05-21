@@ -18,7 +18,15 @@
 ## 发版步骤
 
 1. 与用户确认目标版本（一次）
-2. Bump `version` 字段：`package.json` + `.claude-plugin/plugin.json` + `skills/feishu-user-plugin/SKILL.md` + `.cursor-plugin/plugin.json`（4 个 —— 单 commit；`scripts/check-version.js` 强制 4 源等价；`mcp-registry.json` 与 `.mcpb/manifest.json` 由各自的 check 脚本单独校验）
+2. Bump `version` 字段：**6 处必须同时改**（v1.3.14 收口后明确）—— 单 commit
+   - `package.json::version`
+   - `.claude-plugin/plugin.json::version`
+   - `.cursor-plugin/plugin.json::version`
+   - `skills/feishu-user-plugin/SKILL.md::version`
+   - `mcp-registry.json::version` **+ `mcp-registry.json::packages[0].version`**（两个字段都要）
+   - `.mcpb/manifest.json::version`
+   - `server.json` 由 `node scripts/sync-server-json.js` 自动 regen，不必手 bump
+   - 校验脚本分布：`check-version.js`（前 4 源等价）+ `check-mcp-registry-version.js`（mcp-registry 两个字段）+ `check-mcpb-version.js`（.mcpb manifest）。validate.yml + publish.yml 都跑全套。**漏 bump 任何一处都会让 PR / publish step 失败**。
 3. 开 release PR，等 CI 绿（仓启用 auto-merge —— `gh pr merge --auto --squash`）
 4. PR merge 后，`git tag vX.Y.Z && git push origin vX.Y.Z` 触发 GitHub Actions `Publish to npm` workflow
 5. 验证：`npm view feishu-user-plugin version` 返回新版本

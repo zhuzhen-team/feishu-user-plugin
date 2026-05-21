@@ -21,16 +21,21 @@ class LarkOfficialClient {
   }
 
   // --- UAT (User Access Token) Management ---
+  //
+  // v1.3.14 — preferred entry is src/server.js::loadUATFromEnv(client, env),
+  // which reads from a specific env block (credentials.json profile or harness
+  // env) rather than from process.env. `loadUAT()` below is kept for backward
+  // compat with `src/test-all.js` and any external callers, but new code in
+  // this repo should NOT use it — it can't see credentials.json profiles and
+  // doesn't participate in the profile-switch hot-reload path.
 
+  /** @deprecated v1.3.14 — use server.loadUATFromEnv(client, env) instead. */
   loadUAT() {
     const token = process.env.LARK_USER_ACCESS_TOKEN;
-    const refresh = process.env.LARK_USER_REFRESH_TOKEN;
-    const expires = parseInt(process.env.LARK_UAT_EXPIRES || '0');
-    if (token) {
-      this._uat = token;
-      this._uatRefresh = refresh || null;
-      this._uatExpires = expires || this._decodeTokenExpiry(token);
-    }
+    if (!token) return;
+    this._uat = token;
+    this._uatRefresh = process.env.LARK_USER_REFRESH_TOKEN || null;
+    this._uatExpires = parseInt(process.env.LARK_UAT_EXPIRES || '0') || this._decodeTokenExpiry(token);
   }
 
   get hasUAT() {

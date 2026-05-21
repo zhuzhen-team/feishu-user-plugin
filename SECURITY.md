@@ -55,7 +55,7 @@ This project handles three credential types. The threat model differs per layer:
 ### `LARK_USER_ACCESS_TOKEN` + `LARK_USER_REFRESH_TOKEN` (OAuth UAT)
 
 - **Risk if leaked**: user-level OAuth access subject to granted scopes; refresh token gives 7-day rotation window.
-- **Auto-refresh path**: `~/.claude/feishu-uat-refresh.lock` cross-process file lock (`O_CREAT|O_EXCL`, 30s stale) prevents concurrent refresh. Vulnerabilities in this path are in scope.
+- **Auto-refresh path**: `~/.feishu-user-plugin/uat-refresh.lock` cross-process file lock (`O_CREAT|O_EXCL`, 30s stale; v1.3.14+ — pre-v1.3.14 was at `~/.claude/feishu-uat-refresh.lock`) prevents concurrent refresh. Vulnerabilities in this path are in scope.
 
 ### Out of scope
 

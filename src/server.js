@@ -83,8 +83,15 @@ let nonOwnerPollTimer = null;
 let _ownerStartCallbacks = [];
 
 // Lark Desktop reactor state (v1.3.11 §A) — owned by the heartbeat callback.
+// v1.3.14 — `_lastSwitchAt = 0` was previously misinterpreted as "no recent
+// switch" by the lark-desktop reactor's debounce, so a cold-start owner that
+// hadn't observed any switch would still fire-on-first-tick if the snapshot
+// looked stale. We rebaseline `_lastSwitchAt` to the owner-claim wallclock on
+// first reactor invocation so the cold start window has the same debounce
+// budget as a long-running owner. See `_runLarkDesktopReactor` below.
 let _lastHashMtimes = {};
 let _lastSwitchAt = 0;
+let _reactorFirstTickDone = false;
 const _seenUnboundHashes = new Set();
 
 function _onBecomeOwner(cb) { _ownerStartCallbacks.push(cb); }
@@ -157,11 +164,14 @@ function getOfficialClient() {
   return officialClient;
 }
 
-// Mirror of LarkOfficialClient.loadUAT() but sourced from a specific env block
-// instead of process.env, so credentials.json profiles work uniformly. Also
-// the hot-reload entry point used by credMonitor.onUatChange: when `env` has
-// no UAT (user nuked the token), clear the in-memory copy instead of
+// UAT loader sourced from a specific env block (credentials.json profile or
+// harness env). Used both at startup and as the hot-reload entry point from
+// credMonitor.onUatChange. When `env` has no UAT (user nuked the token via
+// `oauth` --revoke or manual edit), clears the in-memory copy instead of
 // silently leaving the stale token in place.
+//
+// v1.3.14 — replaced the dead `LarkOfficialClient.loadUAT()` helper that
+// read from process.env. All UAT loading now goes through this function.
 function loadUATFromEnv(client, env) {
   const token = env?.LARK_USER_ACCESS_TOKEN || null;
   const refresh = env?.LARK_USER_REFRESH_TOKEN || null;
@@ -274,6 +284,14 @@ function _credMtime() {
 // the WS client with the new profile's events list).
 function _runLarkDesktopReactor() {
   const ld = require('./auth/lark-desktop');
+  // v1.3.14 — cold-start debounce: prevent the first reactor tick from
+  // treating a long-pre-existing snapshot as a "recent switch". By stamping
+  // _lastSwitchAt at first tick we give the debounce the same baseline as a
+  // long-running owner that just hot-took-over.
+  if (!_reactorFirstTickDone) {
+    _reactorFirstTickDone = true;
+    if (_lastSwitchAt === 0) _lastSwitchAt = Date.now();
+  }
   const out = ld.detectSwitch({
     prevSnapshot: _lastHashMtimes,
     lastSwitchAt: _lastSwitchAt,

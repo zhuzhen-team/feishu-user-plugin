@@ -26,7 +26,7 @@ src/
 │                                #   分类 bot-side 错误码；UAT-side 错误码（20064
 │                                #   invalid_grant 等）的分类在 auth/identity-state.js
 ├── doc-blocks.js                # docx block 构造器
-├── oauth.js / oauth-auto.js     # OAuth CLI 流程 + Playwright helper
+├── oauth.js                     # OAuth CLI 流程（v1.3.14 起 oauth-auto.js Playwright helper 已删除）
 ├── cli.js                       # `npx feishu-user-plugin <cmd>` 入口
 ├── setup.js                     # setup CLI 向导
 ├── config.js                    # MCP-config discovery + atomic 持久化
