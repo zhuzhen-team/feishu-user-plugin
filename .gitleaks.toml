@@ -49,6 +49,11 @@ paths = [
   '''README\.en\.md$''',
   '''tests/fixtures/''',
   '''scripts/test-uat-race.*\.js$''',
+  # v1.3.14 — fixture-based unit tests construct mock JWT-shaped strings
+  # to exercise redact regex + flood-gate + invalid_grant paths. They
+  # contain no real tokens; the strings are explicitly synthetic.
+  '''src/test-uat-lifecycle\.js$''',
+  '''src/test-cookie-heartbeat\.js$''',
   '''\.gitleaks\.toml$''',
 ]
 regexes = [

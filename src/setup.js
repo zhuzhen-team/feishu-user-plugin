@@ -102,10 +102,12 @@ async function main() {
   // Validate app credentials
   console.log('\nValidating app credentials...');
   try {
-    const res = await fetch('https://open.feishu.cn/open-apis/auth/v3/app_access_token/internal', {
+    const { fetchWithTimeout } = require('./utils');
+    const res = await fetchWithTimeout('https://open.feishu.cn/open-apis/auth/v3/app_access_token/internal', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ app_id: appId, app_secret: appSecret }),
+      timeoutMs: 10000,
     });
     const data = await res.json();
     if (data.app_access_token) {

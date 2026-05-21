@@ -170,6 +170,11 @@ function createCredentialsMonitor({ path: credPath = DEFAULT_PATH } = {}) {
       lastRefreshHash = _fieldHash(env, 'LARK_USER_REFRESH_TOKEN');
       lastMtimeMs = stat.mtimeMs;
     }
+    // v1.3.14 — always mark initialized after forceInvalidate, even when
+    // canonical was null. Without this, a subsequent sync() that finds the
+    // file existing would treat the first read as baselining (silent) and
+    // swallow the hook fire that should signal "file appeared".
+    _initialized = true;
   }
 
   return {

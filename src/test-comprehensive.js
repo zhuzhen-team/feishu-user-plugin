@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 /**
  * Comprehensive test: exercises every tool category in feishu-user-plugin.
- * Reads credentials from .env, tests each layer independently.
+ * Reads credentials from .env, then backfills from canonical store. Tests
+ * each layer independently.
  */
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+// v1.3.14 — let users on canonical store run this without exporting env vars
+// or maintaining a stale .env. .env still wins via dotenv when present.
+require('./auth/env-backfill').backfillFromCanonical();
 
 const { LarkUserClient } = require('./clients/user');
 const { LarkOfficialClient } = require('./clients/official');
@@ -274,7 +278,8 @@ async function testUAT() {
 }
 
 async function main() {
-  console.log('=== feishu-user-plugin v1.1.3 — Comprehensive Test ===\n');
+  const pkgVersion = require('../package.json').version;
+  console.log(`=== feishu-user-plugin v${pkgVersion} — Comprehensive Test ===\n`);
 
   await testUserIdentity();
   console.log('');

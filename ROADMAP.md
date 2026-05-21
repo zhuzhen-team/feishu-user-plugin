@@ -4,11 +4,11 @@
 >
 > 战略定位：聚焦官方做不到 / 做不好的差异化（cookie + protobuf 用户身份路径 + 文档生态 + 实时事件 SSOT + 多 profile 自动切换 + MCP 协议原生）。明确**不再扩展**与官方重叠的业务系统域（mail / approval / attendance / hr / minutes 等）。详见 [docs/COMPARISON.md](./docs/COMPARISON.md)。
 
-## v1.3.13+ 待办
+## v1.3.15+ 待办
 
 （暂空，等下一个 release 周期定）
 
-v1.3.12 主线（4 个架构 root cause 修复 + `search_messages` + CLI 化 + SEO + 工程质量 + 战略性微调）已全部 ship — 见 [CHANGELOG.md v1.3.12 entry](./CHANGELOG.md)。
+v1.3.14 OAuth / UAT 子系统深度优化（跨进程锁路径迁移到 canonical home + cookie heartbeat ws-owner 单跑 + invalid_grant → UAT_REVOKED 状态机贯通 + 三层 adopt race-shield + 27 个新 fixture 测试 + token-leak 收紧）已 ship — 见 [CHANGELOG.md v1.3.14 entry](./CHANGELOG.md)。前序版本 v1.3.12 / v1.3.13 见同 CHANGELOG。
 
 ## 已调研但暂不实施
 

@@ -83,12 +83,12 @@ const BLOCK_LABELS = {
     process.exit(1);
   }
   const c = new LarkOfficialClient(env.LARK_APP_ID, env.LARK_APP_SECRET);
-  // loadUAT() reads process.env directly — propagate if we got tokens from
-  // the .claude.json fallback path, where process.env is not populated.
-  for (const k of ['LARK_USER_ACCESS_TOKEN', 'LARK_USER_REFRESH_TOKEN']) {
-    if (env[k] && !process.env[k]) process.env[k] = env[k];
-  }
-  if (env.LARK_USER_ACCESS_TOKEN) c.loadUAT();
+  // loadUAT() reads process.env directly. v1.3.14 — use the shared backfill
+  // helper instead of the inline 2-key copy this script previously did
+  // (LARK_UAT_EXPIRES was missing from the manual loop, leading to silent
+  // token-expires-zero issues on the probe path).
+  require('../src/auth/env-backfill').backfillFromCanonical();
+  if (process.env.LARK_USER_ACCESS_TOKEN) c.loadUAT();
 
   // --- Fetch blocks ---
   // NOTE: getDocBlocks fetches up to 500 blocks (no pagination). Docs longer

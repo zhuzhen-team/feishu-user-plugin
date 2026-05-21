@@ -27,15 +27,63 @@
 
 ## UAT refresh 失败 `invalid_grant`
 
-Refresh token 过期或被撤销 —— 自动刷新无法恢复。
+Refresh token 过期或被撤销 —— 自动刷新无法恢复。v1.3.14 起错误消息会显式提示 `UAT refresh_token rejected by Feishu (invalid_grant). The 7-day refresh chain is broken.`，并把 identity state 标记为 `UAT_REVOKED`。
 
-**修**：`npx feishu-user-plugin oauth`，然后重启 Claude Code / Codex 让运行中的 MCP 进程重新加载新 token。
+**修**：`npx feishu-user-plugin oauth`，然后重启 Claude Code / Codex 让运行中的 MCP 进程重新加载新 token（v1.3.12 起 hot-reload 已生效，多数情况下**不必**重启，credentials-monitor 会在下次工具调用时同步）。
 
 v1.3.5+ 已硬化"6 个 MCP 进程同时刷 UAT 把 refresh_token 烧光"这种 case：
 
-- 跨进程文件锁 `~/.claude/feishu-uat-refresh.lock`（`O_CREAT|O_EXCL`，30 秒 stale）
+- 跨进程文件锁 `~/.feishu-user-plugin/uat-refresh.lock`（v1.3.14 起从 `~/.claude/` 搬到这里以支持 Codex-only 用户；`O_CREAT|O_EXCL`，30 秒 stale）
 - 锁持有者在 critical section 里重读持久化 config，如果 peer 已经 rotate 过 token 就采用新的
+- v1.3.14 起：锁外预检 + 锁失败再检 + 锁内再检 —— 三次磁盘 adopt 减少重复 refresh 概率
 - `get_login_status` 实跑一次 UAT health check（`listChatsAsUser({pageSize:1})`）—— 不再有"配置上有但实际 401"的隐蔽 case
+
+## 频繁收到飞书"授权操作通知"
+
+症状：飞书消息列表里来自"飞书安全中心"或类似的"授权操作通知"卡片，提示某应用获得了你的授权，但**你并没有主动跑 oauth**。
+
+**诊断**（按顺序排查）：
+
+1. **看 JWT auth_time 字段** —— 真的 fresh consent 会让 token 的 `auth_time` 字段更新；silent refresh 不会。命令：
+   ```bash
+   node -e 'const fs = require("fs"), os = require("os"); const j = JSON.parse(fs.readFileSync(os.homedir()+"/.feishu-user-plugin/credentials.json", "utf8")); const t = j.profiles[j.active].LARK_USER_ACCESS_TOKEN; const p = JSON.parse(Buffer.from(t.split(".")[1], "base64url").toString()); console.log("auth_time:", new Date(p.auth_time*1000).toLocaleString("zh-CN", {timeZone: "Asia/Shanghai"}), "iat:", new Date(p.iat*1000).toLocaleString("zh-CN", {timeZone: "Asia/Shanghai"}))'
+   ```
+   - 通知时点 ≈ auth_time → 真的有人点了"授权"按钮（你本人或同租户别人持有同 APP_ID）
+   - 通知时点 ≈ iat 但 auth_time 是更早某天 → 是 silent refresh 触发的通知，**客户端没 bug，飞书 server 侧策略**
+2. **看飞书"账号安全中心 → 应用授权管理 → Claude聊天助手 → 用户授权详情"** —— 看授权时间列表对照
+3. **如果是飞书 server 侧策略**：客户端无解。可降低 token refresh 频率（cron `keepalive` 间隔从 4h 调整到 12h）或等飞书侧调整
+
+## Token 已过期但 MCP 没自动刷新
+
+症状：`get_login_status` 显示 UAT SET 但工具调用一直拿过期 token 报 99991663/99991668。
+
+**诊断 + 修复**：
+
+1. 看 ~/.feishu-user-plugin/uat-refresh.lock（v1.3.14+）是否 stuck：`ls -la ~/.feishu-user-plugin/uat-refresh.lock`。mtime > 30 秒前 → stale，直接删
+2. 看是否走了 canonical store：`npx feishu-user-plugin status` 第一行应该是 `Source: ~/.feishu-user-plugin/credentials.json (canonical)`。如果显示 `(legacy)` → 跑 `migrate --confirm`
+3. 主动触发：`npx feishu-user-plugin keepalive` 一次性 refresh cookie + UAT
+4. 重启 Claude Code / Codex（极端 case 下进程内存里 cached 的 token 没有走 hot-reload）
+
+## v1.3.14 升级期间混合版本（短暂窗口）
+
+如果你在 5 分钟内同时跑了 v1.3.13 旧实例 + v1.3.14 新实例（升级过渡期 Claude Code / Codex 进程慢慢替换），UAT refresh 锁路径不同：
+
+- 旧 v1.3.13 实例锁 `~/.claude/feishu-uat-refresh.lock`
+- 新 v1.3.14 实例锁 `~/.feishu-user-plugin/uat-refresh.lock`
+
+两个版本的 refresh 之间**没有互斥**，理论上可能触发一次 refresh_token rotation 抢占。**症状**：升级窗口内某次工具调用报 `UAT refresh_token rejected by Feishu (invalid_grant)`。
+
+**修**：跑一次 `npx feishu-user-plugin oauth` 重新授权 + 重启所有 Claude Code / Codex 进程让大家都到 v1.3.14。窗口过后不再发生。
+
+## migrate 之后老 env 凭证还在被读
+
+症状：跑了 `migrate --confirm` 但 `status` 仍显示 `(legacy)` 或 token 字段没切到 canonical。
+
+**修**：
+
+1. 看 ~/.feishu-user-plugin/credentials.json 是否存在 + mode 是否 0600：`ls -la ~/.feishu-user-plugin/credentials.json`
+2. 看 server.js boot stderr：`[feishu-user-plugin] Auth: ... (source: ~/.feishu-user-plugin/credentials.json (canonical))` —— 如果显示 `(legacy)` 说明 server 进程是 migrate 之前启动的。重启 Claude Code 或杀掉所有 MCP server 进程：`pkill -f 'feishu-user-plugin/src/index.js'`
+3. ~/.claude.json 顶层 mcpServers.feishu-user-plugin.env 里残留的 `LARK_USER_ACCESS_TOKEN` / `LARK_USER_REFRESH_TOKEN` / `LARK_UAT_EXPIRES` / `LARK_UAT_SCOPE` 是 stale fallback，建议清空（保留 `LARK_COOKIE` / `LARK_APP_ID` / `LARK_APP_SECRET` 作 setup 重建用）
 
 ## 多个 / 重复 MCP server 进程
 

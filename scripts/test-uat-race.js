@@ -12,11 +12,18 @@ const HOLD_MS = 300;
 
 const child = path.join(__dirname, 'test-uat-race-child.js');
 
-// Clean up any stale lock from prior runs
+// Clean up any stale lock from prior runs.
+// v1.3.14 — lock path moved; clean up both old and new locations in case the
+// test runs against either version.
+try {
+  const os = require('os');
+  fs.unlinkSync(path.join(os.homedir(), '.feishu-user-plugin', 'uat-refresh.lock'));
+  console.log('(cleaned up stale lock at canonical path)');
+} catch (_) {}
 try {
   const os = require('os');
   fs.unlinkSync(path.join(os.homedir(), '.claude', 'feishu-uat-refresh.lock'));
-  console.log('(cleaned up stale lock)');
+  console.log('(cleaned up stale lock at legacy path)');
 } catch (_) {}
 
 (async () => {

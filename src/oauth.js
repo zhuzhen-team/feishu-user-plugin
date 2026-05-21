@@ -16,6 +16,7 @@ const http = require('http');
 const { execSync } = require('child_process');
 const credentialsModule = require('./auth/credentials');
 const legacyConfig = require('./config');
+const { fetchWithTimeout } = require('./utils');
 
 // v1.3.9: profile-aware. Accepts `--profile <name>` (defaults to credentials.json::active);
 // reads APP_ID/SECRET from that profile, persists UAT back to that profile.
@@ -105,10 +106,11 @@ if (!APP_ID || !APP_SECRET) {
 async function getAppInfo() {
   try {
     // Get app_access_token to query app details
-    const tokenRes = await fetch('https://open.feishu.cn/open-apis/auth/v3/app_access_token/internal', {
+    const tokenRes = await fetchWithTimeout('https://open.feishu.cn/open-apis/auth/v3/app_access_token/internal', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ app_id: APP_ID, app_secret: APP_SECRET }),
+      timeoutMs: 10000,
     });
     const tokenData = await tokenRes.json();
     if (!tokenData.app_access_token) {
@@ -118,8 +120,9 @@ async function getAppInfo() {
 
     // Get app info — try the direct app query first, fall back to underauditlist
     let appName = null;
-    const directRes = await fetch(`https://open.feishu.cn/open-apis/application/v6/applications/${APP_ID}?lang=zh_cn`, {
+    const directRes = await fetchWithTimeout(`https://open.feishu.cn/open-apis/application/v6/applications/${APP_ID}?lang=zh_cn`, {
       headers: { 'Authorization': `Bearer ${tokenData.app_access_token}` },
+      timeoutMs: 10000,
     });
     const directData = await directRes.json();
     appName = directData?.data?.app?.app_name;
@@ -134,8 +137,9 @@ async function getAppInfo() {
       } else if (directData?.code && directData.code !== 0) {
         console.error(`[oauth] App name resolve failed: code=${directData.code} msg=${directData.msg}`);
       }
-      const listRes = await fetch('https://open.feishu.cn/open-apis/application/v6/applications/underauditlist?lang=zh_cn&page_size=1', {
+      const listRes = await fetchWithTimeout('https://open.feishu.cn/open-apis/application/v6/applications/underauditlist?lang=zh_cn&page_size=1', {
         headers: { 'Authorization': `Bearer ${tokenData.app_access_token}` },
+        timeoutMs: 10000,
       });
       const listData = await listRes.json();
       appName = listData?.data?.items?.[0]?.app_name;
@@ -156,11 +160,15 @@ async function exchangeCode(code) {
     code,
     redirect_uri: REDIRECT_URI,
   };
-  console.log('Token exchange request:', JSON.stringify({ ...body, client_secret: '***' }));
-  const tokenRes = await fetch('https://open.feishu.cn/open-apis/authen/v2/oauth/token', {
+  // v1.3.14 — redact `code` too: the authorization code is short-lived but
+  // it IS an exchangeable credential while it's still valid (~60s pre-exchange).
+  // Logging it to stdout means transcripts retain a usable credential window.
+  console.log('Token exchange request:', JSON.stringify({ ...body, client_secret: '***', code: '***' }));
+  const tokenRes = await fetchWithTimeout('https://open.feishu.cn/open-apis/authen/v2/oauth/token', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
+    timeoutMs: 15000,
   });
   const raw = await tokenRes.text();
   // v1.3.13 security followup: don't log the full raw body — it contains the
@@ -236,11 +244,15 @@ const server = http.createServer(async (req, res) => {
 
       const hasRefresh = !!tokenData.refresh_token;
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      // v1.3.14 — do not display any token bytes in the browser callback.
+      // Browser history / screenshots / OS screen recordings would otherwise
+      // retain the first 20 chars of the access token. Replaced with a length
+      // attestation so the user still sees the flow succeeded.
       res.end(`<h2>✅ 授权成功!</h2>
-<p>access_token: ${tokenData.access_token.slice(0, 20)}...</p>
+<p>access_token: ✅ 已获取（${tokenData.access_token.length} chars）</p>
 <p>scope: ${tokenData.scope}</p>
 <p>expires_in: ${tokenData.expires_in}s</p>
-<p>refresh_token: ${hasRefresh ? '✅ 已获取（30天有效，支持自动续期）' : '❌ 未返回（token 将在 2 小时后过期，需重新授权）'}</p>
+<p>refresh_token: ${hasRefresh ? '✅ 已获取（7天有效，支持自动续期；每次 refresh 滚动续 7 天）' : '❌ 未返回（token 将在 2 小时后过期，需重新授权）'}</p>
 <p>已保存到 MCP 配置文件，可以关闭此页面。</p>`);
 
       console.log('\n=== OAuth 授权成功 ===');

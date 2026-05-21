@@ -31,9 +31,9 @@ curl -fsSL https://openclaw.ai/install.sh | bash
 
 ## 第三步：配置 feishu-user-plugin 为 MCP server
 
-这个插件提供 84 个飞书工具（以用户身份发消息、读聊天记录（自动展开合并转发）、管理文档/多维表格/知识库/云盘/OKR/日历、上传下载图片/文件等）。
+这个插件提供 85 个飞书工具（以用户身份发消息、读聊天记录（自动展开合并转发）、管理文档/多维表格/知识库/云盘/OKR/日历、上传下载图片/文件等）。
 
-v1.3.5+ 针对 OpenClaw 这种会在短时间内拉起多个 MCP server 实例的场景做了硬化：跨进程文件锁 (`~/.claude/feishu-uat-refresh.lock`) 序列化 UAT 刷新，避免 refresh_token 被并发消耗而返回 `invalid_grant`。如果你在 OpenClaw 会话里频繁报 UAT 失败，先更新到 1.3.5 再试。
+v1.3.5+ 针对 OpenClaw 这种会在短时间内拉起多个 MCP server 实例的场景做了硬化：跨进程文件锁（v1.3.14+ 在 `~/.feishu-user-plugin/uat-refresh.lock`，之前在 `~/.claude/feishu-uat-refresh.lock`）序列化 UAT 刷新，避免 refresh_token 被并发消耗而返回 `invalid_grant`。如果你在 OpenClaw 会话里频繁报 UAT 失败，先 `npm i -g feishu-user-plugin@latest` 再试。
 
 运行：
 ```bash

@@ -4,6 +4,80 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.14] - 2026-05-21
+
+**TL;DR**：纯收紧的 bug fix / security release。无 schema 变化、无新工具、无 breaking API。升级后重启 Claude Code / Codex 自动拉 v1.3.14；如果之前还没跑过 `migrate --confirm`，**强烈建议**跑一次（canonical store 是 v1.3.7+ 推荐路径，v1.3.14 把 UAT refresh 锁也搬过来完成最后一块）。
+
+OAuth / UAT 子系统深度优化：跨进程互斥锁路径迁移到 canonical home、cookie heartbeat 改为 ws-owner 单跑（30+ 并发 session 不再每 4h × N 倍 API call 进飞书 session-keepalive 端点）、refresh 错误处理与 identity 状态机打通（invalid_grant 显式 `err.uatRevoked` → `_classifyUatFailure` 短路成 UAT_REVOKED → `withIdentityFallback` 给 LLM 清晰的"请重跑 oauth"指引）、安全敏感日志清理（含 OAuth 回调浏览器页面 token bytes 不再显示）、Lark Desktop reactor 冷启动 debounce 修复、decodeTokenExpiry 失败 breadcrumb flood-gate、dead code 移除、TROUBLESHOOTING 四段新指引、新增 27 个 fixture-based 测试（test-uat-lifecycle 18 + test-cookie-heartbeat 9）并修复 v1.3.7 起就静默坏掉的跨进程 race 测试。85 工具 9 prompts 不变。
+
+### Security
+
+- **oauth.js: redact `code` field in token-exchange log**（`src/oauth.js:166`）：之前 `console.log` 把 authorization code 明文写 stdout。code 短寿命（~60s）但仍是可换 token 的有效 credential，转写 / 屏幕录制 / 终端 history 会暂存。改为 `code: '***'`。
+- **oauth.js: 浏览器回调页面不再显示 access_token bytes**（`src/oauth.js:251`）：之前 `<p>access_token: ${tokenData.access_token.slice(0, 20)}...</p>` 把 token 前 20 字节贴到 HTML，浏览器 history / 截图 / 屏幕录制都会留痕。改为 `<p>access_token: ✅ 已获取（${len} chars）</p>` —— 长度 attestation 足以证明流程成功，不暴露 token 任何 byte。
+- **删除 `src/oauth-auto.js`**：Playwright dev-only OAuth helper，v1.3.0 起没有 production path 引用、`.npmignore` 排除发包，但仍 `console.log(raw.slice(0, 300))` 把完整 access_token + refresh_token 写 stdout，对 contributor 是误导。整文件移除，doc 引用同步更新。
+- **uat.js refreshUAT 错误消息不再 dump 整个响应 JSON**（`src/auth/uat.js:160-180`）：飞书部分错误路径会在响应体里 echo 回 refresh_token 字段，之前 `JSON.stringify(data)` 会把这些 bytes 抛到 Error.message → 冒泡到 MCP `content[0].text` → LLM transcript。改为只透 `data.error_description / data.msg / data.code` 结构化字段（`errCode`/`errMsg` 解构）；invalid_grant 单独走 hardcoded `'UAT refresh_token rejected by Feishu (invalid_grant). The 7-day refresh chain is broken. Run: npx feishu-user-plugin oauth to re-authorize.'`，无任何 `data` 字段 interpolation。
+- **identity-state.js `_classifyUatFailure` redact 兜底 + uatRevoked 短路**（`src/auth/identity-state.js:88-105`）：(1) 加 `if (uatError.uatRevoked) return UAT_REVOKED` 短路 —— refreshUAT 抛 invalid_grant 时设的 flag 现在真正驱动状态机（之前 flag 设了但 classifier 不读，是 dead metadata）；(2) 在 `viaReason` 拼接前用 regex `replace(/[A-Za-z0-9._-]{40,}/g, '<redacted>')` 把任何 40+ 字符的 base64-ish 串清掉。defense-in-depth on top of refreshUAT 自己的清理。两条都有 fixture 测试覆盖（test-uat-lifecycle 第 15-16 case）。
+
+### Fixed
+
+- **Cookie heartbeat 改为 ws-owner 单跑（v1.3.14 架构 root cause D 配套）**（`src/auth/cookie.js:30-50`）：pre-v1.3.14 每个 MCP server 进程独立跑自己的 4 小时 cookie heartbeat timer，10+ 个并发 Claude Code / Codex / OpenClaw session 在一台机器上意味着每 4 小时 N 倍并发请求到飞书的 session-keepalive 端点。改为 owner-gated：只有持有 `ws-owner.lock` 的进程做真实 heartbeat + 写新 cookie 到 credentials.json；非 owner 进程的 timer tick 是 no-op。非 owner client 通过 v1.3.12 的 `CredentialsMonitor.onCookieChange` hook 在下次 tool call 时自动重建 userClient 拿新 cookie。Fallback：如果 ws-owner.lock 不存在（APP_ID/SECRET 没配 → WS server 未启 → 没人 claim），所有进程都跑 heartbeat（pre-v1.3.14 行为），保证 cookie-only 部署不受影响。每次 tick 重新检查 owner 身份，ws-owner 切换时自适应。
+- **UAT refresh 跨进程锁路径迁移到 canonical home**（`src/auth/uat.js:98` `uatLockPath()`）：从 `~/.claude/feishu-uat-refresh.lock` 搬到 `~/.feishu-user-plugin/uat-refresh.lock`。原因：Codex-only 用户没有 `~/.claude/` 目录，`mkdirSync` 会隐式创建空 dir 但 lock 文件没法跨 harness 真正互斥 → 30+ MCP server 并发 lazy refresh 时绕过文件锁 → 各自发 refresh API → 飞书侧 RT rotation 抢占 → `invalid_grant` 雪崩。新路径跟 `ws-owner.lock` 同 dir，所有 harness（Claude Code / Codex / OpenClaw / scripts）走同一把锁。`scripts/test-uat-race.js` 4 worker 验证：~1500ms 串行完成，无 overlap。
+- **invalid_grant 触发 identity state machine UAT_REVOKED**（`src/auth/uat.js:170-178` + `src/auth/identity-state.js:88-95`）：refreshUAT 拿到 `error: invalid_grant` 或 `code: 20064` 时**两条路径都执行**：(1) 直接调 `_refineIdentity(client, UAT_REVOKED)` 改 cache，(2) 抛 `err.uatRevoked = true`，由 `_classifyUatFailure` 短路成 UAT_REVOKED 让 `withIdentityFallback` 后续无论谁先到都正确分类。`fallbackWarning` 从含糊的 "UAT 不可用" 升级为 "UAT 已被撤销 (invalid_grant)... 运行 `npx feishu-user-plugin oauth` 后重启"。错误消息也明确 "The 7-day refresh chain is broken"。
+- **三层 adoptPersistedUATIfNewer 检查避免重复 refresh**（`src/auth/uat.js:114-148`）：锁外预检（短路 peer 已经写过的新 token）→ 锁失败再检（lock contention 期间 peer 完成）→ 锁内再检（acquireRefreshLock 返回到自己开始 refresh 之间的窗口）。10+ MCP server 进程同时 lazy refresh 时大幅减少向飞书侧的并发请求数，进一步降低 RT rotation 冲撞。
+- **withUAT retry 后也走 auth-code 检查**（`src/auth/uat.js:194`）：第一次 fn() 抛网络错时 `classifyError` 说 retry，**之前** retry 结果直接 return；**现在**让 retry 后的 response 也通过 `data.code === 99991663/99991668/99991677` 判断，触发 refresh 后再 retry。fix 一个静默走漏：peer 进程在 retry 间隙做了 RT rotation 后，本进程内存 RT 失效，retry response 携带 auth-related code 之前不会触发 refresh。
+- **OAuth + setup 所有 `fetch` 调用加 `timeoutMs`**（`src/oauth.js` 4 处 + `src/setup.js:106`）：之前裸 `fetch`，socket 卡死会让 `npx oauth` / `npx setup` 永久挂。Ctrl-C 重跑同一 authorization code 已被消费必失败。改为 `fetchWithTimeout` with 10-15s timeout。
+- **scripts/test-uat-race-child.js 修复跨进程 race 测试**（v1.3.7 静默坏掉）：原 child 调用 `client._uatLockPath() / _acquireRefreshLock()`，但 v1.3.7 phase A 把这些方法从 `LarkOfficialClient` 抽到 `src/auth/uat.js` 模块。pre-fix child 启动即 `TypeError`，4 个 worker 全部失败但 race test 报 `expected 4 successful workers, got 0` 时大家以为是环境问题。改为直接 import `uat.js::uatLockPath / acquireRefreshLock / releaseRefreshLock`。
+- **credentials-monitor.js `forceInvalidate` 在 canonical 不存在时 `_initialized` 没翻转**（`src/auth/credentials-monitor.js:177`）：之前 `_initialized` 只在 sync() 内部 set；forceInvalidate 时如果 canonical 不存在（用户手动删/移动文件），`_initialized` 仍是 false → 下次 sync() 文件出现会被当 baseline → 应该 fire 的 hook 被静默吞掉。修法：forceInvalidate 末尾无条件 `_initialized = true`。
+- **server.js Lark Desktop reactor 冷启动 debounce**（`src/server.js:86-89` + `_runLarkDesktopReactor` first-tick init）：之前 `_lastSwitchAt = 0` module-global，长时间运行的 owner 进程突然死掉后新 owner 接管，新 owner 的 `_lastSwitchAt` 是 0 → detectSwitch debounce 失效 → 冷启动第一次 tick 会把长期 pre-existing 的 Lark Desktop snapshot 当 "刚刚切换" 误触发 profile flip。修法：reactor 首次 tick 时若 `_lastSwitchAt === 0` 自动 stamp 为 `Date.now()`，给冷启动跟长跑 owner 一样的 debounce baseline。
+- **decodeTokenExpiry 失败 breadcrumb flood-gate**（`src/auth/uat.js:31-46`）：之前每次 `getValidUAT` 调用都会 decode `_uat`（因为 `_uatExpires = 0` 在解码失败后还是 falsy → 下次又 decode），如果 token 持续 malformed 会每个 tool 调用都向 stderr 打一行 warning。改为按 token sha256 hash 去重：每个 distinct 坏 token 只打一次，1024 entry cap 防 OOM。两个新 test case 验证 "same bad token 5 次只 log 1 次" + "3 个不同 bad token 各 log 1 次"。
+
+### Changed
+
+- **`LarkOfficialClient.loadUAT()` 标 `@deprecated` + 内部简化**（`src/clients/official/base.js:25-35`）：保留向后兼容 `src/test-all.js` 与外部 caller；新代码统一走 `src/server.js::loadUATFromEnv(client, env)` 从 credentials.json profile 或 harness env 读，不读 `process.env`。函数体也清掉了 v1.3.13 留下的死表达式（`parseInt(token ? ... : '0')` 表面像 guard 实际无效，code-review 期间删干净）。`server.js` 旁边的 "Mirror of LarkOfficialClient.loadUAT()" 注释更新成正向描述。
+- **`cli.js keepalive` 不再污染 `process.env`**（`src/cli.js:251`）：之前 `--all` 循环里写 `process.env.LARK_USER_ACCESS_TOKEN` 但不还原。注释还说"让 LarkOfficialClient.loadUAT() picks the right tokens"，但实际 loadUAT 没被调用（v1.3.7 起 keepalive 直接赋实例字段）—— 既是 dead 操作又是 dead 注释。删干净。
+- **`src/test-all.js` 自动从 canonical store backfill `process.env`**：v1.3.7+ 用户走 canonical store 后 `process.env.LARK_*` 多半为空，`npm test` 入口的 cookie / UAT 初始化会 sanity fail。加 `backfillFromCanonical()` 让 `npm test` 在没 export env vars 的 shell 直接跑通。
+
+### Added
+
+- **新测试套件 `src/test-uat-lifecycle.js`（18 个 case）**：unit + mock-fetch，覆盖 decodeTokenExpiry（well-formed / missing payload / malformed base64 / no exp / flood-gate same-token-only-warns-once / flood-gate different-tokens-each-warn-once）、acquireRefreshLock（fresh / contention timeout / stale recovery）、releaseRefreshLock 容忍重复释放、adoptPersistedUATIfNewer（no canonical / same token / newer access / rotated refresh）、refreshUAT（invalid_grant 抛 `err.uatRevoked=true`、99991663 transient 不设 uatRevoked）、identity-state `_classifyUatFailure`（redact regex 真实 exercise long token-like string、uatRevoked flag 短路成 UAT_REVOKED）。接入 `npm test` 进 PR gate。
+- **新测试套件 `src/test-cookie-heartbeat.js`（9 个 case）**：覆盖 `_isHeartbeatRunner` 在 6 种 lock 状态（ws-owner=self / ws-owner=other / lock missing / lock body malformed / pid 缺失 / pid 类型错）+ `_heartbeatTick` 在 3 种 owner 状态下的实际调用决策（non-owner 跳过、owner 成功 refresh + persist、owner network 失败但不 persist 不抛）。`_heartbeatTick` 函数从原 `setInterval` callback 抽出，让 tick path 可在 unit 测里直接 invoke 不必等 4 小时 timer。接入 `npm test`。
+- **`src/auth/uat.js` 新增 export `uatLockPath / acquireRefreshLock / releaseRefreshLock`**：仅供测试 harness 用（明确标注非稳定 API），让 lifecycle test + cross-process race test 不依赖 client 实例方法。
+- **`src/auth/identity-state.js` 新增 export `_classifyUatFailure`**：仅供测试用，让 redact regex + uatRevoked short-circuit 两条路径直接被 fixture 测到。
+- **`src/auth/env-backfill.js`（新文件）**：从 canonical credentials store backfill `process.env.LARK_*`，给 legacy 路径（`loadUAT()` 读 `process.env`）兜底。提取自 v1.3.14 初版加在 `test-all.js` 顶部的 closure；现在被 `test-all.js` / `test-comprehensive.js` / `scripts/probe-feishu-docx.js` / `scripts/test-wiki-attach-fallback.js` 共用，统一 6 个 `LARK_*` keys backfill 范围（之前 `probe-feishu-docx.js` 只 backfill 2 key，缺 `LARK_UAT_EXPIRES`；现在统一）。`shell-export LARK_* > .env > canonical` 的优先级保留。
+
+### Docs
+
+- **`docs/TROUBLESHOOTING.md` 加 4 个高频 troubleshooting 段**：（1）"频繁收到飞书授权操作通知" —— 给 JWT `auth_time` 字段诊断命令 + 区分 fresh consent vs silent refresh vs 飞书 server 侧策略变化；（2）"Token 已过期但 MCP 没自动刷新" —— uat-refresh.lock stale 检查 + canonical store 校验 + manual `keepalive`；（3）"v1.3.14 升级期间混合版本（短暂窗口）" —— 旧 v1.3.13 + 新 v1.3.14 同时跑 5 分钟内的 lock 路径不对齐风险 + 恢复步骤；（4）"migrate 后老 env 凭证还在被读" —— 重启 + 清 stale fallback 字段步骤。`UAT refresh invalid_grant` 现有段补 v1.3.14 锁路径变化说明 + canonical hot-reload 期望。
+- **`README.md:147` "已删除" 条目补 reason inline**：之前只写"详见 ROADMAP"，现在显式说明 md → wiki 因 wiki block schema 离散度高、Mermaid → 画板因依赖 wiki 主线一并删，不必跳出 README 就能理解。
+- **`src/auth/cookie.js` 文件头注释精简**（17 行 → 7 行）：保留核心机制说明（owner-gated + non-owner reload path + fallback），删掉营销腔的"10+ concurrent" 阐述（CHANGELOG 已有详述）。
+- **`src/error-codes.js:31` 注释 "30-day window" → "7-day refresh-token window"**：飞书 v2 OAuth refresh_token 实际寿命 7 天滚动续期（与 `docs/AUTH-SETUP.md:29` / `docs/COMPARISON.md:52` / `src/oauth.js:255` 浏览器回调文案对齐）。这一处历史错文档跟其他 doc 一直矛盾，本版收口。
+- **`README.md:147` 删除 "未实现：search_messages"**：v1.3.12 已实装，CLAUDE.md 当时改了但 README 漏改。换成 "已删除：md → wiki 双向同步、Mermaid → 画板"。
+- **`docs/AUTH-SETUP.md:30` ws-owner.lock stale 时长 "30 秒" → "60 秒"**：与 `src/events/owner.js:14 STALE_MS = 60_000` 实际值对齐 + 补 v1.3.12 PID liveness check 说明（SIGKILL'd owner 即时回收，不必等 mtime）。同段加新行：`~/.feishu-user-plugin/uat-refresh.lock`（v1.3.14 起）+ 历史路径备注。
+- **`src/oauth.js:255` 浏览器回调 HTML 文案 "30天有效" → "7天有效，每次 refresh 滚动续 7 天"**：澄清滚动续期语义 —— 活跃用户的 refresh_token 永远不过期，`keepalive` cron 只为关闭客户端 >7 天的场景。
+- **`SECURITY.md:58` + `prompts/openclaw-setup.md:36` lock path 同步更新**：跟 v1.3.14 canonical 路径一致 + 保留历史路径备注。
+- **`docs/REFACTOR-NOTES.md:29` 删除 `oauth-auto.js` 引用**：随文件删除，行内说明改成 `OAuth CLI 流程（v1.3.14 起 oauth-auto.js Playwright helper 已删除）`。
+- **`prompts/openclaw-setup.md:34` 工具数 "84 个" → "85 个"**：跟主仓 README + SKILL.md 已经标的 85 对齐，pre-existing drift 顺手收口。
+- **`prompts/openclaw-setup.md:36` 升级命令 "更新到 1.3.14" → "`npm i -g feishu-user-plugin@latest`"**：避免每发新版本都得回头改这条 dev doc。
+- **`ROADMAP.md` 标题 "v1.3.13+ 待办" → "v1.3.14+ 待办"**。
+- **`docs/RELEASING.md` Step 2 明确列出 6 处版本号 bump**：之前文档说"4 个，mcp-registry + mcpb 由 check 脚本单独校验"——这表述让 v1.3.14 release 漏了这 2 个 bump 直到 CI 警告才发现。改为显式列 6 处 + 各 check 脚本范围，避免后续 release 重蹈覆辙。
+
+### Release engineering
+
+- **6 个版本号 source 全 bump**：`package.json` / `.claude-plugin/plugin.json` / `.cursor-plugin/plugin.json` / `skills/feishu-user-plugin/SKILL.md` / `mcp-registry.json`（含 `packages[0].version`） / `.mcpb/manifest.json`。`server.json` 由 `sync-server-json.js` regen。
+- **10 个 CI gate 全通**：`check-version` / `check-tool-count` / `check-description-drift` / `check-mcp-registry-version` / `check-mcpb-version` / `sync-server-json` / `check-changelog` / `check-scopes` / `check-broken-links` / `check-docs-sync`（validate.yml + publish.yml + prepublishOnly 三个 workflow 跑全套）。
+
+### Test scenarios
+
+- `npm test`（在没有 export `LARK_*` env vars 的 shell）→ **83 个 fixture pass / 0 fail**（含 e2e 18 PASS / 15 SKIP / 0 FAIL + test-uat-lifecycle 18 + test-cookie-heartbeat 9 + lark-desktop 13 + display-label 8 + 既有命名单元 17）
+- OAuth 流程浏览器回调页面 source view → access_token 行只显示 `✅ 已获取（N chars）` 不含任何 token byte
+- 触发持续 malformed UAT 场景（手动 corrupt token in canonical, 调 N 个 UAT 工具）→ stderr 只一条 `decodeTokenExpiry: malformed JWT` 警告，N-1 条被 dedupe
+- `node scripts/test-uat-race.js`（4 worker 跨进程抢锁）→ **mutual exclusion PASSED**，4 worker 串行 ~1500ms，无 overlap（典型 1500-1520ms，依赖系统负载；4 × 300ms hold + 调度开销）
+- `node scripts/check-scopes.js` → `OK (31 OAuth + 1 tenant-only scopes, 2 banned names guarded)`
+- `npm run smoke` → `OK: 85 tools, 9 prompts, login_status shape matches`
+- `npx feishu-user-plugin oauth` 之后浏览器页面文案：`refresh_token: ✅ 已获取（7天有效，支持自动续期；每次 refresh 滚动续 7 天）`
+- 模拟 invalid_grant：next UAT tool call 的 `_fallbackWarning` 包含 `UAT 已被撤销 (invalid_grant)... 运行 \`npx feishu-user-plugin oauth\` 后重启`
+- 升级后短暂出现 `~/.feishu-user-plugin/uat-refresh.lock`（refresh 时；30 秒 stale 自动回收）
+
 ## [1.3.13] - 2026-05-16
 
 紧急 patch — v1.3.12 release 后 Codex + Copilot PR #103 review 发现 1 P1 + 2 P2 + 5 polish，followup 又跑 5-agent 全仓 audit 找出 2 P1 (security) + 多个 doc/compliance 漂移。本版集中修复全部 issue + 把 fixture-based unit tests 拉进 CI gate。
