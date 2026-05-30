@@ -163,6 +163,12 @@ async function refreshUAT(client) {
       return client._uat;
     }
     if (!client._uatRefresh) throw new Error('UAT expired and no refresh token. Run: npx feishu-user-plugin oauth');
+    // Snapshot the refresh_token we are about to send BEFORE awaiting. A peer
+    // in-process refresh or the credentials monitor can hot-reload
+    // client._uatRefresh during the round-trip; the invalid_grant self-heal
+    // below must compare against the token actually sent, not a field that may
+    // have already rotated. (Codex review, PR #111.)
+    const attemptedRefresh = client._uatRefresh;
     const res = await fetchWithTimeout('https://open.feishu.cn/open-apis/authen/v2/oauth/token', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -170,7 +176,7 @@ async function refreshUAT(client) {
         grant_type: 'refresh_token',
         client_id: client.appId,
         client_secret: client.appSecret,
-        refresh_token: client._uatRefresh,
+        refresh_token: attemptedRefresh,
       }),
     });
     const data = await res.json();
@@ -202,13 +208,20 @@ async function refreshUAT(client) {
         // symptom). Only when disk still holds the SAME (now-dead) refresh_token
         // is this a genuine revocation. Covered by test-uat-lifecycle
         // "invalid_grant + peer rotated fresh token to disk".
-        const triedRefresh = client._uatRefresh;
         now = Math.floor(Date.now() / 1000);
-        if (adoptPersistedUATIfNewer(client)
-            && client._uat
-            && client._uatRefresh !== triedRefresh
+        // Best-effort re-sync from disk (a no-op if a peer/monitor already
+        // updated this client in memory). Then recover iff we now hold a
+        // DIFFERENT, still-valid token than the one we actually sent — this
+        // covers both the cross-process race (disk holds the winner) and the
+        // in-process / hot-reload race (client already holds the winner).
+        // Gating on the resulting client state, rather than on
+        // adoptPersistedUATIfNewer()'s return value, is what lets the
+        // hot-reload case recover (adopt is a no-op there). (Codex review, PR #111.)
+        adoptPersistedUATIfNewer(client);
+        if (client._uat
+            && client._uatRefresh !== attemptedRefresh
             && client._uatExpires > now + 300) {
-          console.error('[feishu-user-plugin] UAT invalid_grant on a stale refresh_token; adopted peer-rotated token from disk (benign race — no re-consent needed)');
+          console.error('[feishu-user-plugin] UAT invalid_grant on the sent refresh_token; a different valid token is present (peer won the rotation) — adopted, no re-consent needed');
           return client._uat;
         }
         try {
