@@ -187,6 +187,30 @@ async function refreshUAT(client) {
       // UAT_REVOKED, and withIdentityFallback can give the LLM clear guidance.
       const isInvalidGrant = errCode === 'invalid_grant' || errCode === 20064;
       if (isInvalidGrant) {
+        // v1.3.15 — self-heal a benign refresh_token rotation race before
+        // declaring the 7-day chain dead. When cross-process mutual exclusion
+        // is defeated (lock-acquire timeout fallthrough above, or a transient
+        // mixed-version upgrade window where old/new instances use different
+        // lock paths), two processes can refresh with the same refresh_token;
+        // Feishu rotates it for the winner and rejects the loser with
+        // invalid_grant. By the time the loser lands here, the winner has very
+        // likely already persisted a fresh, valid, DIFFERENT token to disk.
+        // Re-read disk: if it now holds a different, still-valid token, our
+        // invalid_grant just means "our copy was rotated away" — adopt it and
+        // recover, instead of flipping to UAT_REVOKED and pushing the user
+        // through a needless `oauth` re-consent (the "授权操作通知 没撑过一晚上"
+        // symptom). Only when disk still holds the SAME (now-dead) refresh_token
+        // is this a genuine revocation. Covered by test-uat-lifecycle
+        // "invalid_grant + peer rotated fresh token to disk".
+        const triedRefresh = client._uatRefresh;
+        now = Math.floor(Date.now() / 1000);
+        if (adoptPersistedUATIfNewer(client)
+            && client._uat
+            && client._uatRefresh !== triedRefresh
+            && client._uatExpires > now + 300) {
+          console.error('[feishu-user-plugin] UAT invalid_grant on a stale refresh_token; adopted peer-rotated token from disk (benign race — no re-consent needed)');
+          return client._uat;
+        }
         try {
           const { _refineIdentity, IdentityState } = require('./identity-state');
           _refineIdentity(client, IdentityState.UAT_REVOKED);
