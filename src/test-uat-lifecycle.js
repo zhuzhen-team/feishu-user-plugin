@@ -276,6 +276,101 @@ async function run() {
     }
   });
 
+  // --- refreshUAT: benign rotation race must self-heal, not false-revoke ---
+  //
+  // A peer process wins the refresh_token rotation and persists a fresh, VALID
+  // token to disk DURING our refresh round-trip; our now-stale refresh_token
+  // then comes back invalid_grant. refreshUAT must adopt the peer's on-disk
+  // token and recover, instead of throwing uatRevoked (which would push the
+  // user through a needless `npx feishu-user-plugin oauth` re-consent — the
+  // root cause of the "授权操作通知 没撑过一晚上" reports).
+  await ok('refreshUAT: invalid_grant + peer rotated fresh token to disk → adopts & recovers (no false revoke)', async () => {
+    os.homedir = () => fakeHome;
+    const now = Math.floor(Date.now() / 1000);
+    // Disk starts equal to our stale in-memory token so the pre-fetch adopt
+    // checks find nothing newer and we proceed into the refresh fetch.
+    writeCanonical({
+      LARK_USER_ACCESS_TOKEN: 'stale.access',
+      LARK_USER_REFRESH_TOKEN: 'stale.refresh',
+      LARK_UAT_EXPIRES: String(now - 3600),
+    });
+
+    const origFetch = global.fetch;
+    global.fetch = async () => {
+      // The winning peer finishes mid-round-trip: persists a fresh VALID token.
+      writeCanonical({
+        LARK_USER_ACCESS_TOKEN: 'winner.access',
+        LARK_USER_REFRESH_TOKEN: 'winner.refresh',
+        LARK_UAT_EXPIRES: String(now + 7200),
+      });
+      // Our stale refresh_token was rotated away on the Feishu side.
+      return { json: async () => ({ error: 'invalid_grant', error_description: 'refresh_token expired' }) };
+    };
+
+    try {
+      const client = {
+        appId: 'test', appSecret: 'test',
+        _uat: 'stale.access',
+        _uatRefresh: 'stale.refresh',
+        _uatExpires: now - 3600,
+      };
+      let thrown = null, ret = null;
+      try { ret = await uat.refreshUAT(client); } catch (e) { thrown = e; }
+      assert.ok(!thrown, `should recover, not throw; got: ${thrown && thrown.message}`);
+      assert.strictEqual(ret, 'winner.access', 'should return the peer-rotated access token');
+      assert.strictEqual(client._uatRefresh, 'winner.refresh', 'should adopt the peer-rotated refresh_token');
+    } finally {
+      global.fetch = origFetch;
+      os.homedir = origHomedir;
+    }
+  });
+
+  // Codex review (PR #111) edge: a peer in-process refresh / credentials-monitor
+  // hot-reloads THIS client in memory (and persists to disk) WHILE our refresh
+  // request — carrying the now-stale token — is still in flight. Because we
+  // snapshot the sent token before awaiting and gate recovery on client state
+  // (not adoptPersistedUATIfNewer's return value), we must still recover instead
+  // of false-revoking. With the pre-fix code (post-await capture) this throws.
+  await ok('refreshUAT: invalid_grant after mid-flight hot-reload to a fresh token → recovers (no false revoke)', async () => {
+    os.homedir = () => fakeHome;
+    const now = Math.floor(Date.now() / 1000);
+    // Disk starts stale so the pre-fetch adopt checks proceed into the fetch.
+    writeCanonical({
+      LARK_USER_ACCESS_TOKEN: 'stale.access',
+      LARK_USER_REFRESH_TOKEN: 'stale.refresh',
+      LARK_UAT_EXPIRES: String(now - 3600),
+    });
+    const client = {
+      appId: 'test', appSecret: 'test',
+      _uat: 'stale.access', _uatRefresh: 'stale.refresh', _uatExpires: now - 3600,
+    };
+
+    const origFetch = global.fetch;
+    global.fetch = async () => {
+      // Concurrent winner finishes mid-flight: persists rotated token to disk
+      // AND a hot-reload updates this very client in memory.
+      writeCanonical({
+        LARK_USER_ACCESS_TOKEN: 'winner.access',
+        LARK_USER_REFRESH_TOKEN: 'winner.refresh',
+        LARK_UAT_EXPIRES: String(now + 7200),
+      });
+      client._uat = 'winner.access';
+      client._uatRefresh = 'winner.refresh';
+      client._uatExpires = now + 7200;
+      return { json: async () => ({ error: 'invalid_grant', error_description: 'refresh_token expired' }) };
+    };
+
+    try {
+      let thrown = null, ret = null;
+      try { ret = await uat.refreshUAT(client); } catch (e) { thrown = e; }
+      assert.ok(!thrown, `should recover, not throw; got: ${thrown && thrown.message}`);
+      assert.strictEqual(ret, 'winner.access', 'should recover the winner token despite mid-flight hot-reload');
+    } finally {
+      global.fetch = origFetch;
+      os.homedir = origHomedir;
+    }
+  });
+
   // identity-state.js redact-regex regression guard. Exercises the actual
   // regex on `_classifyUatFailure` path that the previous "no dead.refresh"
   // assertion in test #14 did NOT cover (the invalid_grant message is
