@@ -63,6 +63,22 @@ module.exports = {
     return { items: res.data.items || [] };
   },
 
+  // Direct children of a single block — scoped, so it does not inherit the
+  // whole-document 500-block cap of getDocBlocks. Used by createDocTable to map
+  // a table's cells (and each cell's text block) reliably in large documents.
+  async getBlockChildren(documentId, blockId) {
+    const res = await this._asUserOrApp({
+      uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks/${blockId}/children`,
+      query: { page_size: '500' },
+      sdkFn: () => this.client.docx.documentBlockChildren.get({
+        path: { document_id: documentId, block_id: blockId },
+        params: { page_size: 500 },
+      }),
+      label: 'getBlockChildren',
+    });
+    return { items: res.data.items || [] };
+  },
+
   async createDocBlock(documentId, parentBlockId, children, index) {
     const data = { children };
     if (index !== undefined) data.index = index;
@@ -118,13 +134,17 @@ module.exports = {
     const viaUser = !!created._viaUser;
     const fallbackWarning = created._fallbackWarning || null;
 
-    // Read the doc back to reliably map cells -> their auto-created text blocks.
-    // (The create response's cell-id shape isn't contractually guaranteed, and
-    // we need each cell's child text block to fill cleanly.)
-    const all = (await this.getDocBlocks(documentId)).items || [];
-    const byId = new Map(all.map(b => [b.block_id, b]));
-    const tableBlock = byId.get(tableBlockId);
-    const flatCellIds = tableBlock?.table?.cells || tableBlock?.children || tableCreated.children || [];
+    // Resolve the cell IDs. Prefer the create response; else fetch the table
+    // block's children directly (scoped — NOT the whole-doc getDocBlocks, which
+    // caps at 500 blocks and would silently lose an appended table's cells in a
+    // large document). Fail loud rather than silently dropping requested content.
+    let flatCellIds = tableCreated.table?.cells || tableCreated.children || [];
+    if (flatCellIds.length < rows * columns) {
+      flatCellIds = ((await this.getBlockChildren(documentId, tableBlockId)).items || []).map(b => b.block_id);
+    }
+    if (flatCellIds.length < rows * columns) {
+      throw new Error(`createDocTable: created table ${tableBlockId} but resolved only ${flatCellIds.length}/${rows * columns} cells — aborting fill to avoid silently dropping content.`);
+    }
     const grid = [];
     for (let r = 0; r < rows; r++) grid.push(flatCellIds.slice(r * columns, (r + 1) * columns));
 
@@ -134,13 +154,16 @@ module.exports = {
         for (let c = 0; c < columns; c++) {
           const content = cells[r] ? cells[r][c] : undefined;
           if (content === undefined || content === null || content === '') continue;
-          const cellId = grid[r] && grid[r][c];
-          if (!cellId) continue;
-          const cell = byId.get(cellId);
-          const childTextId = (cell?.children || []).find(id => byId.get(id)?.block_type === 2);
+          const cellId = grid[r][c];
+          if (!cellId) throw new Error(`createDocTable: missing cell id at row ${r}, col ${c}`);
+          // Each fresh cell auto-creates exactly one empty text block — UPDATE it
+          // (clean) rather than CREATE a second. Scoped per-cell fetch stays
+          // correct regardless of overall document size.
+          const cellChildren = (await this.getBlockChildren(documentId, cellId)).items || [];
+          const textChild = cellChildren.find(b => b.block_type === 2);
           const elements = { elements: [{ text_run: { content: String(content) } }] };
-          if (childTextId) {
-            await this.updateDocBlock(documentId, childTextId, { update_text_elements: elements });
+          if (textChild) {
+            await this.updateDocBlock(documentId, textChild.block_id, { update_text_elements: elements });
           } else {
             await this.createDocBlock(documentId, cellId, [{ block_type: 2, text: elements }]);
           }
