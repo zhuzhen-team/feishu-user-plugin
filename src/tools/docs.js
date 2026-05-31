@@ -52,7 +52,7 @@ const schemas = [
   },
   {
     name: 'manage_doc_block',
-    description: '[Official API] Manage content blocks in a document. Single tool replaces v1.3.6 create_doc_block / update_doc_block / delete_doc_blocks.\n  action=create — five modes:\n    (A) Generic — pass `children` array (e.g. [{block_type:2, text:{...}}]).\n    (B) Image from local file — pass `image_path`; plugin uploads and patches.\n    (C) Image from token — pass `image_token` (already uploaded).\n    (D) File attachment from local file — pass `file_path`; plugin handles VIEW-wrap + replace_file.\n    (E) File from token — pass `file_token`.\n  action=update — generic (pass `update_body`), image-replace (pass `image_token`), or file-replace (pass `file_token`).\n  action=delete — pass `parent_block_id` + `start_index` + `end_index` (range delete).\n`document_id` accepts native ID, wiki node token, or Feishu URL.',
+    description: '[Official API] Manage content blocks in a document. Single tool replaces v1.3.6 create_doc_block / update_doc_block / delete_doc_blocks.\n  action=create — six modes (pass exactly ONE):\n    (A) Generic — pass `children` array (e.g. [{block_type:2, text:{...}}]).\n    (B) Image from local file — pass `image_path`; plugin uploads and patches.\n    (C) Image from token — pass `image_token` (already uploaded).\n    (D) File attachment from local file — pass `file_path`; plugin handles VIEW-wrap + replace_file.\n    (E) File from token — pass `file_token`.\n    (F) Table — pass `table={rows,columns,cells?}`; plugin creates a block_type=31 table (Feishu auto-makes the block_type=32 cells) and fills each provided cell. USE THIS for tables — do NOT hand-build table blocks via `children` (the table block_type is 31, NOT 40; getting it wrong returns invalid_param).\n  action=update — generic (pass `update_body`), image-replace (pass `image_token`), or file-replace (pass `file_token`).\n  action=delete — pass `parent_block_id` + `start_index` + `end_index` (range delete).\n`document_id` accepts native ID, wiki node token, or Feishu URL.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -69,6 +69,7 @@ const schemas = [
         file_path: { type: 'string', description: 'Local file path — create mode D (mutually exclusive with other create modes).' },
         file_token: { type: 'string', description: 'Pre-uploaded docx file token — create mode E, or update file-replace.' },
         update_body: { type: 'object', description: 'Generic update payload for action=update. E.g. {update_text_elements:{elements:[{text_run:{content:"new text"}}]}}.' },
+        table: { type: 'object', description: 'Create a table — create mode F (mutually exclusive with other create modes). Shape: {rows:int>=1, columns:int>=1, cells?:string[][] (row-major plain text; omit/empty-string to leave a cell blank), column_width?:int[] (px, length=columns), header_row?:bool, header_column?:bool}. The plugin creates a block_type=31 table, lets Feishu auto-create the cells, and fills each provided cell by updating its text — you never specify block types. Returns {tableBlockId, cells:[[cellId,...]] (row-major grid), filled}. Example: {"rows":2,"columns":2,"cells":[["Name","Role"],["Ann","PM"]]}.' },
       },
       required: ['action', 'document_id'],
     },
@@ -121,8 +122,16 @@ const handlers = {
     switch (args.action) {
       case 'create': {
         need(args.parent_block_id, 'parent_block_id', 'create');
-        const modes = [args.children, args.image_path, args.image_token, args.file_path, args.file_token].filter(Boolean);
-        if (modes.length > 1) return text('manage_doc_block(create): pass exactly ONE of children / image_path / image_token / file_path / file_token.');
+        const modes = [args.children, args.image_path, args.image_token, args.file_path, args.file_token, args.table].filter(Boolean);
+        if (modes.length > 1) return text('manage_doc_block(create): pass exactly ONE of children / image_path / image_token / file_path / file_token / table.');
+        if (args.table) {
+          const t = args.table;
+          return json(await official.createDocTable(docId, args.parent_block_id, {
+            rows: t.rows, columns: t.columns, cells: t.cells,
+            columnWidth: t.column_width, headerRow: t.header_row, headerColumn: t.header_column,
+            index: args.index,
+          }));
+        }
         if (args.image_path || args.image_token) {
           const r = await official.createDocBlockWithImage(docId, args.parent_block_id, {
             imagePath: args.image_path,
@@ -139,7 +148,7 @@ const handlers = {
           });
           return json(r);
         }
-        if (!args.children) return text('manage_doc_block(create): children, image_path, image_token, file_path, or file_token is required.');
+        if (!args.children) return text('manage_doc_block(create): children, image_path, image_token, file_path, file_token, or table is required.');
         return json(await official.createDocBlock(docId, args.parent_block_id, args.children, args.index));
       }
       case 'update': {
