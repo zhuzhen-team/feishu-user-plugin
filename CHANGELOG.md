@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.15] - 2026-05-31
+
+两条增强：文档建表格不再让 agent 猜 block_type；UAT 频繁重新授权的根因（良性 refresh_token 轮换竞态被误判为撤销）修掉。无 schema 变化、无新工具（仍 85）、无 breaking API。升级后重启 Claude Code / Codex 自动拉 v1.3.15。
+
+### Added
+
+- **manage_doc_block 新增 table 创建模式（mode F）**：`manage_doc_block(action=create, table={rows, columns, cells?, column_width?, header_row?, header_column?})` 一步建表 + 填格。此前 agent 要自己拼 table block 并猜 `block_type`（猜成 40 → 飞书报 `invalid_param`）；现在插件内部建 `block_type=31` 表、由飞书自动生成 `block_type=32` 单元格、逐格 UPDATE 单元格自带的空文本块（无遗留空块）。单元格 ID 行优先解析自创建响应，回退到 scoped `getBlockChildren`（不吃整文档 500 块上限），解析不全则报错而非静默丢内容。返回 `tableBlockId` + 行优先 `cells` 网格。`skills/feishu-user-plugin/references/doc.md` 同步补建表 + 决策树指引。
+
+### Fixed
+
+- **UAT refresh `invalid_grant` 良性轮换竞态自愈**：频繁收到飞书"授权操作通知"、"没撑过一晚上"的根因。飞书 refresh_token 每次刷新滚动轮换；当跨进程互斥失效时（20s 锁超时兜底，或 v1.3.14 升级期间新旧锁路径 `~/.claude/feishu-uat-refresh.lock` vs `~/.feishu-user-plugin/uat-refresh.lock` 不对齐），并发刷新的输家拿 `invalid_grant`，此前 `refreshUAT` 直接判 `UAT_REVOKED` 并提示重跑 oauth——而赢家此刻早已把有效新 token 落盘。现在 `invalid_grant` 时先快照已发送的 refresh_token、回查磁盘，若已有"不同且仍有效"的 token（peer 赢了轮换）就采用并恢复，只有磁盘也是同一个死 token 才真判撤销；按 client 状态判定（而非 `adoptPersistedUATIfNewer` 返回值）兼顾 in-process / credentials-monitor hot-reload race。（`src/auth/uat.js`）
+
+### Test scenarios
+
+- 多进程 / 多版本并发刷 UAT 时，良性轮换不再弹"授权操作通知"、不再提示重跑 oauth（`auth_time` 不跳）
+- `manage_doc_block(action=create, table={rows:2,columns:2,cells:[["A","B"],["C","D"]]})` 在文档里生成 2×2 表、四格有内容、无空行
+
 ## [1.3.14] - 2026-05-21
 
 **TL;DR**：纯收紧的 bug fix / security release。无 schema 变化、无新工具、无 breaking API。升级后重启 Claude Code / Codex 自动拉 v1.3.14；如果之前还没跑过 `migrate --confirm`，**强烈建议**跑一次（canonical store 是 v1.3.7+ 推荐路径，v1.3.14 把 UAT refresh 锁也搬过来完成最后一块）。
