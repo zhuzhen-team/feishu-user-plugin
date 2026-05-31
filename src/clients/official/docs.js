@@ -79,6 +79,78 @@ module.exports = {
     return { blocks: res.data.children || [], fallbackWarning: res._fallbackWarning || null };
   },
 
+  // Create a Feishu docx table (block_type=31) and optionally fill its cells —
+  // so callers never have to know docx block types. Added after field reports
+  // of agents guessing the table block_type (40 is wrong; 31 table / 32 cell).
+  // Flow:
+  //   1) create the table block with row_size/column_size — Feishu auto-creates
+  //      the table_cell (32) children (row-major) and gives each cell an empty
+  //      text block.
+  //   2) read the table back to map cell_id -> its auto-created text block.
+  //   3) fill: UPDATE each cell's existing text block (clean — no stray empty
+  //      block) when present, else CREATE a text block in the cell.
+  // `cells` is an optional row-major 2D array of plain strings.
+  // Returns { tableBlockId, cells:[[cellId,...],...], rows, columns, filled, viaUser, fallbackWarning }.
+  async createDocTable(documentId, parentBlockId, { rows, columns, cells, columnWidth, headerRow, headerColumn, index } = {}) {
+    rows = Number(rows); columns = Number(columns);
+    if (!Number.isInteger(rows) || !Number.isInteger(columns) || rows < 1 || columns < 1) {
+      throw new Error('createDocTable: rows and columns must be integers >= 1');
+    }
+    const property = { row_size: rows, column_size: columns };
+    if (Array.isArray(columnWidth) && columnWidth.length === columns) property.column_width = columnWidth;
+    if (headerRow) property.header_row = true;
+    if (headerColumn) property.header_column = true;
+    const createBody = { children: [{ block_type: 31, table: { property } }] };
+    if (index !== undefined) createBody.index = index;
+    const created = await this._asUserOrApp({
+      uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks/${parentBlockId}/children`,
+      method: 'POST',
+      body: createBody,
+      sdkFn: () => this.client.docx.documentBlockChildren.create({
+        path: { document_id: documentId, block_id: parentBlockId },
+        data: createBody,
+      }),
+      label: 'createDocTable',
+    });
+    const tableCreated = (created.data.children || [])[0];
+    const tableBlockId = tableCreated?.block_id;
+    if (!tableBlockId) throw new Error(`createDocTable: no table block_id returned: ${JSON.stringify(created.data).slice(0, 400)}`);
+    const viaUser = !!created._viaUser;
+    const fallbackWarning = created._fallbackWarning || null;
+
+    // Read the doc back to reliably map cells -> their auto-created text blocks.
+    // (The create response's cell-id shape isn't contractually guaranteed, and
+    // we need each cell's child text block to fill cleanly.)
+    const all = (await this.getDocBlocks(documentId)).items || [];
+    const byId = new Map(all.map(b => [b.block_id, b]));
+    const tableBlock = byId.get(tableBlockId);
+    const flatCellIds = tableBlock?.table?.cells || tableBlock?.children || tableCreated.children || [];
+    const grid = [];
+    for (let r = 0; r < rows; r++) grid.push(flatCellIds.slice(r * columns, (r + 1) * columns));
+
+    let filled = 0;
+    if (Array.isArray(cells)) {
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < columns; c++) {
+          const content = cells[r] ? cells[r][c] : undefined;
+          if (content === undefined || content === null || content === '') continue;
+          const cellId = grid[r] && grid[r][c];
+          if (!cellId) continue;
+          const cell = byId.get(cellId);
+          const childTextId = (cell?.children || []).find(id => byId.get(id)?.block_type === 2);
+          const elements = { elements: [{ text_run: { content: String(content) } }] };
+          if (childTextId) {
+            await this.updateDocBlock(documentId, childTextId, { update_text_elements: elements });
+          } else {
+            await this.createDocBlock(documentId, cellId, [{ block_type: 2, text: elements }]);
+          }
+          filled++;
+        }
+      }
+    }
+    return { tableBlockId, cells: grid, rows, columns, filled, viaUser, fallbackWarning };
+  },
+
   async updateDocBlock(documentId, blockId, updateBody) {
     const res = await this._asUserOrApp({
       uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks/${blockId}`,
