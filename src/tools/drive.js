@@ -9,10 +9,14 @@ const { text, json } = require('./_registry');
 const schemas = [
   {
     name: 'list_files',
-    description: '[Official API] List files in a Drive folder.',
+    description: '[Official API] List files in a Drive folder. UAT-first with app fallback: with user identity (UAT), empty folder_token lists YOUR personal-space ("我的空间") root; via bot it can only see folders shared with the bot (personal-space folders return 403). Response carries viaUser so you know whose view you got. Use the returned file token with manage_drive_file to copy/move/delete.',
     inputSchema: {
       type: 'object',
-      properties: { folder_token: { type: 'string', description: 'Folder token (empty for root)' } },
+      properties: {
+        folder_token: { type: 'string', description: 'Folder token (empty for root — your 我的空间 root when UAT is configured)' },
+        page_size: { type: 'number', description: 'Max files per page (default 50)' },
+        page_token: { type: 'string', description: 'Pagination token from a previous nextPageToken' },
+      },
     },
   },
   {
@@ -66,7 +70,10 @@ function need(arg, name, action) {
 
 const handlers = {
   async list_files(args, ctx) {
-    return json(await ctx.getOfficialClient().listFiles(args.folder_token));
+    const opts = {};
+    if (args.page_size) opts.pageSize = args.page_size;
+    if (args.page_token) opts.pageToken = args.page_token;
+    return json(await ctx.getOfficialClient().listFiles(args.folder_token, opts));
   },
   async create_folder(args, ctx) {
     const r = await ctx.getOfficialClient().createFolder(args.name, args.parent_token);

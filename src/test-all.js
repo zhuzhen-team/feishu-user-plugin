@@ -377,6 +377,10 @@ main().catch(console.error).finally(() => {
     console.error('search-messages: FAIL', e);
     process.exitCode = 1;
   });
+  require('./test-uat-read-paths').run().catch(e => {
+    console.error('uat-read-paths: FAIL', e);
+    process.exitCode = 1;
+  });
   require('./test-cli-tool').run();
   require('./test-lark-desktop').run();
   require('./test-display-label');  // standalone — runs on require, exits non-zero on fail

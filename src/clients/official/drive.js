@@ -8,10 +8,35 @@ module.exports = {
   // --- Drive ---
 
   async listFiles(folderToken, { pageSize = 50, pageToken } = {}) {
-    const params = { page_size: pageSize, folder_token: folderToken || '' };
+    // UAT-first (v1.3.16): the bot identity 403s on personal-space ("我的空间")
+    // folders it was never invited to, which made user-uploaded files (UAT
+    // upload path) undiscoverable — and therefore undeletable, because
+    // manage_drive_file needs a file_token only list_files can provide.
+    // Bot fallback keeps bot-shared folders working. (2026-06-06 user report.)
+    const size = Math.max(1, parseInt(pageSize, 10) || 50);
+    const params = { page_size: size, folder_token: folderToken || '' };
     if (pageToken) params.page_token = pageToken;
-    const res = await this._safeSDKCall(() => this.client.drive.file.list({ params }), 'listFiles');
-    return { items: res.data.files || [], hasMore: res.data.has_more };
+    const query = { page_size: String(size), folder_token: folderToken || '' };
+    if (pageToken) query.page_token = pageToken;
+    const res = await this._asUserOrApp({
+      uatPath: '/open-apis/drive/v1/files',
+      query,
+      sdkFn: () => this.client.drive.file.list({ params }),
+      label: 'listFiles',
+    });
+    const out = { items: res.data.files || [], hasMore: res.data.has_more, viaUser: !!res._viaUser };
+    if (res.data.next_page_token) out.nextPageToken = res.data.next_page_token;
+    if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
+    // Empty + bot path + ROOT listing only: with an empty folder_token the
+    // bot lists its OWN root space (usually empty), not the user's 我的空间 —
+    // that mismatch is the blind spot worth explaining. A specific
+    // folder_token the bot cannot access throws (403) and never reaches here,
+    // and a bot-visible folder that is genuinely empty should stay a bare []
+    // (Copilot review, PR #115).
+    if (out.items.length === 0 && !res._viaUser && !folderToken) {
+      out.scopeHint = 'Empty result via app identity: with an empty folder_token the bot lists its OWN root space, not your 我的空间 — your personal files are invisible to it. Run `npx feishu-user-plugin oauth` so list_files can read your own space via UAT.';
+    }
+    return out;
   },
 
   async createFolder(name, parentToken) {

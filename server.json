@@ -105,7 +105,7 @@
     },
     {
       "name": "search_docs",
-      "description": "Search Feishu documents by keyword."
+      "description": "Search Feishu documents by keyword. UAT-first with app fallback: with user identity (UAT) the search covers docs visible to YOU, including your personal space; via bot it only covers docs shared with "
     },
     {
       "name": "read_doc",
@@ -129,7 +129,7 @@
     },
     {
       "name": "list_files",
-      "description": "List files in a Drive folder."
+      "description": "List files in a Drive folder. UAT-first with app fallback: with user identity (UAT), empty folder_token lists YOUR personal-space (\"我的空间\") root; via bot it can only see folders shared with the bot (pe"
     },
     {
       "name": "create_folder",
@@ -337,7 +337,7 @@
     },
     {
       "name": "search_wiki",
-      "description": "Search Wiki nodes by keyword."
+      "description": "Search Wiki nodes by keyword. UAT-first with app fallback: with user identity (UAT) the search covers wiki spaces visible to YOU; via bot it only covers spaces the bot was invited to. Response carries"
     },
     {
       "name": "list_wiki_nodes",

@@ -9,10 +9,14 @@ const { text, json } = require('./_registry');
 const schemas = [
   {
     name: 'search_docs',
-    description: '[Official API] Search Feishu documents by keyword.',
+    description: '[Official API] Search Feishu documents by keyword. UAT-first with app fallback: with user identity (UAT) the search covers docs visible to YOU, including your personal space; via bot it only covers docs shared with the bot. Response carries viaUser; when hasMore is true, pass the returned nextOffset back as offset to page forward.',
     inputSchema: {
       type: 'object',
-      properties: { query: { type: 'string', description: 'Search keyword' } },
+      properties: {
+        query: { type: 'string', description: 'Search keyword' },
+        page_size: { type: 'number', description: 'Max results per page (default 10)' },
+        offset: { type: 'number', description: 'Pagination offset from a previous nextOffset' },
+      },
       required: ['query'],
     },
   },
@@ -95,7 +99,10 @@ function need(arg, name, action) {
 
 const handlers = {
   async search_docs(args, ctx) {
-    return json(await ctx.getOfficialClient().searchDocs(args.query));
+    const opts = {};
+    if (args.page_size) opts.pageSize = args.page_size;
+    if (args.offset) opts.pageToken = String(args.offset);
+    return json(await ctx.getOfficialClient().searchDocs(args.query, opts));
   },
   async read_doc(args, ctx) {
     return json(await ctx.getOfficialClient().readDoc(await ctx.resolveDocId(args.document_id)));

@@ -79,6 +79,7 @@ post-v1.3.7 phase A 重构后的文件职责矩阵在 **[docs/REFACTOR-NOTES.md]
 ## 关键 Caveats（高频踩点）
 
 - **写默认 UAT-first**：每个 docx / bitable / drive / wiki / OKR / calendar / tasks 的 `create` / `edit` 走 `_asUserOrApp` —— UAT 优先，bot 仅 fallback。被迫走 bot 时返回 ⚠ warning（指向 `npx feishu-user-plugin oauth`），让 ownership 漂移立即显现
+- **发现类读路径也 UAT-first**（v1.3.16+）：`list_files` / `search_docs` / `search_wiki` / `get_wiki_node` 走 `_asUserOrApp`。bot 身份看不到个人空间（"我的空间"403、搜索不索引），纯 app token 曾导致用户上传的文件找不到也删不掉。返回带 `viaUser` 标明视角归属
 - **下载 2 MiB 上限**：`download_message_resource` / `download_doc_image` 返回 inline base64 时，> 2 MiB 必须传 `save_path`（Anthropic 5 MB inline 上限留 headroom）
 - **`oc_xxx` 自动解析**：所有 cookie 发送自 v1.3.7 起自动把 `oc_xxx` 解析为 numeric chat ID
 - **`merge_forward` 自动展开**：`read_messages` 默认把合并转发展开为子消息；子消息附件下载用 `parentMessageId`，不是子消息 id
