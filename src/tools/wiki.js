@@ -10,10 +10,14 @@ const schemas = [
   },
   {
     name: 'search_wiki',
-    description: '[Official API] Search Wiki nodes by keyword. UAT-first with app fallback: with user identity (UAT) the search covers wiki spaces visible to YOU; via bot it only covers spaces the bot was invited to. Response carries viaUser.',
+    description: '[Official API] Search Wiki nodes by keyword. UAT-first with app fallback: with user identity (UAT) the search covers wiki spaces visible to YOU; via bot it only covers spaces the bot was invited to. Response carries viaUser; when hasMore is true, pass the returned nextOffset back as offset to page forward.',
     inputSchema: {
       type: 'object',
-      properties: { query: { type: 'string', description: 'Search keyword' } },
+      properties: {
+        query: { type: 'string', description: 'Search keyword' },
+        page_size: { type: 'number', description: 'Max results per page (default 20)' },
+        offset: { type: 'number', description: 'Pagination offset from a previous nextOffset' },
+      },
       required: ['query'],
     },
   },
@@ -119,7 +123,10 @@ const handlers = {
     return json(await ctx.getOfficialClient().listWikiSpaces());
   },
   async search_wiki(args, ctx) {
-    return json(await ctx.getOfficialClient().searchWiki(args.query));
+    const opts = {};
+    if (args.page_size) opts.pageSize = args.page_size;
+    if (args.offset) opts.offset = args.offset;
+    return json(await ctx.getOfficialClient().searchWiki(args.query, opts));
   },
   async list_wiki_nodes(args, ctx) {
     return json(await ctx.getOfficialClient().listWikiNodes(args.space_id, { parentNodeToken: args.parent_node_token }));

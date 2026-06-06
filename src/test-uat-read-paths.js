@@ -121,7 +121,7 @@ async function run() {
     assert.equal(res.fallbackWarning, '⚠️ w');
   }
 
-  // --- 6. getWikiNode is UAT-first ---
+  // --- 6. getWikiNode is UAT-first and surfaces viaUser ---
   {
     const c = fakeClient({
       uatResult: { code: 0, data: { node: { node_token: 'wikcnZ', obj_type: 'docx' } }, _viaUser: true },
@@ -132,6 +132,20 @@ async function run() {
     assert.equal(opts.uatPath, '/open-apis/wiki/v2/spaces/get_node');
     assert.equal(opts.query.token, 'wikcnZ');
     assert.equal(node.node_token, 'wikcnZ');
+    assert.equal(node.viaUser, true, 'getWikiNode must surface viaUser like its 3 sibling reads');
+  }
+
+  // --- 6b. getWikiNode bot fallback must NOT swallow the fallbackWarning ---
+  // The warning lives on the top-level data object from withIdentityFallback,
+  // not on data.node — without explicit copying, a UAT-revoked → bot fallback
+  // silently drops it (caught by multi-agent review of the original commit).
+  {
+    const c = fakeClient({
+      uatResult: { code: 0, data: { node: { node_token: 'wikcnZ', obj_type: 'docx' } }, _viaUser: false, _fallbackWarning: '⚠️ g' },
+    });
+    const node = await wikiMixin.getWikiNode.call(c, 'wikcnZ');
+    assert.equal(node.viaUser, false);
+    assert.equal(node.fallbackWarning, '⚠️ g', 'fallbackWarning must survive onto the node so json() hoists it');
   }
 
   // --- 7. get_wiki_node handler still synthesizes for obj_tokens on dual failure ---
@@ -150,6 +164,52 @@ async function run() {
     const body = JSON.parse(resp.content[0].text);
     assert.equal(body.obj_type, 'docx', 'obj_token synthesis must survive the dual-identity error shape');
     assert.equal(body.obj_token, 'docxabcdef');
+  }
+
+  // --- 7b. synthesis also survives the LIVE error shape (131005, not 95300x) ---
+  // Real Feishu instances return code=131005 "not found" for non-wiki tokens
+  // (observed in E2E 2026-06-06); only the `node.*not.*found` regex branch
+  // catches it. Pin that branch so a regex edit can't silently regress it.
+  {
+    const { handlers } = require('./tools/wiki');
+    const err = new Error('getNode failed on both identities. as user: code=131005 msg=not found. as app: getNode failed (HTTP 400, code=131005): not found');
+    const ctx = {
+      getOfficialClient: () => ({
+        getWikiNode: async () => { throw err; },
+      }),
+    };
+    const resp = await handlers.get_wiki_node({ node_token: 'bascnabcdef' }, ctx);
+    const body = JSON.parse(resp.content[0].text);
+    assert.equal(body.obj_type, 'bitable', 'live 131005 error shape must still trigger obj_token synthesis');
+    assert.equal(body.obj_token, 'bascnabcdef');
+  }
+
+  // --- 10. search pagination: nextOffset cursor surfaces; params pass through ---
+  {
+    const c = fakeClient({
+      uatResult: { code: 0, data: { docs_entities: [{ t: 1 }, { t: 2 }], has_more: true }, _viaUser: true },
+    });
+    const res = await docsMixin.searchDocs.call(c, 'q', { pageSize: 2, pageToken: '4' });
+    assert.equal(c.calls.asUserOrApp[0].body.offset, 4, 'searchDocs offset passthrough');
+    assert.equal(c.calls.asUserOrApp[0].body.count, 2, 'searchDocs page size passthrough');
+    assert.equal(res.nextOffset, 6, 'searchDocs nextOffset = offset + items returned');
+  }
+  {
+    const c = fakeClient({
+      uatResult: { code: 0, data: { docs_entities: [{ t: 1 }], has_more: true }, _viaUser: true },
+    });
+    const res = await wikiMixin.searchWiki.call(c, 'q', { pageSize: 1, offset: 3 });
+    assert.equal(c.calls.asUserOrApp[0].body.offset, 3, 'searchWiki offset passthrough');
+    assert.equal(c.calls.asUserOrApp[0].body.count, 1, 'searchWiki page size passthrough');
+    assert.equal(res.nextOffset, 4, 'searchWiki nextOffset cursor');
+    assert.equal(res.hasMore, true, 'searchWiki must surface hasMore');
+  }
+  // schema: pagination params exposed on both search tools
+  {
+    const sd = require('./tools/docs').schemas.find(s => s.name === 'search_docs');
+    const sw = require('./tools/wiki').schemas.find(s => s.name === 'search_wiki');
+    assert.ok(sd.inputSchema.properties.page_size && sd.inputSchema.properties.offset, 'search_docs schema pagination');
+    assert.ok(sw.inputSchema.properties.page_size && sw.inputSchema.properties.offset, 'search_wiki schema pagination');
   }
 
   // --- 8. list_files tool schema exposes pagination + UAT-first semantics ---

@@ -14,7 +14,8 @@ module.exports = {
     // UAT-first (v1.3.16): the suite search API only indexes docs the calling
     // identity can see. App identity misses everything in the user's personal
     // space — the 2026-06-06 "search_docs 搜不到个人空间 PDF" report.
-    const body = { search_key: query, count: pageSize, offset: pageToken ? parseInt(pageToken) : 0, owner_ids: [], chat_ids: [], docs_types: [] };
+    const offset = pageToken ? parseInt(pageToken) : 0;
+    const body = { search_key: query, count: pageSize, offset, owner_ids: [], chat_ids: [], docs_types: [] };
     const res = await this._asUserOrApp({
       uatPath: '/open-apis/suite/docs-api/search/object',
       method: 'POST',
@@ -23,6 +24,10 @@ module.exports = {
       label: 'searchDocs',
     });
     const out = { items: res.data.docs_entities || [], hasMore: res.data.has_more, viaUser: !!res._viaUser };
+    // Offset-based cursor — hasMore alone gave callers no way to actually
+    // page forward, and UAT-wide search makes truncation likelier (the hidden
+    // tail may hold the very personal-space doc the user is hunting).
+    if (res.data.has_more) out.nextOffset = offset + out.items.length;
     if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
     return out;
   },

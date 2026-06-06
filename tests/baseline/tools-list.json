@@ -1869,9 +1869,17 @@
   },
   {
     "name": "search_docs",
-    "description": "[Official API] Search Feishu documents by keyword. UAT-first with app fallback: with user identity (UAT) the search covers docs visible to YOU, including your personal space; via bot it only covers docs shared with the bot. Response carries viaUser.",
+    "description": "[Official API] Search Feishu documents by keyword. UAT-first with app fallback: with user identity (UAT) the search covers docs visible to YOU, including your personal space; via bot it only covers docs shared with the bot. Response carries viaUser; when hasMore is true, pass the returned nextOffset back as offset to page forward.",
     "inputSchema": {
       "properties": {
+        "offset": {
+          "description": "Pagination offset from a previous nextOffset",
+          "type": "number"
+        },
+        "page_size": {
+          "description": "Max results per page (default 10)",
+          "type": "number"
+        },
         "query": {
           "description": "Search keyword",
           "type": "string"
@@ -1944,9 +1952,17 @@
   },
   {
     "name": "search_wiki",
-    "description": "[Official API] Search Wiki nodes by keyword. UAT-first with app fallback: with user identity (UAT) the search covers wiki spaces visible to YOU; via bot it only covers spaces the bot was invited to. Response carries viaUser.",
+    "description": "[Official API] Search Wiki nodes by keyword. UAT-first with app fallback: with user identity (UAT) the search covers wiki spaces visible to YOU; via bot it only covers spaces the bot was invited to. Response carries viaUser; when hasMore is true, pass the returned nextOffset back as offset to page forward.",
     "inputSchema": {
       "properties": {
+        "offset": {
+          "description": "Pagination offset from a previous nextOffset",
+          "type": "number"
+        },
+        "page_size": {
+          "description": "Max results per page (default 20)",
+          "type": "number"
+        },
         "query": {
           "description": "Search keyword",
           "type": "string"

@@ -28,11 +28,11 @@ module.exports = {
     return out;
   },
 
-  async searchWiki(query) {
+  async searchWiki(query, { pageSize = 20, offset = 0 } = {}) {
     // UAT-first (v1.3.16): same blind spot as searchDocs — the suite search
     // API only indexes entities the calling identity can see, so the app
     // identity misses wiki nodes in spaces the bot wasn't invited to.
-    const body = { search_key: query, count: 20, offset: 0, owner_ids: [], chat_ids: [], docs_types: ['wiki'] };
+    const body = { search_key: query, count: pageSize, offset, owner_ids: [], chat_ids: [], docs_types: ['wiki'] };
     const res = await this._asUserOrApp({
       uatPath: '/open-apis/suite/docs-api/search/object',
       method: 'POST',
@@ -40,7 +40,12 @@ module.exports = {
       sdkFn: () => this.client.request({ method: 'POST', url: '/open-apis/suite/docs-api/search/object', data: body }),
       label: 'searchWiki',
     });
-    const out = { items: res.data.docs_entities || [], viaUser: !!res._viaUser };
+    const out = { items: res.data.docs_entities || [], hasMore: res.data.has_more, viaUser: !!res._viaUser };
+    // The suite search API is offset-based; hand the caller a ready-to-use
+    // cursor so paging doesn't require manual offset math (UAT-wide search
+    // makes truncation likelier — the hidden tail may hold the very
+    // personal-space doc the user is hunting).
+    if (res.data.has_more) out.nextOffset = offset + out.items.length;
     if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
     return out;
   },
@@ -65,7 +70,17 @@ module.exports = {
       sdkFn: () => this.client.wiki.space.getNode({ params: { token: nodeToken } }),
       label: 'getNode',
     });
-    return res.data.node;
+    const node = res.data.node;
+    // Keep the bare-node return shape (resolver.js reads obj_token/obj_type
+    // off it), but attach identity metadata additively so the get_wiki_node
+    // tool surfaces degradation like its 3 sibling discovery reads — without
+    // this, a UAT-revoked → bot fallback would silently swallow the warning
+    // (json() hoists `fallbackWarning` only when it is on the returned object).
+    if (node && typeof node === 'object') {
+      node.viaUser = !!res._viaUser;
+      if (res._fallbackWarning) node.fallbackWarning = res._fallbackWarning;
+    }
+    return node;
   },
 
   async listWikiNodes(spaceId, { parentNodeToken, pageToken } = {}) {
