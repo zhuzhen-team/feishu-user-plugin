@@ -31,7 +31,9 @@ module.exports = {
     // Offset-based cursor — hasMore alone gave callers no way to actually
     // page forward, and UAT-wide search makes truncation likelier (the hidden
     // tail may hold the very personal-space doc the user is hunting).
-    if (res.data.has_more) out.nextOffset = offset + out.items.length;
+    // Guard on items.length: an abnormal has_more:true + empty page would
+    // otherwise emit nextOffset === offset and stall a paging loop.
+    if (res.data.has_more && out.items.length > 0) out.nextOffset = offset + out.items.length;
     if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
     return out;
   },
