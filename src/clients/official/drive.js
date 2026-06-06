@@ -8,10 +8,30 @@ module.exports = {
   // --- Drive ---
 
   async listFiles(folderToken, { pageSize = 50, pageToken } = {}) {
+    // UAT-first (v1.3.16): the bot identity 403s on personal-space ("我的空间")
+    // folders it was never invited to, which made user-uploaded files (UAT
+    // upload path) undiscoverable — and therefore undeletable, because
+    // manage_drive_file needs a file_token only list_files can provide.
+    // Bot fallback keeps bot-shared folders working. (2026-06-06 user report.)
     const params = { page_size: pageSize, folder_token: folderToken || '' };
     if (pageToken) params.page_token = pageToken;
-    const res = await this._safeSDKCall(() => this.client.drive.file.list({ params }), 'listFiles');
-    return { items: res.data.files || [], hasMore: res.data.has_more };
+    const query = { page_size: String(pageSize), folder_token: folderToken || '' };
+    if (pageToken) query.page_token = pageToken;
+    const res = await this._asUserOrApp({
+      uatPath: '/open-apis/drive/v1/files',
+      query,
+      sdkFn: () => this.client.drive.file.list({ params }),
+      label: 'listFiles',
+    });
+    const out = { items: res.data.files || [], hasMore: res.data.has_more, viaUser: !!res._viaUser };
+    if (res.data.next_page_token) out.nextPageToken = res.data.next_page_token;
+    if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
+    // Empty + bot path: most likely the caller wanted their personal space,
+    // which the bot cannot see (403). Surface the why instead of a bare [].
+    if (out.items.length === 0 && !res._viaUser) {
+      out.scopeHint = 'No files returned via app identity — personal-space ("我的空间") folders are invisible to the bot (HTTP 403). Run `npx feishu-user-plugin oauth` so list_files can read your own space via UAT.';
+    }
+    return out;
   },
 
   async createFolder(name, parentToken) {

@@ -9,7 +9,7 @@ const { text, json } = require('./_registry');
 const schemas = [
   {
     name: 'search_docs',
-    description: '[Official API] Search Feishu documents by keyword.',
+    description: '[Official API] Search Feishu documents by keyword. UAT-first with app fallback: with user identity (UAT) the search covers docs visible to YOU, including your personal space; via bot it only covers docs shared with the bot. Response carries viaUser.',
     inputSchema: {
       type: 'object',
       properties: { query: { type: 'string', description: 'Search keyword' } },

@@ -930,11 +930,19 @@
   },
   {
     "name": "list_files",
-    "description": "[Official API] List files in a Drive folder.",
+    "description": "[Official API] List files in a Drive folder. UAT-first with app fallback: with user identity (UAT), empty folder_token lists YOUR personal-space (\"我的空间\") root; via bot it can only see folders shared with the bot (personal-space folders return 403). Response carries viaUser so you know whose view you got. Use the returned file token with manage_drive_file to copy/move/delete.",
     "inputSchema": {
       "properties": {
         "folder_token": {
-          "description": "Folder token (empty for root)",
+          "description": "Folder token (empty for root — your 我的空间 root when UAT is configured)",
+          "type": "string"
+        },
+        "page_size": {
+          "description": "Max files per page (default 50)",
+          "type": "number"
+        },
+        "page_token": {
+          "description": "Pagination token from a previous nextPageToken",
           "type": "string"
         }
       },
@@ -1861,7 +1869,7 @@
   },
   {
     "name": "search_docs",
-    "description": "[Official API] Search Feishu documents by keyword.",
+    "description": "[Official API] Search Feishu documents by keyword. UAT-first with app fallback: with user identity (UAT) the search covers docs visible to YOU, including your personal space; via bot it only covers docs shared with the bot. Response carries viaUser.",
     "inputSchema": {
       "properties": {
         "query": {
@@ -1936,7 +1944,7 @@
   },
   {
     "name": "search_wiki",
-    "description": "[Official API] Search Wiki nodes by keyword.",
+    "description": "[Official API] Search Wiki nodes by keyword. UAT-first with app fallback: with user identity (UAT) the search covers wiki spaces visible to YOU; via bot it only covers spaces the bot was invited to. Response carries viaUser.",
     "inputSchema": {
       "properties": {
         "query": {

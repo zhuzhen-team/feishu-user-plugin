@@ -10,7 +10,7 @@ const schemas = [
   },
   {
     name: 'search_wiki',
-    description: '[Official API] Search Wiki nodes by keyword.',
+    description: '[Official API] Search Wiki nodes by keyword. UAT-first with app fallback: with user identity (UAT) the search covers wiki spaces visible to YOU; via bot it only covers spaces the bot was invited to. Response carries viaUser.',
     inputSchema: {
       type: 'object',
       properties: { query: { type: 'string', description: 'Search keyword' } },

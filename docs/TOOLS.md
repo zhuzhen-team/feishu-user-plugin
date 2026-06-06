@@ -42,6 +42,7 @@
 
 - `list_user_chats` 仅返回**群聊**（飞书 API 限制）。P2P 列表请走 `search_contacts` → `create_p2p_chat`
 - docx / bitable / drive / wiki / OKR / calendar / tasks 的 create+edit 默认 UAT-first —— UAT 优先、bot fallback，被迫走 bot 时返回里带 ⚠ warning。资源 ownership 与 caller 一致
+- 发现类读路径同样 UAT-first（v1.3.16+）：`list_files` / `search_docs` / `search_wiki` / `get_wiki_node`。此前这四个走纯 app token，bot 看不到个人空间（"我的空间"403 / 搜索不索引），导致用户上传的文件**找不到也删不掉**；现在返回里带 `viaUser` 标明视角归属
 
 ## Official API — IM（16 tools）
 `list_chats` / `read_messages` / `search_messages` / `send_message_as_bot` / `reply_message` / `forward_message` / `delete_message` / `update_message` / `add_reaction` / `delete_reaction` / `pin_message` / `create_group` / `update_group` / `list_members` / `manage_members` / `download_message_resource`
@@ -57,6 +58,7 @@
 ## Official API — Docs（7 tools）
 `search_docs` / `read_doc` / `read_doc_markdown` / `get_doc_blocks` / `create_doc` / `manage_doc_block` / `download_doc_image`
 
+- `search_docs` UAT-first（v1.3.16）：用户身份下搜索范围覆盖**你**可见的全部文档（含个人空间上传的 PDF 等）；bot 身份只覆盖共享给 bot 的文档。返回带 `viaUser`
 - `read_doc_markdown` 返回 markdown 字符串而非结构化 JSON —— RAG / digest / 摘要类调用省 ~60% token。嵌入图片 / 文件以 `feishu://image_token/<TOKEN>` / `feishu://file_token/<TOKEN>` 占位符保留；二进制内容配合 `download_doc_image` 取。`document_id` 同样接受 native token / wiki node / 飞书 URL
 - `manage_doc_block(action=create)` 提供图片（`image_path` / `image_token`）和文件（`file_path` / `file_token`）快捷参数；FILE 块（block_type=23）会被自动包到 VIEW 容器（block_type=33），插件在 `replace_file` PATCH 前先走入容器内的文件块
 - `download_doc_image` 同 `download_message_resource` 的 2 MiB 上限
@@ -73,7 +75,7 @@
 ## Official API — Wiki（9 tools）
 `list_wiki_spaces` / `search_wiki` / `list_wiki_nodes` / `get_wiki_node` / `create_wiki_node` / `update_wiki_node` / `move_wiki_node` / `copy_wiki_node` / `delete_wiki_node`
 
-- `list_wiki_spaces` / `list_wiki_nodes` 是 UAT-first；bot 路径返回空时附 `scopeHint`（一般是缺 `wiki:wiki:readonly`）
+- `list_wiki_spaces` / `list_wiki_nodes` / `search_wiki` / `get_wiki_node` 都是 UAT-first（后两个 v1.3.16 起）；bot 路径返回空时 `list_wiki_spaces` 附 `scopeHint`（一般是缺 `wiki:wiki:readonly`）
 - `get_wiki_node` 同时接受 wiki node token 和 `search_wiki` 返回的底层 `obj_token`（合成 node-shape）
 - `update_wiki_node` 只能 patch `title`（飞书 wiki API 不接收内容编辑 —— 内容走 docx / bitable / sheet 工具）
 - `delete_wiki_node` 只删 wiki 节点指针；底层 drive 资源需另外 `manage_drive_file(action=delete)` 删
@@ -82,6 +84,7 @@
 `list_files` / `create_folder` / `manage_drive_file(action=copy|move|delete)` / `upload_drive_file` — Drive 域（4）
 `upload_image` / `upload_file` / `upload_bitable_attachment` — 跨域上传辅助（3，分别用于 cookie 消息 / docx 媒体 / bitable 附件）
 
+- `list_files` UAT-first（v1.3.16）：UAT 身份下空 `folder_token` 列**你的**"我的空间"根目录；bot 身份只能看被显式共享的文件夹（个人空间 403）。支持 `page_size` / `page_token` 分页（返回 `nextPageToken`），空结果 + bot 路径时附 `scopeHint`。上传→`list_files` 拿 token→`manage_drive_file(action=delete)` 的删除闭环由此打通
 - `manage_drive_file` 必传 `type`（`file/folder/docx/sheet/bitable/mindnote/slides`）—— 否则飞书报 1061002 / 1062501
 - `upload_drive_file` 带 `wiki_space_id` 时调 `attachToWiki(obj_type=file)` 把上传作为 Wiki 节点原子放置
 
