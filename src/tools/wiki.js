@@ -125,7 +125,7 @@ const handlers = {
   async search_wiki(args, ctx) {
     const opts = {};
     if (args.page_size) opts.pageSize = args.page_size;
-    if (args.offset) opts.offset = args.offset;
+    if (args.offset !== undefined) opts.offset = args.offset;
     return json(await ctx.getOfficialClient().searchWiki(args.query, opts));
   },
   async list_wiki_nodes(args, ctx) {

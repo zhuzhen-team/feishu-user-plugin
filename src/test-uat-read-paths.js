@@ -235,6 +235,41 @@ async function run() {
     assert.equal(body.count, 20, 'searchWiki NaN page size falls back to default');
   }
 
+  // --- 11b. abnormal has_more:true + empty page must NOT emit a stalled cursor ---
+  // nextOffset === offset would loop a paging caller forever (final release
+  // review, v1.3.16). hasMore stays visible; the unusable cursor is withheld.
+  {
+    const c = fakeClient({
+      uatResult: { code: 0, data: { docs_entities: [], has_more: true }, _viaUser: true },
+    });
+    const res = await docsMixin.searchDocs.call(c, 'q', { pageToken: '5' });
+    assert.equal(res.hasMore, true);
+    assert.equal(res.nextOffset, undefined, 'searchDocs empty page must not emit nextOffset === offset');
+  }
+  {
+    const c = fakeClient({
+      uatResult: { code: 0, data: { docs_entities: [], has_more: true }, _viaUser: true },
+    });
+    const res = await wikiMixin.searchWiki.call(c, 'q', { offset: 5 });
+    assert.equal(res.nextOffset, undefined, 'searchWiki empty page must not emit nextOffset === offset');
+  }
+
+  // --- 11c. explicit offset:0 is honored by the handlers (not dropped as falsy) ---
+  {
+    const docsHandlers = require('./tools/docs').handlers;
+    let got;
+    const ctx = { getOfficialClient: () => ({ searchDocs: async (q, opts) => { got = opts; return { items: [] }; } }) };
+    await docsHandlers.search_docs({ query: 'q', offset: 0 }, ctx);
+    assert.equal(got.pageToken, '0', 'search_docs handler must pass explicit offset:0 through');
+  }
+  {
+    const wikiHandlers = require('./tools/wiki').handlers;
+    let got;
+    const ctx = { getOfficialClient: () => ({ searchWiki: async (q, opts) => { got = opts; return { items: [] }; } }) };
+    await wikiHandlers.search_wiki({ query: 'q', offset: 0 }, ctx);
+    assert.equal(got.offset, 0, 'search_wiki handler must pass explicit offset:0 through');
+  }
+
   // --- 12. scopeHint fires ONLY for empty root listing via bot ---
   // A bot-visible folder that is genuinely empty must stay a bare [] — the
   // blind-spot hint is about the bot's OWN root vs the user's 我的空间

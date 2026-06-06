@@ -101,7 +101,7 @@ const handlers = {
   async search_docs(args, ctx) {
     const opts = {};
     if (args.page_size) opts.pageSize = args.page_size;
-    if (args.offset) opts.pageToken = String(args.offset);
+    if (args.offset !== undefined) opts.pageToken = String(args.offset);
     return json(await ctx.getOfficialClient().searchDocs(args.query, opts));
   },
   async read_doc(args, ctx) {

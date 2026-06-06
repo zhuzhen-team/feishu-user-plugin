@@ -48,7 +48,9 @@ module.exports = {
     // cursor so paging doesn't require manual offset math (UAT-wide search
     // makes truncation likelier — the hidden tail may hold the very
     // personal-space doc the user is hunting).
-    if (res.data.has_more) out.nextOffset = safeOffset + out.items.length;
+    // Guard on items.length: see searchDocs — prevents a stalled cursor on an
+    // abnormal has_more:true + empty page.
+    if (res.data.has_more && out.items.length > 0) out.nextOffset = safeOffset + out.items.length;
     if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
     return out;
   },
