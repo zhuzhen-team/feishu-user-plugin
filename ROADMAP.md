@@ -4,11 +4,11 @@
 >
 > 战略定位：聚焦官方做不到 / 做不好的差异化（cookie + protobuf 用户身份路径 + 文档生态 + 实时事件 SSOT + 多 profile 自动切换 + MCP 协议原生）。明确**不再扩展**与官方重叠的业务系统域（mail / approval / attendance / hr / minutes 等）。详见 [docs/COMPARISON.md](./docs/COMPARISON.md)。
 
-## v1.3.15+ 待办
+## v1.3.16+ 待办
 
-（暂空，等下一个 release 周期定）
+- PR #110（uncaughtException 加固 + zombie 进程清理，外部贡献）：已 request changes（`ps comm` 匹配不到进程、SIGKILL 误杀 WS-owner 风险、重入计数不可达、index.js 边界契约、缺测试），等贡献者按建议拆分后再合 util.inspect 加固部分
 
-v1.3.14 OAuth / UAT 子系统深度优化（跨进程锁路径迁移到 canonical home + cookie heartbeat ws-owner 单跑 + invalid_grant → UAT_REVOKED 状态机贯通 + 三层 adopt race-shield + 27 个新 fixture 测试 + token-leak 收紧）已 ship — 见 [CHANGELOG.md v1.3.14 entry](./CHANGELOG.md)。前序版本 v1.3.12 / v1.3.13 见同 CHANGELOG。
+v1.3.16 发现类读路径 UAT-first（list_files / search_docs / search_wiki / get_wiki_node + 分页游标 + protobufjs 8 / lark-sdk 1.66 依赖升级）已 ship — 见 [CHANGELOG.md v1.3.16 entry](./CHANGELOG.md)。前序版本 v1.3.14 / v1.3.15 见同 CHANGELOG。
 
 ## 已调研但暂不实施
 
