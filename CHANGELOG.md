@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.16] - 2026-06-06
+
+修掉发现类读路径的身份盲区：上传到个人空间的文件此前找不到、也因此删不掉。`list_files` / `search_docs` / `search_wiki` / `get_wiki_node` 四条读路径改为 UAT 优先（bot fallback 保留）。85 工具数不变，list_files / search_docs / search_wiki 三个 schema 新增分页参数，无 breaking API。
+
+### Added
+
+- **list_files 看得见你的个人空间了（用户报障修复）**：此前 `list_files` 走纯 app token，bot 对个人空间（"我的空间"）文件夹 403，导致 `upload_drive_file` 走 UAT 传上去的文件**不可发现、也不可删除**（`manage_drive_file(action=delete)` 需要的 file_token 拿不到）。现在 UAT 优先、bot fallback：配置 UAT 后空 `folder_token` 列你自己的"我的空间"根目录。新增 `page_size` / `page_token` 入参与 `nextPageToken` 返回；root 空结果且走 bot 路径时附 `scopeHint` 解释 bot root ≠ 我的空间。（`src/clients/official/drive.js`）
+- **search_docs / search_wiki 分页游标**：新增 `page_size` / `offset` 入参，`hasMore` 时返回 `nextOffset` 直接回填即可翻页；此前只有 `hasMore` 没有可用游标，截断的尾部恰好可能藏着要找的个人空间文档。异常的 `has_more:true` 空页不发 cursor，防止翻页死循环。坏参数（NaN / 负数）收敛为非负整数后才发给飞书。
+
+### Changed
+
+- **search_docs / search_wiki / get_wiki_node 改 UAT-first**：suite 搜索 API 只索引调用身份可见的内容，app 身份搜不到个人空间文档（报障里上传的 PDF 就是这样消失的）。三条路径与 `list_files` 一并走 `_asUserOrApp`（UAT 优先、bot fallback，被迫走 bot 时返回 ⚠ fallbackWarning），响应统一带 `viaUser` 标明视角归属。`get_wiki_node` 保持裸 node 返回形状（resolver 兼容），additive 附加 `viaUser` / `fallbackWarning`；obj_token 合成正则不受新错误形状影响（953001 与 live 实测 131005 双分支测试钉死）。
+- **依赖升级**：protobufjs 7.5.6 → 8.6.0（cookie protobuf 发送层经真实发送探针 + 读回验证）；`@larksuiteoapi/node-sdk` 1.63.1 → 1.66.0（official API 读路径实测）。
+- **MCP Registry namespace** 指向 `io.github.zhuzhen-team`（仓库迁移收尾）。
+
+### Test scenarios
+
+- 配置 UAT 后调 `list_files`（空参）应列出你"我的空间"根目录且 `viaUser:true`
+- `upload_drive_file` 上传 → `list_files` 拿 file_token → `manage_drive_file(action=delete)` 删除 → 再 `list_files` 确认消失
+- `search_docs` 搜个人空间上传的 PDF 标题应能命中，`page_size`+`offset` 翻页两页无重叠
+
 ## [1.3.15] - 2026-05-31
 
 两条增强：文档建表格不再让 agent 猜 block_type；UAT 频繁重新授权的根因（良性 refresh_token 轮换竞态被误判为撤销）修掉。无 schema 变化、无新工具（仍 85）、无 breaking API。升级后重启 Claude Code / Codex 自动拉 v1.3.15。
