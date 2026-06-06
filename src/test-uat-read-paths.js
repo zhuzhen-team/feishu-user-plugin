@@ -212,6 +212,41 @@ async function run() {
     assert.ok(sw.inputSchema.properties.page_size && sw.inputSchema.properties.offset, 'search_wiki schema pagination');
   }
 
+  // --- 11. unvalidated args are clamped, never reach Feishu as NaN/negative ---
+  // Tool args have no schema validation layer; a bad offset/page_size must be
+  // normalized to sane non-negative integers (Copilot review, PR #115).
+  {
+    const c = fakeClient({
+      uatResult: { code: 0, data: { docs_entities: [{ t: 1 }], has_more: true }, _viaUser: true },
+    });
+    const res = await docsMixin.searchDocs.call(c, 'q', { pageSize: 'abc', pageToken: '-5' });
+    const body = c.calls.asUserOrApp[0].body;
+    assert.equal(body.offset, 0, 'searchDocs negative offset clamps to 0');
+    assert.equal(body.count, 10, 'searchDocs non-numeric page size falls back to default');
+    assert.equal(res.nextOffset, 1, 'nextOffset math stays sane after clamping');
+  }
+  {
+    const c = fakeClient({
+      uatResult: { code: 0, data: { docs_entities: [], has_more: false }, _viaUser: true },
+    });
+    await wikiMixin.searchWiki.call(c, 'q', { pageSize: NaN, offset: 'xyz' });
+    const body = c.calls.asUserOrApp[0].body;
+    assert.equal(body.offset, 0, 'searchWiki non-numeric offset clamps to 0');
+    assert.equal(body.count, 20, 'searchWiki NaN page size falls back to default');
+  }
+
+  // --- 12. scopeHint fires ONLY for empty root listing via bot ---
+  // A bot-visible folder that is genuinely empty must stay a bare [] — the
+  // blind-spot hint is about the bot's OWN root vs the user's 我的空间
+  // (Copilot review, PR #115). 403-on-personal-folder throws and never gets here.
+  {
+    const c = fakeClient({
+      uatResult: { code: 0, data: { files: [], has_more: false }, _viaUser: false },
+    });
+    const res = await driveMixin.listFiles.call(c, 'fldcnSharedEmpty');
+    assert.equal(res.scopeHint, undefined, 'empty bot-visible folder must NOT carry the root blind-spot hint');
+  }
+
   // --- 8. list_files tool schema exposes pagination + UAT-first semantics ---
   {
     const { schemas } = require('./tools/drive');

@@ -14,8 +14,12 @@ module.exports = {
     // UAT-first (v1.3.16): the suite search API only indexes docs the calling
     // identity can see. App identity misses everything in the user's personal
     // space — the 2026-06-06 "search_docs 搜不到个人空间 PDF" report.
-    const offset = pageToken ? parseInt(pageToken) : 0;
-    const body = { search_key: query, count: pageSize, offset, owner_ids: [], chat_ids: [], docs_types: [] };
+    // Tool args arrive unvalidated — clamp to sane non-negative integers so a
+    // bad offset can't reach Feishu as NaN/negative or corrupt nextOffset
+    // math (Copilot review, PR #115).
+    const offset = Math.max(0, parseInt(pageToken, 10) || 0);
+    const size = Math.max(1, parseInt(pageSize, 10) || 10);
+    const body = { search_key: query, count: size, offset, owner_ids: [], chat_ids: [], docs_types: [] };
     const res = await this._asUserOrApp({
       uatPath: '/open-apis/suite/docs-api/search/object',
       method: 'POST',

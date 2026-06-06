@@ -32,7 +32,10 @@ module.exports = {
     // UAT-first (v1.3.16): same blind spot as searchDocs — the suite search
     // API only indexes entities the calling identity can see, so the app
     // identity misses wiki nodes in spaces the bot wasn't invited to.
-    const body = { search_key: query, count: pageSize, offset, owner_ids: [], chat_ids: [], docs_types: ['wiki'] };
+    // Clamp unvalidated tool args (Copilot review, PR #115).
+    const safeOffset = Math.max(0, parseInt(offset, 10) || 0);
+    const size = Math.max(1, parseInt(pageSize, 10) || 20);
+    const body = { search_key: query, count: size, offset: safeOffset, owner_ids: [], chat_ids: [], docs_types: ['wiki'] };
     const res = await this._asUserOrApp({
       uatPath: '/open-apis/suite/docs-api/search/object',
       method: 'POST',
@@ -45,7 +48,7 @@ module.exports = {
     // cursor so paging doesn't require manual offset math (UAT-wide search
     // makes truncation likelier — the hidden tail may hold the very
     // personal-space doc the user is hunting).
-    if (res.data.has_more) out.nextOffset = offset + out.items.length;
+    if (res.data.has_more) out.nextOffset = safeOffset + out.items.length;
     if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
     return out;
   },
