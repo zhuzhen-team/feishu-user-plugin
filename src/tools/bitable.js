@@ -106,6 +106,7 @@ const schemas = [
         filter: { type: 'object', description: 'Filter conditions (search only, optional)' },
         sort: { type: 'array', description: 'Sort conditions (search only, optional)' },
         page_size: { type: 'number', description: 'Results per page (search only, default 20)' },
+        page_token: { type: 'string', description: 'Pagination cursor (search only) — pass the pageToken from a previous response to fetch the next page when hasMore is true.' },
       },
       required: ['action', 'app_token', 'table_id'],
     },
@@ -221,7 +222,7 @@ const handlers = {
     switch (args.action) {
       case 'search':
         return json(await c.searchBitableRecords(appToken, args.table_id, {
-          filter: args.filter, sort: args.sort, pageSize: args.page_size,
+          filter: args.filter, sort: args.sort, pageSize: args.page_size, pageToken: args.page_token,
         }));
       case 'get': {
         need(args.record_id, 'record_id', 'get');

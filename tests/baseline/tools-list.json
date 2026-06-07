@@ -1120,9 +1120,13 @@
   },
   {
     "name": "list_wiki_nodes",
-    "description": "[Official API] List nodes in a Wiki space.",
+    "description": "[Official API] List nodes in a Wiki space (50 per page). When hasMore is true, pass the returned pageToken back as page_token to fetch the next page.",
     "inputSchema": {
       "properties": {
+        "page_token": {
+          "description": "Pagination cursor — pass the pageToken from a previous response to fetch the next page.",
+          "type": "string"
+        },
         "parent_node_token": {
           "description": "Parent node token (optional)",
           "type": "string"
@@ -1140,7 +1144,7 @@
   },
   {
     "name": "list_wiki_spaces",
-    "description": "[Official API] List all accessible Wiki spaces.",
+    "description": "[Official API] List all accessible Wiki spaces. Follows pagination internally and returns ALL spaces (pre-v1.3.17 silently capped at 50).",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -1262,6 +1266,10 @@
         "page_size": {
           "description": "Results per page (search only, default 20)",
           "type": "number"
+        },
+        "page_token": {
+          "description": "Pagination cursor (search only) — pass the pageToken from a previous response to fetch the next page when hasMore is true.",
+          "type": "string"
         },
         "record_id": {
           "description": "Record ID — required for action=get.",
@@ -1744,6 +1752,10 @@
           "description": "Messages to fetch (default 20, max 50)",
           "type": "number"
         },
+        "page_token": {
+          "description": "Pagination cursor — pass the pageToken from a previous response to fetch the next (older) page when hasMore is true.",
+          "type": "string"
+        },
         "sort_type": {
           "description": "Sort order (default: ByCreateTimeDesc = newest first)",
           "enum": [
@@ -1787,6 +1799,10 @@
         "page_size": {
           "description": "Messages to fetch (default 20, max 50)",
           "type": "number"
+        },
+        "page_token": {
+          "description": "Pagination cursor — pass the pageToken from a previous response to fetch the next (older) page when hasMore is true.",
+          "type": "string"
         },
         "sort_type": {
           "description": "Sort order (default: ByCreateTimeDesc = newest first)",

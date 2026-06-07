@@ -50,9 +50,11 @@
 - `search_messages`（v1.3.12, B.5）UAT-only：包 `POST /open-apis/search/v2/message`，需 OAuth scope `search:message`（飞书 bot path 不暴露搜索）。Filter 支持 `chat_ids` / `from_ids` / `at_user_ids` / `message_types` / `from_types` + 分页。返回 message-id 指针（不是 full bodies），跨多群搜索时 response token 友好
 
 - `read_messages` 解析 chat 名 → bot 群列表 → `im.chat.search` → cookie `search_contacts`。外部群自动 fallback 到 UAT。`merge_forward` 自动展开；text 消息会抽取 `urls[]` + `feishuDocs[]`（用 `expand_merge_forward=false` 关闭）
+- `read_messages` / `read_p2p_messages` **支持 `page_token` 续拉**（v1.3.17）：响应 `hasMore:true` 时把返回的 `pageToken` 作为 `page_token` 传回即可翻页（此前 client 返回了 cursor 但工具不收，超出单页窗口的历史只能用时间区间硬凑）
 - `update_message` 仅支持 `msg_type=text|interactive`（飞书限制；调 API 前就会被拒绝）
 - `forward_message` 自动从前缀识别 `receive_id_type`（`ou_` / `on_` / `email` / ...）
 - `manage_members` 要求 `member_id_type` 与传入的 ID 类型匹配（默认 `open_id`；显式传 `union_id` / `user_id` 避免 9499）
+- `manage_members(action=add)` **上报全部三类部分失败**（v1.3.17）：`invalidIds`（格式错）/ `notExistedIds`（用户不存在）/ `pendingApprovalIds`（卡在入群审批，**还没进群**），任一非空响应顶部带 ⚠ 警示——此前后两类被静默吞掉，半失败读作全员入群
 - `download_message_resource(kind=image|file)` 当 payload > 2 MiB 时**必须传** `save_path`（Anthropic 5 MB inline 上限）。`merge_forward` 子消息要用 `parentMessageId`，不是子消息 id
 
 ## Official API — Docs（7 tools）
@@ -63,6 +65,7 @@
 - `manage_doc_block(action=create)` 提供图片（`image_path` / `image_token`）和文件（`file_path` / `file_token`）快捷参数；FILE 块（block_type=23）会被自动包到 VIEW 容器（block_type=33），插件在 `replace_file` PATCH 前先走入容器内的文件块
 - `get_doc_blocks` / `read_doc_markdown` **跟进分页拉全量**（v1.3.17）：内部循环 `page_token` 直到取完，`hasMore:false` 保证整棵块树都在返回里（此前静默截断在 500 块——大文档尾部"消失"的根因）。超大文档可传 `max_blocks` 限定单次返回，配合返回的 `nextPageToken` 作为 `page_token` 续拉；被限定的返回带 `truncated:true` + `hasMore:true`，绝不静默
 - `manage_doc_block` mode F（table）填格**部分失败不再整体抛错**（v1.3.17）：瞬态错误（code=2200 scope-check 抖动 / 限频 / 5xx）自动退避重试；重试后仍失败的格子记录在 `failedCells:[{row,col,cellId,textBlockId?,reason,skipped?}]`（row/col 0 起算）随成功结果一起返回，连续 3 格失败后剩余格子跳过并标 `skipped:true`。逐格用 `action=update`（block_id 传 `textBlockId`）补内容，不必重建表
+- 图片 / 文件块三步流程（占位块 → 上传 → PATCH）**第 2/3 步瞬态失败自动重试**（v1.3.17）；持续失败时错误信息携带占位块 `blockId`（上传已成功时还带媒体 token）——用 `action=update` 重挂或 `action=delete` 清孤儿，不必全文找空块
 - **`update_text_elements` 是整段替换**：`manage_doc_block(action=update)` 的 `update_text_elements` 全量覆盖该块的 elements 数组（**不是** patch / append）——漏传的 element（加粗前缀、链接等）会永久丢失。只想改一部分时，先 `get_doc_blocks` 读出原 elements，改完后整组传回
 - `download_doc_image` 同 `download_message_resource` 的 2 MiB 上限
 - 所有 `document_id` / `app_token` 都接受 native token / wiki node token / 完整飞书 URL（通过 `getWikiNode` 解析，10 分钟缓存）
@@ -72,6 +75,7 @@
 
 - `manage_bitable_field(action=update)` 即使只改 field name 也必须传 `type`（飞书 API 限制）
 - `manage_bitable_record` create / update / delete 接受数组（单条或最多 500 条）
+- `manage_bitable_record(action=search)` **支持 `page_token` 续拉**（v1.3.17）：`hasMore:true` 时把返回的 `pageToken` 传回 `page_token` 翻页（此前千行表只能拿到第一页且无法续拉）
 - `manage_bitable_app(action=create)` 接受可选 `wiki_space_id`（+ `wiki_parent_node_token`）直接挂到 Wiki
 - `upload_bitable_attachment` 返回 `file_token` → 通过 `manage_bitable_record(action=create|update, records=[{fields:{<field>:[{file_token:"..."}]}}])` 写入附件字段
 
@@ -79,6 +83,7 @@
 `list_wiki_spaces` / `search_wiki` / `list_wiki_nodes` / `get_wiki_node` / `create_wiki_node` / `update_wiki_node` / `move_wiki_node` / `copy_wiki_node` / `delete_wiki_node`
 
 - `list_wiki_spaces` / `list_wiki_nodes` / `search_wiki` / `get_wiki_node` 都是 UAT-first（后两个 v1.3.16 起）；bot 路径返回空时 `list_wiki_spaces` 附 `scopeHint`（一般是缺 `wiki:wiki:readonly`）
+- `list_wiki_spaces` **内部分页拉全量**（v1.3.17，此前静默截断在 50 个空间）；`list_wiki_nodes` 返回 `hasMore` + `pageToken`，传回 `page_token` 翻页（此前 cursor 被丢弃，第 51+ 个节点不可达）
 - `get_wiki_node` 同时接受 wiki node token 和 `search_wiki` 返回的底层 `obj_token`（合成 node-shape）
 - `update_wiki_node` 只能 patch `title`（飞书 wiki API 不接收内容编辑 —— 内容走 docx / bitable / sheet 工具）
 - `delete_wiki_node` 只删 wiki 节点指针；底层 drive 资源需另外 `manage_drive_file(action=delete)` 删

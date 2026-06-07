@@ -330,6 +330,14 @@ main().catch(console.error).finally(() => {
     console.error('doc-blocks-pagination: FAIL', e);
     process.exitCode = 1;
   });
+  require('./test-pagination-cursor-chain').run().catch(e => {
+    console.error('pagination-cursor-chain: FAIL', e);
+    process.exitCode = 1;
+  });
+  require('./test-doc-block-media').run().catch(e => {
+    console.error('doc-block-media: FAIL', e);
+    process.exitCode = 1;
+  });
   require('./test-switch-profile').run().catch(e => {
     console.error('switch-profile-e2e: FAIL', e);
     process.exitCode = 1;

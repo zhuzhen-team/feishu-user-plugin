@@ -29,6 +29,21 @@ async function _withTransientRetry(fn, delays) {
   }
 }
 
+// Structured error for the 3-step media flows (placeholder → upload → PATCH):
+// the placeholder block already exists in the document when step 2/3 fails, so
+// the failure must name it — and carry the uploaded media token when present —
+// or the caller is left hunting for an unexplained empty block with no repair
+// path (2026-06-07 audit).
+function _orphanBlockError(label, blockId, stage, cause, mediaToken) {
+  const repair = mediaToken
+    ? `re-attach it with manage_doc_block(action=update, block_id=${blockId}, image_token/file_token=${mediaToken}) — no need to re-upload`
+    : `retry, or remove the orphan via manage_doc_block(action=delete) on its parent`;
+  const err = new Error(`${label}: placeholder block ${blockId} was created but ${stage} failed — ${cause.message}. The empty block remains in the document; ${repair}.`);
+  err.blockId = blockId;
+  if (mediaToken) err.mediaToken = mediaToken;
+  return err;
+}
+
 module.exports = {
   // --- Docs ---
 
@@ -338,8 +353,12 @@ module.exports = {
   //   1) create empty image placeholder block
   //   2) upload pixels (skipped if caller passes a ready-made imageToken)
   //   3) patch the placeholder with the uploaded token
+  // Steps 2/3 retry transient failures (upload re-send and PATCH full-replace
+  // are both idempotent); a persistent failure throws an error carrying the
+  // placeholder blockId (+ uploaded token when step 2 succeeded) so the caller
+  // can repair instead of orphan-hunting. `retryDelaysMs` is test-only.
   // Returns { blockId, imageToken, viaUser }.
-  async createDocBlockWithImage(documentId, parentBlockId, { imagePath, imageToken, index } = {}) {
+  async createDocBlockWithImage(documentId, parentBlockId, { imagePath, imageToken, index, retryDelaysMs } = {}) {
     if (!imagePath && !imageToken) {
       throw new Error('createDocBlockWithImage: either imagePath or imageToken is required');
     }
@@ -362,28 +381,39 @@ module.exports = {
     const blockId = newBlock?.block_id;
     if (!blockId) throw new Error(`createDocBlockWithImage: placeholder creation returned no block_id: ${JSON.stringify(created.data).slice(0, 400)}`);
 
-    // Step 2 — upload (if needed).
+    // Step 2 — upload (if needed), with transient retry.
+    const delays = Array.isArray(retryDelaysMs) ? retryDelaysMs : CELL_RETRY_DELAYS_MS;
     let finalToken = imageToken;
     let viaUser = !!created._viaUser;
     let fallbackWarning = created._fallbackWarning || null;
     if (!finalToken) {
-      const uploaded = await this.uploadMedia(imagePath, blockId, 'docx_image');
+      let uploaded;
+      try {
+        uploaded = await _withTransientRetry(() => this.uploadMedia(imagePath, blockId, 'docx_image'), delays);
+      } catch (e) {
+        throw _orphanBlockError('createDocBlockWithImage', blockId, 'image upload', e, null);
+      }
       finalToken = uploaded.fileToken;
       viaUser = viaUser && uploaded.viaUser; // true iff both steps went via user
     }
 
-    // Step 3 — attach token to the placeholder via PATCH replace_image.
+    // Step 3 — attach token to the placeholder via PATCH replace_image
+    // (idempotent full replace), with transient retry.
     const patch = buildReplaceImagePayload(finalToken);
-    await this._asUserOrApp({
-      uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks/${blockId}`,
-      method: 'PATCH',
-      body: patch,
-      sdkFn: () => this.client.docx.documentBlock.patch({
-        path: { document_id: documentId, block_id: blockId },
-        data: patch,
-      }),
-      label: 'createDocBlockWithImage.replaceImage',
-    });
+    try {
+      await _withTransientRetry(() => this._asUserOrApp({
+        uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks/${blockId}`,
+        method: 'PATCH',
+        body: patch,
+        sdkFn: () => this.client.docx.documentBlock.patch({
+          path: { document_id: documentId, block_id: blockId },
+          data: patch,
+        }),
+        label: 'createDocBlockWithImage.replaceImage',
+      }), delays);
+    } catch (e) {
+      throw _orphanBlockError('createDocBlockWithImage', blockId, 'replace_image PATCH', e, finalToken);
+    }
 
     return { blockId, imageToken: finalToken, viaUser, fallbackWarning };
   },
@@ -410,8 +440,11 @@ module.exports = {
   //   1) create empty file placeholder block
   //   2) upload the binary via uploadMedia(parent_type=docx_file)
   //   3) PATCH with replace_file.token to attach
+  // Steps 2/3 retry transient failures and a persistent failure throws an
+  // error carrying the placeholder blockId (+ uploaded token when step 2
+  // succeeded) — mirrors createDocBlockWithImage. `retryDelaysMs` is test-only.
   // Returns { blockId, fileToken, viaUser, fallbackWarning }.
-  async createDocBlockWithFile(documentId, parentBlockId, { filePath, fileToken, index } = {}) {
+  async createDocBlockWithFile(documentId, parentBlockId, { filePath, fileToken, index, retryDelaysMs } = {}) {
     if (!filePath && !fileToken) {
       throw new Error('createDocBlockWithFile: either filePath or fileToken is required');
     }
@@ -446,26 +479,36 @@ module.exports = {
       blockId = inner;
     }
 
+    const delays = Array.isArray(retryDelaysMs) ? retryDelaysMs : CELL_RETRY_DELAYS_MS;
     let finalToken = fileToken;
     let viaUser = !!created._viaUser;
     let fallbackWarning = created._fallbackWarning || null;
     if (!finalToken) {
-      const uploaded = await this.uploadMedia(filePath, blockId, 'docx_file');
+      let uploaded;
+      try {
+        uploaded = await _withTransientRetry(() => this.uploadMedia(filePath, blockId, 'docx_file'), delays);
+      } catch (e) {
+        throw _orphanBlockError('createDocBlockWithFile', blockId, 'file upload', e, null);
+      }
       finalToken = uploaded.fileToken;
       viaUser = viaUser && uploaded.viaUser;
     }
 
     const patch = buildReplaceFilePayload(finalToken);
-    await this._asUserOrApp({
-      uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks/${blockId}`,
-      method: 'PATCH',
-      body: patch,
-      sdkFn: () => this.client.docx.documentBlock.patch({
-        path: { document_id: documentId, block_id: blockId },
-        data: patch,
-      }),
-      label: 'createDocBlockWithFile.replaceFile',
-    });
+    try {
+      await _withTransientRetry(() => this._asUserOrApp({
+        uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks/${blockId}`,
+        method: 'PATCH',
+        body: patch,
+        sdkFn: () => this.client.docx.documentBlock.patch({
+          path: { document_id: documentId, block_id: blockId },
+          data: patch,
+        }),
+        label: 'createDocBlockWithFile.replaceFile',
+      }), delays);
+    } catch (e) {
+      throw _orphanBlockError('createDocBlockWithFile', blockId, 'replace_file PATCH', e, finalToken);
+    }
 
     return { blockId, viewBlockId: outerBlockId !== blockId ? outerBlockId : undefined, fileToken: finalToken, viaUser, fallbackWarning };
   },

@@ -11,18 +11,48 @@ module.exports = {
     // Try UAT first — most users access only their own / team Wiki spaces
     // which the bot may not have been invited to. Falling back to app keeps
     // the bot-shared-spaces case working too.
-    const res = await this._asUserOrApp({
-      uatPath: '/open-apis/wiki/v2/spaces?page_size=50',
-      method: 'GET',
-      sdkFn: () => this.client.wiki.space.list({ params: { page_size: 50 } }),
-      label: 'listSpaces',
-    });
-    const items = res.data.items || [];
-    const out = { items, viaUser: !!res._viaUser };
-    if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
+    //
+    // Follows page_token pagination to completion (2026-06-07 audit): the
+    // endpoint pages at 50/page and the pre-fix single call silently dropped
+    // every space past the first page with no hasMore flag — spaces beyond
+    // #50 were unreachable (their space_id could never be discovered).
+    const items = [];
+    let token;
+    let viaUser = true;
+    let fallbackWarning = null;
+    let hasMore = false;
+    const seenTokens = new Set();
+    for (let page = 0; page < 200; page++) {
+      if (token) seenTokens.add(token);
+      const query = { page_size: '50' };
+      if (token) query.page_token = token;
+      const params = { page_size: 50 };
+      if (token) params.page_token = token;
+      const res = await this._asUserOrApp({
+        uatPath: '/open-apis/wiki/v2/spaces',
+        method: 'GET',
+        query,
+        sdkFn: () => this.client.wiki.space.list({ params }),
+        label: 'listSpaces',
+      });
+      const pageItems = res.data.items || [];
+      items.push(...pageItems);
+      viaUser = viaUser && !!res._viaUser;
+      if (!fallbackWarning && res._fallbackWarning) fallbackWarning = res._fallbackWarning;
+      hasMore = !!res.data.has_more;
+      if (!hasMore) break;
+      const next = res.data.page_token;
+      // Stall/cycle guards (getDocBlocks parity) — never loop on a server
+      // that repeats tokens or returns empty pages with has_more set.
+      if (!next || next === token || seenTokens.has(next) || pageItems.length === 0) break;
+      token = next;
+    }
+    const out = { items, viaUser };
+    if (hasMore) out.hasMore = true; // stalled upstream cursor — incompleteness stays visible
+    if (fallbackWarning) out.fallbackWarning = fallbackWarning;
     // Empty + bot path means scope is missing; surface a clear hint instead
     // of silently returning nothing.
-    if (items.length === 0 && !res._viaUser) {
+    if (items.length === 0 && !viaUser) {
       out.scopeHint = 'No spaces returned via app — the bot likely lacks `wiki:wiki:readonly` scope, or has not been invited to any Wiki space. Run `npx feishu-user-plugin oauth` and ensure the wiki scope is granted; or invite the bot to the target Wiki space.';
     }
     return out;
@@ -104,7 +134,11 @@ module.exports = {
       sdkFn: () => this.client.wiki.spaceNode.list({ path: { space_id: spaceId }, params: sdkParams }),
       label: 'listWikiNodes',
     });
-    return { items: res.data.items || [], hasMore: res.data.has_more, viaUser: !!res._viaUser };
+    // pageToken accompanies hasMore (2026-06-07 audit) — hasMore without the
+    // resume cursor stranded callers at the first 50 nodes forever.
+    const out = { items: res.data.items || [], hasMore: res.data.has_more, viaUser: !!res._viaUser };
+    if (res.data.page_token) out.pageToken = res.data.page_token;
+    return out;
   },
 
   // --- Wiki write (v1.3.7) ---

@@ -117,6 +117,7 @@ const schemas = [
         end_time: { type: 'string', description: 'End timestamp in seconds (optional)' },
         sort_type: { type: 'string', enum: ['ByCreateTimeDesc', 'ByCreateTimeAsc'], description: 'Sort order (default: ByCreateTimeDesc = newest first)' },
         expand_merge_forward: { type: 'boolean', description: 'Auto-expand merge_forward placeholders into their child messages (default true). Children carry parentMessageId; use that id (not the child id) with download_message_resource (kind=image or file).' },
+        page_token: { type: 'string', description: 'Pagination cursor — pass the pageToken from a previous response to fetch the next (older) page when hasMore is true.' },
       },
       required: ['chat_id'],
     },
@@ -155,6 +156,7 @@ const schemas = [
         end_time: { type: 'string', description: 'End timestamp in seconds (optional)' },
         sort_type: { type: 'string', enum: ['ByCreateTimeDesc', 'ByCreateTimeAsc'], description: 'Sort order (default: ByCreateTimeDesc = newest first)' },
         expand_merge_forward: { type: 'boolean', description: 'Auto-expand merge_forward placeholders into their child messages (default true). Children carry parentMessageId; use that id (not the child id) with download_message_resource (kind=image or file).' },
+        page_token: { type: 'string', description: 'Pagination cursor — pass the pageToken from a previous response to fetch the next (older) page when hasMore is true.' },
         via_user: { type: 'boolean', description: 'v1.3.12 — explicit identity override. `true` skips the bot path and reads directly via UAT (use when the chat is yours / external and you know bot has no access). `false` skips UAT fallback and surfaces the bot error instead of cross-identity hop (use when you specifically want the bot view). Omit for default auto-fallback (bot first, UAT on failure).' },
       },
       required: ['chat_id'],
@@ -230,7 +232,7 @@ const handlers = {
     }
     return json(await official.readMessagesAsUser(chatId, {
       pageSize: args.page_size, startTime: args.start_time, endTime: args.end_time,
-      sortType: args.sort_type,
+      sortType: args.sort_type, pageToken: args.page_token,
       expandMergeForward: args.expand_merge_forward !== false,
     }, uc));
   },
@@ -247,7 +249,7 @@ const handlers = {
     const official = ctx.getOfficialClient();
     const msgOpts = {
       pageSize: args.page_size, startTime: args.start_time, endTime: args.end_time,
-      sortType: args.sort_type,
+      sortType: args.sort_type, pageToken: args.page_token,
       expandMergeForward: args.expand_merge_forward !== false,
     };
     // v1.3.12: via_user opt-in routing override. true=skip bot (UAT only),
