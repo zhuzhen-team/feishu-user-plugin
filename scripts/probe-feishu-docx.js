@@ -91,9 +91,8 @@ const BLOCK_LABELS = {
   if (process.env.LARK_USER_ACCESS_TOKEN) c.loadUAT();
 
   // --- Fetch blocks ---
-  // NOTE: getDocBlocks fetches up to 500 blocks (no pagination). Docs longer
-  // than that produce a truncated fixture / undercount. Out of scope for this
-  // one-shot probe.
+  // getDocBlocks follows page_token pagination to completion (v1.3.17), so
+  // the fixture covers the whole document regardless of size.
   let blocks;
   try {
     const result = await c.getDocBlocks(rawDocId);

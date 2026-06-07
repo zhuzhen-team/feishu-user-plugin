@@ -326,6 +326,10 @@ main().catch(console.error).finally(() => {
     console.error('doc-table: FAIL', e);
     process.exitCode = 1;
   });
+  require('./test-doc-blocks-pagination').run().catch(e => {
+    console.error('doc-blocks-pagination: FAIL', e);
+    process.exitCode = 1;
+  });
   require('./test-switch-profile').run().catch(e => {
     console.error('switch-profile-e2e: FAIL', e);
     process.exitCode = 1;

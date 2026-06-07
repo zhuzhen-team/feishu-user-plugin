@@ -31,11 +31,13 @@ const schemas = [
   },
   {
     name: 'get_doc_blocks',
-    description: '[Official API] Get structured block tree of a document. Returns block types, content, and hierarchy for precise document analysis.',
+    description: '[Official API] Get structured block tree of a document. Returns block types, content, and hierarchy for precise document analysis. Follows pagination internally and returns ALL blocks by default — hasMore:false in the response guarantees the complete tree (pre-v1.3.17 silently capped at 500 blocks). For very large docs, pass max_blocks to bound one call (rounded up to 500/page granularity) and page forward by passing the returned nextPageToken back as page_token; a bounded response carries truncated:true + hasMore:true so partial output is never silent.',
     inputSchema: {
       type: 'object',
       properties: {
         document_id: { type: 'string', description: 'Document ID (from search_docs or create_doc)' },
+        page_token: { type: 'string', description: 'Resume cursor — pass the nextPageToken from a previous truncated response to fetch the next slice.' },
+        max_blocks: { type: 'number', description: 'Soft cap on blocks returned in this call (rounded up to page granularity of 500). Omit to fetch the entire document.' },
       },
       required: ['document_id'],
     },
@@ -56,7 +58,7 @@ const schemas = [
   },
   {
     name: 'manage_doc_block',
-    description: '[Official API] Manage content blocks in a document. Single tool replaces v1.3.6 create_doc_block / update_doc_block / delete_doc_blocks.\n  action=create — six modes (pass exactly ONE):\n    (A) Generic — pass `children` array (e.g. [{block_type:2, text:{...}}]).\n    (B) Image from local file — pass `image_path`; plugin uploads and patches.\n    (C) Image from token — pass `image_token` (already uploaded).\n    (D) File attachment from local file — pass `file_path`; plugin handles VIEW-wrap + replace_file.\n    (E) File from token — pass `file_token`.\n    (F) Table — pass `table={rows,columns,cells?}`; plugin creates a block_type=31 table (Feishu auto-makes the block_type=32 cells) and fills each provided cell. USE THIS for tables — do NOT hand-build table blocks via `children` (the table block_type is 31, NOT 40; getting it wrong returns invalid_param).\n  action=update — generic (pass `update_body`), image-replace (pass `image_token`), or file-replace (pass `file_token`).\n  action=delete — pass `parent_block_id` + `start_index` + `end_index` (range delete).\n`document_id` accepts native ID, wiki node token, or Feishu URL.',
+    description: '[Official API] Manage content blocks in a document. Single tool replaces v1.3.6 create_doc_block / update_doc_block / delete_doc_blocks.\n  action=create — six modes (pass exactly ONE):\n    (A) Generic — pass `children` array (e.g. [{block_type:2, text:{...}}]).\n    (B) Image from local file — pass `image_path`; plugin uploads and patches.\n    (C) Image from token — pass `image_token` (already uploaded).\n    (D) File attachment from local file — pass `file_path`; plugin handles VIEW-wrap + replace_file.\n    (E) File from token — pass `file_token`.\n    (F) Table — pass `table={rows,columns,cells?}`; plugin creates a block_type=31 table (Feishu auto-makes the block_type=32 cells) and fills each provided cell. USE THIS for tables — do NOT hand-build table blocks via `children` (the table block_type is 31, NOT 40; getting it wrong returns invalid_param).\n  action=update — generic (pass `update_body`), image-replace (pass `image_token`), or file-replace (pass `file_token`). ⚠ `update_text_elements` REPLACES the block\'s ENTIRE elements array — it is a full overwrite, NOT a patch/append. Any element you omit (bold runs, links, prefixes) is permanently lost; to change part of a block, read it first (get_doc_blocks) and resend ALL elements.\n  action=delete — pass `parent_block_id` + `start_index` + `end_index` (range delete).\n`document_id` accepts native ID, wiki node token, or Feishu URL.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -72,8 +74,8 @@ const schemas = [
         image_token: { type: 'string', description: 'Pre-uploaded docx image token — create mode C, or update image-replace.' },
         file_path: { type: 'string', description: 'Local file path — create mode D (mutually exclusive with other create modes).' },
         file_token: { type: 'string', description: 'Pre-uploaded docx file token — create mode E, or update file-replace.' },
-        update_body: { type: 'object', description: 'Generic update payload for action=update. E.g. {update_text_elements:{elements:[{text_run:{content:"new text"}}]}}.' },
-        table: { type: 'object', description: 'Create a table — create mode F (mutually exclusive with other create modes). Shape: {rows:int>=1, columns:int>=1, cells?:string[][] (row-major plain text; omit/empty-string to leave a cell blank), column_width?:int[] (px, length=columns), header_row?:bool, header_column?:bool}. The plugin creates a block_type=31 table, lets Feishu auto-create the cells, and fills each provided cell by updating its text — you never specify block types. Returns {tableBlockId, cells:[[cellId,...]] (row-major grid), filled}. Example: {"rows":2,"columns":2,"cells":[["Name","Role"],["Ann","PM"]]}.' },
+        update_body: { type: 'object', description: 'Generic update payload for action=update. E.g. {update_text_elements:{elements:[{text_run:{content:"new text"}}]}}. ⚠ update_text_elements is a FULL REPLACEMENT of the block\'s elements array (not patch/append) — include every element you want to keep, or the omitted ones are permanently lost.' },
+        table: { type: 'object', description: 'Create a table — create mode F (mutually exclusive with other create modes). Shape: {rows:int>=1, columns:int>=1, cells?:string[][] (row-major plain text; omit/empty-string to leave a cell blank), column_width?:int[] (px, length=columns), header_row?:bool, header_column?:bool}. The plugin creates a block_type=31 table, lets Feishu auto-create the cells, and fills each provided cell by updating its text — you never specify block types. Returns {tableBlockId, cells:[[cellId,...]] (row-major grid), filled, failedCells?}. Cell fills auto-retry transient Feishu errors with backoff; cells that still fail do NOT abort the call — they are listed in failedCells:[{row,col,cellId,textBlockId?,reason,skipped?}] (0-based row/col) so you can repair each via action=update on its textBlockId (or action=create into its cellId). Example: {"rows":2,"columns":2,"cells":[["Name","Role"],["Ann","PM"]]}.' },
       },
       required: ['action', 'document_id'],
     },
@@ -108,7 +110,12 @@ const handlers = {
     return json(await ctx.getOfficialClient().readDoc(await ctx.resolveDocId(args.document_id)));
   },
   async get_doc_blocks(args, ctx) {
-    return json(await ctx.getOfficialClient().getDocBlocks(await ctx.resolveDocId(args.document_id)));
+    const opts = {};
+    if (args.page_token) opts.pageToken = args.page_token;
+    // Pass through verbatim — the client clamps to a finite integer >= 1 and
+    // treats anything else as "no cap" (PR #118 review).
+    if (args.max_blocks !== undefined) opts.maxBlocks = args.max_blocks;
+    return json(await ctx.getOfficialClient().getDocBlocks(await ctx.resolveDocId(args.document_id), opts));
   },
   async create_doc(args, ctx) {
     const r = await ctx.getOfficialClient().createDoc(args.title, args.folder_id, {
@@ -133,11 +140,20 @@ const handlers = {
         if (modes.length > 1) return text('manage_doc_block(create): pass exactly ONE of children / image_path / image_token / file_path / file_token / table.');
         if (args.table) {
           const t = args.table;
-          return json(await official.createDocTable(docId, args.parent_block_id, {
+          const r = await official.createDocTable(docId, args.parent_block_id, {
             rows: t.rows, columns: t.columns, cells: t.cells,
             columnWidth: t.column_width, headerRow: t.header_row, headerColumn: t.header_column,
             index: args.index,
-          }));
+          });
+          // Partial fill — lift a repair-oriented warning above the JSON so the
+          // caller cannot mistake a half-filled table for success (json() hoists
+          // fallbackWarning to the top of the rendered response).
+          if (r.failedCells && r.failedCells.length) {
+            const attempted = r.filled + r.failedCells.length;
+            const fillWarn = `⚠ Table ${r.tableBlockId} created, but ${r.failedCells.length}/${attempted} cell(s) could not be filled (transient errors were already retried). See failedCells[] below — repair each with manage_doc_block(action=update, block_id=<textBlockId>, update_body={update_text_elements:...}), or action=create into its cellId when no textBlockId is given.`;
+            r.fallbackWarning = r.fallbackWarning ? `${fillWarn}\n\n${r.fallbackWarning}` : fillWarn;
+          }
+          return json(r);
         }
         if (args.image_path || args.image_token) {
           const r = await official.createDocBlockWithImage(docId, args.parent_block_id, {
@@ -207,7 +223,13 @@ const handlers = {
       return text(`read_doc_markdown: feishu-docx render failed — ${e.message}. Try get_doc_blocks for raw JSON fallback. (feishu-docx version may need upgrading)`);
     }
 
-    return text(_normaliseEmbeds(md));
+    md = _normaliseEmbeds(md);
+    // getDocBlocks paginates to completion, so hasMore only survives a stalled
+    // upstream cursor — still, never let partial output pass as the whole doc.
+    if (result.hasMore) {
+      md += `\n\n[output truncated: rendered ${blocks.length} blocks but the document has more — the block list could not be fetched to completion. Retry, or use get_doc_blocks with page_token to inspect the tail.]`;
+    }
+    return text(md);
   },
 };
 

@@ -669,11 +669,19 @@
   },
   {
     "name": "get_doc_blocks",
-    "description": "[Official API] Get structured block tree of a document. Returns block types, content, and hierarchy for precise document analysis.",
+    "description": "[Official API] Get structured block tree of a document. Returns block types, content, and hierarchy for precise document analysis. Follows pagination internally and returns ALL blocks by default — hasMore:false in the response guarantees the complete tree (pre-v1.3.17 silently capped at 500 blocks). For very large docs, pass max_blocks to bound one call (rounded up to 500/page granularity) and page forward by passing the returned nextPageToken back as page_token; a bounded response carries truncated:true + hasMore:true so partial output is never silent.",
     "inputSchema": {
       "properties": {
         "document_id": {
           "description": "Document ID (from search_docs or create_doc)",
+          "type": "string"
+        },
+        "max_blocks": {
+          "description": "Soft cap on blocks returned in this call (rounded up to page granularity of 500). Omit to fetch the entire document.",
+          "type": "number"
+        },
+        "page_token": {
+          "description": "Resume cursor — pass the nextPageToken from a previous truncated response to fetch the next slice.",
           "type": "string"
         }
       },
@@ -1378,7 +1386,7 @@
   },
   {
     "name": "manage_doc_block",
-    "description": "[Official API] Manage content blocks in a document. Single tool replaces v1.3.6 create_doc_block / update_doc_block / delete_doc_blocks.\n  action=create — six modes (pass exactly ONE):\n    (A) Generic — pass `children` array (e.g. [{block_type:2, text:{...}}]).\n    (B) Image from local file — pass `image_path`; plugin uploads and patches.\n    (C) Image from token — pass `image_token` (already uploaded).\n    (D) File attachment from local file — pass `file_path`; plugin handles VIEW-wrap + replace_file.\n    (E) File from token — pass `file_token`.\n    (F) Table — pass `table={rows,columns,cells?}`; plugin creates a block_type=31 table (Feishu auto-makes the block_type=32 cells) and fills each provided cell. USE THIS for tables — do NOT hand-build table blocks via `children` (the table block_type is 31, NOT 40; getting it wrong returns invalid_param).\n  action=update — generic (pass `update_body`), image-replace (pass `image_token`), or file-replace (pass `file_token`).\n  action=delete — pass `parent_block_id` + `start_index` + `end_index` (range delete).\n`document_id` accepts native ID, wiki node token, or Feishu URL.",
+    "description": "[Official API] Manage content blocks in a document. Single tool replaces v1.3.6 create_doc_block / update_doc_block / delete_doc_blocks.\n  action=create — six modes (pass exactly ONE):\n    (A) Generic — pass `children` array (e.g. [{block_type:2, text:{...}}]).\n    (B) Image from local file — pass `image_path`; plugin uploads and patches.\n    (C) Image from token — pass `image_token` (already uploaded).\n    (D) File attachment from local file — pass `file_path`; plugin handles VIEW-wrap + replace_file.\n    (E) File from token — pass `file_token`.\n    (F) Table — pass `table={rows,columns,cells?}`; plugin creates a block_type=31 table (Feishu auto-makes the block_type=32 cells) and fills each provided cell. USE THIS for tables — do NOT hand-build table blocks via `children` (the table block_type is 31, NOT 40; getting it wrong returns invalid_param).\n  action=update — generic (pass `update_body`), image-replace (pass `image_token`), or file-replace (pass `file_token`). ⚠ `update_text_elements` REPLACES the block's ENTIRE elements array — it is a full overwrite, NOT a patch/append. Any element you omit (bold runs, links, prefixes) is permanently lost; to change part of a block, read it first (get_doc_blocks) and resend ALL elements.\n  action=delete — pass `parent_block_id` + `start_index` + `end_index` (range delete).\n`document_id` accepts native ID, wiki node token, or Feishu URL.",
     "inputSchema": {
       "properties": {
         "action": {
@@ -1438,11 +1446,11 @@
           "type": "number"
         },
         "table": {
-          "description": "Create a table — create mode F (mutually exclusive with other create modes). Shape: {rows:int>=1, columns:int>=1, cells?:string[][] (row-major plain text; omit/empty-string to leave a cell blank), column_width?:int[] (px, length=columns), header_row?:bool, header_column?:bool}. The plugin creates a block_type=31 table, lets Feishu auto-create the cells, and fills each provided cell by updating its text — you never specify block types. Returns {tableBlockId, cells:[[cellId,...]] (row-major grid), filled}. Example: {\"rows\":2,\"columns\":2,\"cells\":[[\"Name\",\"Role\"],[\"Ann\",\"PM\"]]}.",
+          "description": "Create a table — create mode F (mutually exclusive with other create modes). Shape: {rows:int>=1, columns:int>=1, cells?:string[][] (row-major plain text; omit/empty-string to leave a cell blank), column_width?:int[] (px, length=columns), header_row?:bool, header_column?:bool}. The plugin creates a block_type=31 table, lets Feishu auto-create the cells, and fills each provided cell by updating its text — you never specify block types. Returns {tableBlockId, cells:[[cellId,...]] (row-major grid), filled, failedCells?}. Cell fills auto-retry transient Feishu errors with backoff; cells that still fail do NOT abort the call — they are listed in failedCells:[{row,col,cellId,textBlockId?,reason,skipped?}] (0-based row/col) so you can repair each via action=update on its textBlockId (or action=create into its cellId). Example: {\"rows\":2,\"columns\":2,\"cells\":[[\"Name\",\"Role\"],[\"Ann\",\"PM\"]]}.",
           "type": "object"
         },
         "update_body": {
-          "description": "Generic update payload for action=update. E.g. {update_text_elements:{elements:[{text_run:{content:\"new text\"}}]}}.",
+          "description": "Generic update payload for action=update. E.g. {update_text_elements:{elements:[{text_run:{content:\"new text\"}}]}}. ⚠ update_text_elements is a FULL REPLACEMENT of the block's elements array (not patch/append) — include every element you want to keep, or the omitted ones are permanently lost.",
           "type": "object"
         }
       },
