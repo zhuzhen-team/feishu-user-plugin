@@ -112,7 +112,9 @@ const handlers = {
   async get_doc_blocks(args, ctx) {
     const opts = {};
     if (args.page_token) opts.pageToken = args.page_token;
-    if (args.max_blocks) opts.maxBlocks = args.max_blocks;
+    // Pass through verbatim — the client clamps to a finite integer >= 1 and
+    // treats anything else as "no cap" (PR #118 review).
+    if (args.max_blocks !== undefined) opts.maxBlocks = args.max_blocks;
     return json(await ctx.getOfficialClient().getDocBlocks(await ctx.resolveDocId(args.document_id), opts));
   },
   async create_doc(args, ctx) {

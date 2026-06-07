@@ -101,6 +101,11 @@ module.exports = {
   // Returns { items, total, hasMore, truncated?, nextPageToken?, viaUser, fallbackWarning? }.
   // hasMore:false guarantees the full tree is in `items`.
   async getDocBlocks(documentId, { pageToken, maxBlocks } = {}) {
+    // Tool args arrive unvalidated — accept the cap only as a finite integer
+    // >= 1; anything else (0, negatives, NaN, random strings) means "no cap"
+    // so a malformed value can never silently change paging semantics
+    // (Copilot review PR #118; same clamp precedent as searchDocs offset).
+    const cap = Number.isFinite(Number(maxBlocks)) && Number(maxBlocks) >= 1 ? Math.floor(Number(maxBlocks)) : null;
     const items = [];
     let token = pageToken || undefined;
     let viaUser = true;
@@ -131,7 +136,7 @@ module.exports = {
       hasMore = !!res.data.has_more;
       if (!hasMore) break;
       const next = res.data.page_token;
-      if (maxBlocks && items.length >= maxBlocks) {
+      if (cap && items.length >= cap) {
         if (next) nextPageToken = next;
         break;
       }

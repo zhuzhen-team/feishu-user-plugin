@@ -68,6 +68,18 @@ async function run() {
     assert.strictEqual(calls.length, 1, 'no extra page fetched past max_blocks');
   });
 
+  await ok('treats malformed max_blocks (0 / negative / string) as "no cap" — full fetch, no truncation', async () => {
+    for (const bad of [0, -5, 'abc', NaN]) {
+      const { self } = pagedStub({
+        '':   { items: [blk('b1'), blk('b2')], has_more: true, next: 'p2' },
+        'p2': { items: [blk('b3')], has_more: false },
+      });
+      const r = await docs.getDocBlocks.call(self, 'docX', { maxBlocks: bad });
+      assert.strictEqual(r.items.length, 3, `maxBlocks=${bad} must not cap the fetch`);
+      assert.strictEqual(r.hasMore, false, `maxBlocks=${bad} must not flag truncation`);
+    }
+  });
+
   await ok('resumes from a caller-provided pageToken', async () => {
     const { self, calls } = pagedStub({
       'p2': { items: [blk('b3')], has_more: false },
