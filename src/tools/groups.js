@@ -74,7 +74,18 @@ const handlers = {
     if (args.action === 'remove') {
       return json(await official.removeChatMembers(args.chat_id, args.member_ids, memberIdType));
     }
-    return json(await official.addChatMembers(args.chat_id, args.member_ids, memberIdType));
+    const r = await official.addChatMembers(args.chat_id, args.member_ids, memberIdType);
+    // Lift a top warning when any id did NOT actually join — invalid format,
+    // nonexistent user, or stuck behind join-approval. Without it an empty
+    // invalidIds read as "everyone is in" while some never joined.
+    const problems = [];
+    if (r.invalidIds?.length) problems.push(`${r.invalidIds.length} invalid id(s): ${r.invalidIds.join(', ')}`);
+    if (r.notExistedIds?.length) problems.push(`${r.notExistedIds.length} nonexistent user(s): ${r.notExistedIds.join(', ')}`);
+    if (r.pendingApprovalIds?.length) problems.push(`${r.pendingApprovalIds.length} pending group-owner approval (NOT yet in the group): ${r.pendingApprovalIds.join(', ')}`);
+    if (problems.length) {
+      r.fallbackWarning = `⚠ Partial add — ${problems.join('; ')}. The rest joined successfully.`;
+    }
+    return json(r);
   },
 };
 

@@ -51,7 +51,14 @@ module.exports = {
       }),
       'addChatMembers'
     );
-    return { invalidIds: res.data.invalid_id_list || [] };
+    // Feishu reports three partial-failure buckets on batch add (2026-06-07
+    // audit) — swallowing not_existed/pending_approval made a half-failed add
+    // read as full success (members "in the group" who never joined).
+    return {
+      invalidIds: res.data.invalid_id_list || [],
+      notExistedIds: res.data.not_existed_id_list || [],
+      pendingApprovalIds: res.data.pending_approval_id_list || [],
+    };
   },
 
   async removeChatMembers(chatId, userIds, memberIdType = 'open_id') {

@@ -13,7 +13,7 @@
 2. 找到节点后可用 `read_doc` 读取其文档内容
 
 ### 浏览节点
-1. 用 `list_wiki_nodes` 列出指定空间的节点树
+1. 用 `list_wiki_nodes` 列出指定空间的节点树（每页 50 个；`hasMore:true` 时把返回的 `pageToken` 传回 `page_token` 翻页）
 2. 可传 `parent_node_token` 浏览子节点
 
 ## 示例

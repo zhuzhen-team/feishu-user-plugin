@@ -333,7 +333,7 @@
     },
     {
       "name": "list_wiki_spaces",
-      "description": "List all accessible Wiki spaces."
+      "description": "List all accessible Wiki spaces. Follows pagination internally and returns ALL spaces (pre-v1.3.17 silently capped at 50). If the upstream cursor stalls, the response carries hasMore:true — treat that"
     },
     {
       "name": "search_wiki",
@@ -341,7 +341,7 @@
     },
     {
       "name": "list_wiki_nodes",
-      "description": "List nodes in a Wiki space."
+      "description": "List nodes in a Wiki space (50 per page). When hasMore is true, pass the returned pageToken back as page_token to fetch the next page."
     },
     {
       "name": "get_wiki_node",

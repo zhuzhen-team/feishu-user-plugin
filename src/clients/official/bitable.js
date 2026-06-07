@@ -116,7 +116,12 @@ module.exports = {
       }),
       label: 'searchRecords',
     });
-    return { items: res.data.items || [], total: res.data.total, hasMore: res.data.has_more };
+    // pageToken accompanies hasMore (2026-06-07 audit) — hasMore + total
+    // without the resume cursor stranded callers at the first page of a
+    // potentially thousands-row table.
+    const out = { items: res.data.items || [], total: res.data.total, hasMore: res.data.has_more };
+    if (res.data.page_token) out.pageToken = res.data.page_token;
+    return out;
   },
 
   async createBitableRecord(appToken, tableId, fields) {

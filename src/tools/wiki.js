@@ -5,7 +5,7 @@ const { json } = require('./_registry');
 const schemas = [
   {
     name: 'list_wiki_spaces',
-    description: '[Official API] List all accessible Wiki spaces.',
+    description: '[Official API] List all accessible Wiki spaces. Follows pagination internally and returns ALL spaces (pre-v1.3.17 silently capped at 50). If the upstream cursor stalls, the response carries hasMore:true — treat that as a partial list.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
@@ -23,12 +23,13 @@ const schemas = [
   },
   {
     name: 'list_wiki_nodes',
-    description: '[Official API] List nodes in a Wiki space.',
+    description: '[Official API] List nodes in a Wiki space (50 per page). When hasMore is true, pass the returned pageToken back as page_token to fetch the next page.',
     inputSchema: {
       type: 'object',
       properties: {
         space_id: { type: 'string', description: 'Wiki space ID' },
         parent_node_token: { type: 'string', description: 'Parent node token (optional)' },
+        page_token: { type: 'string', description: 'Pagination cursor — pass the pageToken from a previous response to fetch the next page.' },
       },
       required: ['space_id'],
     },
@@ -129,7 +130,7 @@ const handlers = {
     return json(await ctx.getOfficialClient().searchWiki(args.query, opts));
   },
   async list_wiki_nodes(args, ctx) {
-    return json(await ctx.getOfficialClient().listWikiNodes(args.space_id, { parentNodeToken: args.parent_node_token }));
+    return json(await ctx.getOfficialClient().listWikiNodes(args.space_id, { parentNodeToken: args.parent_node_token, pageToken: args.page_token }));
   },
   async create_wiki_node(args, ctx) {
     return json(await ctx.getOfficialClient().createWikiNode(args.space_id, {
