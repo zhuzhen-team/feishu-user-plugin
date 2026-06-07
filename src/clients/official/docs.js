@@ -6,6 +6,28 @@
 // base.js or mixed in via other domain modules.
 
 const { buildEmptyImageBlock, buildReplaceImagePayload, buildEmptyFileBlock, buildReplaceFilePayload } = require('../../doc-blocks');
+const { classifyError } = require('../../error-codes');
+
+const _sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Backoff schedule between cell-fill retries (attempts = delays.length + 1).
+// Field report 2026-06-07: rapid-fire docx writes intermittently trip the
+// code=2200 scope-check flake / frequency control — a short pause clears it.
+const CELL_RETRY_DELAYS_MS = [400, 1200];
+
+// Run fn(); retry on transient failures (classifyError → 'retry') after the
+// next backoff delay. Permanent failures propagate immediately. Safe here
+// because every retried operation is idempotent (update_text_elements is a
+// full replacement; getBlockChildren is a read).
+async function _withTransientRetry(fn, delays) {
+  for (let attempt = 0; ; attempt++) {
+    try { return await fn(); }
+    catch (e) {
+      if (attempt >= delays.length || classifyError(e).action !== 'retry') throw e;
+      await _sleep(delays[attempt]);
+    }
+  }
+}
 
 module.exports = {
   // --- Docs ---
@@ -70,14 +92,62 @@ module.exports = {
     return out;
   },
 
-  async getDocBlocks(documentId) {
-    const res = await this._asUserOrApp({
-      uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks`,
-      query: { page_size: '500' },
-      sdkFn: () => this.client.docx.documentBlock.list({ path: { document_id: documentId }, params: { page_size: 500 } }),
-      label: 'getDocBlocks',
-    });
-    return { items: res.data.items || [] };
+  // Fetch the document's block tree. Follows page_token pagination until
+  // exhaustion by default — the pre-v1.3.17 single 500-block page silently
+  // truncated large docs (field report 2026-06-07: a ~300KB doc lost everything
+  // past mid-document, with no flag — callers believed the tail blocks were
+  // never created). Pass maxBlocks to bound one call (rounded up to page
+  // granularity) and resume with the returned nextPageToken as pageToken.
+  // Returns { items, total, hasMore, truncated?, nextPageToken?, viaUser, fallbackWarning? }.
+  // hasMore:false guarantees the full tree is in `items`.
+  async getDocBlocks(documentId, { pageToken, maxBlocks } = {}) {
+    const items = [];
+    let token = pageToken || undefined;
+    let viaUser = true;
+    let fallbackWarning = null;
+    let hasMore = false;
+    let nextPageToken;
+    const seenTokens = new Set();
+    // 1000-page backstop (~500k blocks) — a server that keeps minting fresh
+    // tokens must not pin the loop forever. Hitting it reports hasMore:true.
+    const MAX_PAGES = 1000;
+    let page = 0;
+    for (; page < MAX_PAGES; page++) {
+      if (token) seenTokens.add(token);
+      const query = { page_size: '500' };
+      if (token) query.page_token = token;
+      const params = { page_size: 500 };
+      if (token) params.page_token = token;
+      const res = await this._asUserOrApp({
+        uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks`,
+        query,
+        sdkFn: () => this.client.docx.documentBlock.list({ path: { document_id: documentId }, params }),
+        label: 'getDocBlocks',
+      });
+      const pageItems = res.data.items || [];
+      items.push(...pageItems);
+      viaUser = viaUser && !!res._viaUser;
+      if (!fallbackWarning && res._fallbackWarning) fallbackWarning = res._fallbackWarning;
+      hasMore = !!res.data.has_more;
+      if (!hasMore) break;
+      const next = res.data.page_token;
+      if (maxBlocks && items.length >= maxBlocks) {
+        if (next) nextPageToken = next;
+        break;
+      }
+      // Stall/cycle guards (PR #116 parity): an empty page, a missing token, or
+      // a token we've already used means paging forward is futile — stop and
+      // WITHHOLD the cursor rather than hand the caller an infinite loop.
+      if (!next || next === token || seenTokens.has(next) || pageItems.length === 0) break;
+      token = next;
+    }
+    // Backstop exhausted mid-document: `token` is the still-unfetched cursor.
+    if (page >= MAX_PAGES && hasMore && token) nextPageToken = token;
+    const out = { items, total: items.length, hasMore, viaUser };
+    if (hasMore) out.truncated = true;
+    if (nextPageToken) out.nextPageToken = nextPageToken;
+    if (fallbackWarning) out.fallbackWarning = fallbackWarning;
+    return out;
   },
 
   // Direct children of a single block — scoped, so it does not inherit the
@@ -123,8 +193,18 @@ module.exports = {
   //   3) fill: UPDATE each cell's existing text block (clean — no stray empty
   //      block) when present, else CREATE a text block in the cell.
   // `cells` is an optional row-major 2D array of plain strings.
-  // Returns { tableBlockId, cells:[[cellId,...],...], rows, columns, filled, viaUser, fallbackWarning }.
-  async createDocTable(documentId, parentBlockId, { rows, columns, cells, columnWidth, headerRow, headerColumn, index } = {}) {
+  // Cell fills retry transient Feishu errors (code=2200 scope-check flake,
+  // rate limits, 5xx) with backoff; cells that still fail are reported in
+  // `failedCells` [{row,col,cellId,textBlockId?,reason,skipped?}] (0-based)
+  // instead of aborting the whole call — the table block already exists, so
+  // the caller needs the partial-success map to repair, not an opaque throw
+  // (field report 2026-06-07: a 7×3 fill died at row 6 and the caller had to
+  // grep the whole doc for empty cells). After 3 consecutive cell failures the
+  // remaining fills are skipped (marked skipped:true) — a structural error
+  // (revoked perms) would otherwise burn 2 API calls per remaining cell.
+  // `retryDelaysMs` overrides the backoff schedule (tests only).
+  // Returns { tableBlockId, cells:[[cellId,...],...], rows, columns, filled, failedCells?, viaUser, fallbackWarning }.
+  async createDocTable(documentId, parentBlockId, { rows, columns, cells, columnWidth, headerRow, headerColumn, index, retryDelaysMs } = {}) {
     rows = Number(rows); columns = Number(columns);
     if (!Number.isInteger(rows) || !Number.isInteger(columns) || rows < 1 || columns < 1) {
       throw new Error('createDocTable: rows and columns must be integers >= 1');
@@ -166,29 +246,58 @@ module.exports = {
     for (let r = 0; r < rows; r++) grid.push(flatCellIds.slice(r * columns, (r + 1) * columns));
 
     let filled = 0;
+    const failedCells = [];
     if (Array.isArray(cells)) {
+      const delays = Array.isArray(retryDelaysMs) ? retryDelaysMs : CELL_RETRY_DELAYS_MS;
+      let consecutiveFailures = 0;
+      let lastReason = '';
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < columns; c++) {
           const content = cells[r] ? cells[r][c] : undefined;
           if (content === undefined || content === null || content === '') continue;
           const cellId = grid[r][c];
           if (!cellId) throw new Error(`createDocTable: missing cell id at row ${r}, col ${c}`);
+          if (consecutiveFailures >= 3) {
+            failedCells.push({
+              row: r, col: c, cellId, skipped: true,
+              reason: `skipped: aborted after ${consecutiveFailures} consecutive cell failures (last: ${lastReason})`,
+            });
+            continue;
+          }
           // Each fresh cell auto-creates exactly one empty text block — UPDATE it
           // (clean) rather than CREATE a second. Scoped per-cell fetch stays
           // correct regardless of overall document size.
-          const cellChildren = (await this.getBlockChildren(documentId, cellId)).items || [];
-          const textChild = cellChildren.find(b => b.block_type === 2);
-          const elements = { elements: [{ text_run: { content: String(content) } }] };
-          if (textChild) {
-            await this.updateDocBlock(documentId, textChild.block_id, { update_text_elements: elements });
-          } else {
-            await this.createDocBlock(documentId, cellId, [{ block_type: 2, text: elements }]);
+          let textBlockId = null;
+          try {
+            await _withTransientRetry(async () => {
+              // Reset per attempt — the cell is re-inspected on every retry, and
+              // a stale id from a prior attempt must not leak into failedCells.
+              textBlockId = null;
+              const cellChildren = (await this.getBlockChildren(documentId, cellId)).items || [];
+              const textChild = cellChildren.find(b => b.block_type === 2);
+              const elements = { elements: [{ text_run: { content: String(content) } }] };
+              if (textChild) {
+                textBlockId = textChild.block_id;
+                await this.updateDocBlock(documentId, textChild.block_id, { update_text_elements: elements });
+              } else {
+                await this.createDocBlock(documentId, cellId, [{ block_type: 2, text: elements }]);
+              }
+            }, delays);
+            filled++;
+            consecutiveFailures = 0;
+          } catch (e) {
+            consecutiveFailures++;
+            lastReason = e.message;
+            const entry = { row: r, col: c, cellId, reason: e.message };
+            if (textBlockId) entry.textBlockId = textBlockId;
+            failedCells.push(entry);
           }
-          filled++;
         }
       }
     }
-    return { tableBlockId, cells: grid, rows, columns, filled, viaUser, fallbackWarning };
+    const out = { tableBlockId, cells: grid, rows, columns, filled, viaUser, fallbackWarning };
+    if (failedCells.length) out.failedCells = failedCells;
+    return out;
   },
 
   async updateDocBlock(documentId, blockId, updateBody) {
@@ -377,15 +486,11 @@ module.exports = {
       // None matched directly; return the first as best-effort
       return childIds[0];
     }
-    // Fallback: list all blocks and find a 23 whose parent_id is the view block
+    // Fallback: list all blocks and find a 23 whose parent_id is the view block.
+    // Uses getDocBlocks (paginates past 500 blocks) — a single unpaged list
+    // would miss the freshly appended view block in a large document.
     try {
-      const res = await this._asUserOrApp({
-        uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks`,
-        method: 'GET',
-        sdkFn: () => this.client.docx.documentBlock.list({ path: { document_id: documentId } }),
-        label: '_findFileChildOf.list',
-      });
-      const items = res?.data?.items || [];
+      const { items } = await this.getDocBlocks(documentId);
       const match = items.find(b => b.block_type === 23 && b.parent_id === viewBlockId);
       return match?.block_id || null;
     } catch (_) {

@@ -84,6 +84,8 @@ post-v1.3.7 phase A 重构后的文件职责矩阵在 **[docs/REFACTOR-NOTES.md]
 - **`oc_xxx` 自动解析**：所有 cookie 发送自 v1.3.7 起自动把 `oc_xxx` 解析为 numeric chat ID
 - **`merge_forward` 自动展开**：`read_messages` 默认把合并转发展开为子消息；子消息附件下载用 `parentMessageId`，不是子消息 id
 - **`update_message` 仅 text / interactive**：飞书限制
+- **`update_text_elements` 整段替换**：`manage_doc_block(action=update)` 的 `update_text_elements` 全量覆盖该块的 elements（非 patch / append），漏传的 element 永久丢失。改局部先 `get_doc_blocks` 读原块，整组传回
+- **大文档读全量 + 建表部分失败上报**（v1.3.17）：`get_doc_blocks` / `read_doc_markdown` 跟进 `page_token` 拉完整块树（此前静默截断在 500 块），`hasMore:false` 才代表拉全；mode F 建表填格瞬态错误自动重试，仍失败的格子记录在 `failedCells`（含 cellId / textBlockId）返回而非中途抛错
 - **`update_task` 必传 `update_fields`**：飞书只 patch 列出的字段
 - **`manage_bitable_field(action=update)` 必传 `type`**：即使只改 field name
 - **多 profile auto-switch**（v1.3.8）：读路径遇 `91403 / 1254301 / 1254000 / 99991672 / HTTP 403` 自动跨 profile retry。写路径**绝不**自动切。`via_profile: "auto"` 给写路径手动开

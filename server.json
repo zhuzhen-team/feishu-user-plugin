@@ -113,7 +113,7 @@
     },
     {
       "name": "get_doc_blocks",
-      "description": "Get structured block tree of a document. Returns block types, content, and hierarchy for precise document analysis."
+      "description": "Get structured block tree of a document. Returns block types, content, and hierarchy for precise document analysis. Follows pagination internally and returns ALL blocks by default — hasMore:false in t"
     },
     {
       "name": "create_doc",

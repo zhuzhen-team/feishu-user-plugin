@@ -49,6 +49,13 @@ const FAILURE_MAP = {
   1254301: { action: 'retry', reason: 'upload_transient' },
   1254400: { action: 'retry', reason: 'upload_transient' },
 
+  // docx scope-check flake — "check incr user_access_token scope fail".
+  // Field report 2026-06-07: a mode-F table fill saw 15 identical
+  // updateDocBlock calls succeed, then 2200 — same UAT, so the scope was
+  // granted; Feishu's incremental-scope check is intermittently flaky under
+  // rapid-fire docx writes. A short-backoff retry usually clears it.
+  2200: { action: 'retry', reason: 'docx_scope_check_transient' },
+
   // Rate limited — Feishu throttles, try once more after a brief pause.
   42101:  { action: 'retry', reason: 'bot_rate_limited' },
   // Frequency control variants occasionally observed.

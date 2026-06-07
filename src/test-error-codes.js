@@ -47,6 +47,16 @@ function run() {
     assert.equal(c.reason, 'upload_transient', `${code} reason`);
   }
 
+  // --- 2200 docx scope-check flake (v1.3.17) ---
+  // Field report 2026-06-07: a mode-F table fill saw 15 identical updateDocBlock
+  // calls succeed, then "code=2200 check incr user_access_token scope fail" —
+  // same token, so the scope was fine; the check itself is intermittently flaky
+  // under rapid-fire docx writes. Classified transient so cell-fill retries it.
+  const c2200 = classifyError(2200);
+  assert.equal(c2200.action, 'retry', '2200 should be transient (retry)');
+  const bothIdentities = new Error('updateDocBlock failed on both identities. as user: code=2200 msg=check incr user_access_token scope fail. as app: updateDocBlock failed (HTTP 403, code=1770032): forBidden');
+  assert.equal(classifyError(bothIdentities).action, 'retry', 'combined both-identities message extracts the UAT-side 2200');
+
   // --- res.json() parse failures should retry once ---
   // Real-world: feishu's gateway occasionally returns truncated bodies that
   // make response.json() throw SyntaxError; one retry usually clears it.

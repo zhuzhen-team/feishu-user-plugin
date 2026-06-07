@@ -61,6 +61,9 @@
 - `search_docs` UAT-first（v1.3.16）：用户身份下搜索范围覆盖**你**可见的全部文档（含个人空间上传的 PDF 等）；bot 身份只覆盖共享给 bot 的文档。返回带 `viaUser`
 - `read_doc_markdown` 返回 markdown 字符串而非结构化 JSON —— RAG / digest / 摘要类调用省 ~60% token。嵌入图片 / 文件以 `feishu://image_token/<TOKEN>` / `feishu://file_token/<TOKEN>` 占位符保留；二进制内容配合 `download_doc_image` 取。`document_id` 同样接受 native token / wiki node / 飞书 URL
 - `manage_doc_block(action=create)` 提供图片（`image_path` / `image_token`）和文件（`file_path` / `file_token`）快捷参数；FILE 块（block_type=23）会被自动包到 VIEW 容器（block_type=33），插件在 `replace_file` PATCH 前先走入容器内的文件块
+- `get_doc_blocks` / `read_doc_markdown` **跟进分页拉全量**（v1.3.17）：内部循环 `page_token` 直到取完，`hasMore:false` 保证整棵块树都在返回里（此前静默截断在 500 块——大文档尾部"消失"的根因）。超大文档可传 `max_blocks` 限定单次返回，配合返回的 `nextPageToken` 作为 `page_token` 续拉；被限定的返回带 `truncated:true` + `hasMore:true`，绝不静默
+- `manage_doc_block` mode F（table）填格**部分失败不再整体抛错**（v1.3.17）：瞬态错误（code=2200 scope-check 抖动 / 限频 / 5xx）自动退避重试；重试后仍失败的格子记录在 `failedCells:[{row,col,cellId,textBlockId?,reason,skipped?}]`（row/col 0 起算）随成功结果一起返回，连续 3 格失败后剩余格子跳过并标 `skipped:true`。逐格用 `action=update`（block_id 传 `textBlockId`）补内容，不必重建表
+- **`update_text_elements` 是整段替换**：`manage_doc_block(action=update)` 的 `update_text_elements` 全量覆盖该块的 elements 数组（**不是** patch / append）——漏传的 element（加粗前缀、链接等）会永久丢失。只想改一部分时，先 `get_doc_blocks` 读出原 elements，改完后整组传回
 - `download_doc_image` 同 `download_message_resource` 的 2 MiB 上限
 - 所有 `document_id` / `app_token` 都接受 native token / wiki node token / 完整飞书 URL（通过 `getWikiNode` 解析，10 分钟缓存）
 
