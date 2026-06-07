@@ -89,6 +89,8 @@ async function run() {
     assert.strictEqual(err.blockId, 'ph1', 'error must carry the placeholder blockId');
     assert.ok(/ph1/.test(err.message), 'message must name the placeholder for cleanup/repair');
     assert.ok(/img_tok_1/.test(err.message), 'message should carry the uploaded token so the caller can re-attach without re-uploading');
+    assert.ok(/image_token=/.test(err.message), 'repair hint must use the concrete token param name (not an ambiguous placeholder)');
+    assert.ok(/document_id=d\b/.test(err.message), 'repair hint must include the document_id required by manage_doc_block');
   });
 
   await ok('image: upload failure also names the placeholder (orphan exists before upload)', async () => {

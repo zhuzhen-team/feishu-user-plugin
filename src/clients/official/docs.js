@@ -34,10 +34,10 @@ async function _withTransientRetry(fn, delays) {
 // the failure must name it — and carry the uploaded media token when present —
 // or the caller is left hunting for an unexplained empty block with no repair
 // path (2026-06-07 audit).
-function _orphanBlockError(label, blockId, stage, cause, mediaToken) {
+function _orphanBlockError(label, documentId, blockId, stage, cause, mediaToken, tokenParam) {
   const repair = mediaToken
-    ? `re-attach it with manage_doc_block(action=update, block_id=${blockId}, image_token/file_token=${mediaToken}) — no need to re-upload`
-    : `retry, or remove the orphan via manage_doc_block(action=delete) on its parent`;
+    ? `re-attach it with manage_doc_block(action=update, document_id=${documentId}, block_id=${blockId}, ${tokenParam}=${mediaToken}) — no need to re-upload`
+    : `retry, or remove the orphan via manage_doc_block(action=delete, document_id=${documentId}) on its parent block`;
   const err = new Error(`${label}: placeholder block ${blockId} was created but ${stage} failed — ${cause.message}. The empty block remains in the document; ${repair}.`);
   err.blockId = blockId;
   if (mediaToken) err.mediaToken = mediaToken;
@@ -391,7 +391,7 @@ module.exports = {
       try {
         uploaded = await _withTransientRetry(() => this.uploadMedia(imagePath, blockId, 'docx_image'), delays);
       } catch (e) {
-        throw _orphanBlockError('createDocBlockWithImage', blockId, 'image upload', e, null);
+        throw _orphanBlockError('createDocBlockWithImage', documentId, blockId, 'image upload', e, null);
       }
       finalToken = uploaded.fileToken;
       viaUser = viaUser && uploaded.viaUser; // true iff both steps went via user
@@ -412,7 +412,7 @@ module.exports = {
         label: 'createDocBlockWithImage.replaceImage',
       }), delays);
     } catch (e) {
-      throw _orphanBlockError('createDocBlockWithImage', blockId, 'replace_image PATCH', e, finalToken);
+      throw _orphanBlockError('createDocBlockWithImage', documentId, blockId, 'replace_image PATCH', e, finalToken, 'image_token');
     }
 
     return { blockId, imageToken: finalToken, viaUser, fallbackWarning };
@@ -488,7 +488,7 @@ module.exports = {
       try {
         uploaded = await _withTransientRetry(() => this.uploadMedia(filePath, blockId, 'docx_file'), delays);
       } catch (e) {
-        throw _orphanBlockError('createDocBlockWithFile', blockId, 'file upload', e, null);
+        throw _orphanBlockError('createDocBlockWithFile', documentId, blockId, 'file upload', e, null);
       }
       finalToken = uploaded.fileToken;
       viaUser = viaUser && uploaded.viaUser;
@@ -507,7 +507,7 @@ module.exports = {
         label: 'createDocBlockWithFile.replaceFile',
       }), delays);
     } catch (e) {
-      throw _orphanBlockError('createDocBlockWithFile', blockId, 'replace_file PATCH', e, finalToken);
+      throw _orphanBlockError('createDocBlockWithFile', documentId, blockId, 'replace_file PATCH', e, finalToken, 'file_token');
     }
 
     return { blockId, viewBlockId: outerBlockId !== blockId ? outerBlockId : undefined, fileToken: finalToken, viaUser, fallbackWarning };
