@@ -124,6 +124,24 @@ async function run() {
     assert.ok(!r.hasMore, 'complete fetch must not flag hasMore');
   });
 
+  await ok('listWikiSpaces continues past a permission-filtered empty page (empty + advancing token)', async () => {
+    const calls = [];
+    const self = {
+      async _asUserOrApp({ query }) {
+        const key = (query && query.page_token) || '';
+        calls.push(key);
+        if (key === '') return { data: { items: [{ space_id: 's1' }], has_more: true, page_token: 'SP2' }, _viaUser: true };
+        if (key === 'SP2') return { data: { items: [], has_more: true, page_token: 'SP3' }, _viaUser: true }; // filtered-empty
+        if (key === 'SP3') return { data: { items: [{ space_id: 's2' }], has_more: false }, _viaUser: true };
+        throw new Error('unexpected page_token: ' + key);
+      },
+    };
+    const r = await wikiClient.listWikiSpaces.call(self);
+    assert.strictEqual(r.items.length, 2, 'must page through the filtered-empty page to reach s2');
+    assert.deepStrictEqual(calls, ['', 'SP2', 'SP3']);
+    assert.ok(!r.hasMore, 'complete fetch must not flag hasMore');
+  });
+
   await ok('listWikiSpaces terminates on a stalled cursor and reports hasMore', async () => {
     let n = 0;
     const self = {

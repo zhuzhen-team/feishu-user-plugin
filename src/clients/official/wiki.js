@@ -42,9 +42,12 @@ module.exports = {
       hasMore = !!res.data.has_more;
       if (!hasMore) break;
       const next = res.data.page_token;
-      // Stall/cycle guards (getDocBlocks parity) — never loop on a server
-      // that repeats tokens or returns empty pages with has_more set.
-      if (!next || next === token || seenTokens.has(next) || pageItems.length === 0) break;
+      // Stall/cycle guards (getDocBlocks parity) — never loop on a server that
+      // drops or repeats the cursor. An empty page is NOT a stop signal: the
+      // Feishu wiki endpoints document empty pages with has_more:true under
+      // permission filtering, with real spaces behind them — keep paging while
+      // the cursor advances; the 200-page backstop bounds a pathological server.
+      if (!next || next === token || seenTokens.has(next)) break;
       token = next;
     }
     const out = { items, viaUser };

@@ -49,11 +49,11 @@
     },
     {
       "name": "list_calendars",
-      "description": "List the current user's calendars (primary + shared + subscribed). Requires UAT — app identity only sees calendars it was explicitly invited to. Requires `calendar:calendar:readonly` scope on the OAut"
+      "description": "List the current user's calendars (primary + shared + subscribed). Requires UAT — app identity only sees calendars it was explicitly invited to. Requires `calendar:calendar:readonly` scope on the…"
     },
     {
       "name": "list_calendar_events",
-      "description": "List events in a calendar within an optional time range. Typical usage: first list_calendars to find calendar_id (primary calendar has type=\"primary\"), then list events in e.g. [now, now+7d] (Unix sec"
+      "description": "List events in a calendar within an optional time range. Typical usage: first list_calendars to find calendar_id (primary calendar has type=\"primary\"), then list events in e.g. [now, now+7d] (Unix…"
     },
     {
       "name": "get_calendar_event",
@@ -61,7 +61,7 @@
     },
     {
       "name": "create_calendar_event",
-      "description": "Create a new calendar event. Requires `calendar:calendar.event:create` scope (re-run `npx feishu-user-plugin oauth` after enabling). The current identity (UAT-first) must have writer or owner permissi"
+      "description": "Create a new calendar event. Requires `calendar:calendar.event:create` scope (re-run `npx feishu-user-plugin oauth` after enabling). The current identity (UAT-first) must have writer or owner…"
     },
     {
       "name": "update_calendar_event",
@@ -101,11 +101,11 @@
     },
     {
       "name": "download_doc_image",
-      "description": "Download an image embedded in a docx document so the model can see it. Pass the `image_token` from `get_doc_blocks` (block.image.token), and optionally the doc/wiki/URL token to scope the lookup. UAT-"
+      "description": "Download an image embedded in a docx document so the model can see it. Pass the `image_token` from `get_doc_blocks` (block.image.token), and optionally the doc/wiki/URL token to scope the lookup…"
     },
     {
       "name": "search_docs",
-      "description": "Search Feishu documents by keyword. UAT-first with app fallback: with user identity (UAT) the search covers docs visible to YOU, including your personal space; via bot it only covers docs shared with "
+      "description": "Search Feishu documents by keyword. UAT-first with app fallback: with user identity (UAT) the search covers docs visible to YOU, including your personal space; via bot it only covers docs shared…"
     },
     {
       "name": "read_doc",
@@ -113,11 +113,11 @@
     },
     {
       "name": "get_doc_blocks",
-      "description": "Get structured block tree of a document. Returns block types, content, and hierarchy for precise document analysis. Follows pagination internally and returns ALL blocks by default — hasMore:false in t"
+      "description": "Get structured block tree of a document. Returns block types, content, and hierarchy for precise document analysis. Follows pagination internally and returns ALL blocks by default — hasMore:false in…"
     },
     {
       "name": "create_doc",
-      "description": "Create a new Feishu document. Can place directly under a Wiki space by passing wiki_space_id (optionally wiki_parent_node_token for nested placement) — the plugin creates the doc in drive then attache"
+      "description": "Create a new Feishu document. Can place directly under a Wiki space by passing wiki_space_id (optionally wiki_parent_node_token for nested placement) — the plugin creates the doc in drive then…"
     },
     {
       "name": "manage_doc_block",
@@ -125,11 +125,11 @@
     },
     {
       "name": "read_doc_markdown",
-      "description": "Read a Feishu doc as Markdown (vs get_doc_blocks JSON). Saves ~60% tokens for RAG / digest / summarisation use cases. Accepts native docx token, wiki node token, or full Feishu URL. Embedded images / "
+      "description": "Read a Feishu doc as Markdown (vs get_doc_blocks JSON). Saves ~60% tokens for RAG / digest / summarisation use cases. Accepts native docx token, wiki node token, or full Feishu URL. Embedded images…"
     },
     {
       "name": "list_files",
-      "description": "List files in a Drive folder. UAT-first with app fallback: with user identity (UAT), empty folder_token lists YOUR personal-space (\"我的空间\") root; via bot it can only see folders shared with the bot (pe"
+      "description": "List files in a Drive folder. UAT-first with app fallback: with user identity (UAT), empty folder_token lists YOUR personal-space (\"我的空间\") root; via bot it can only see folders shared with the bot…"
     },
     {
       "name": "create_folder",
@@ -137,19 +137,19 @@
     },
     {
       "name": "upload_drive_file",
-      "description": "Upload a file from disk to a Feishu Drive folder (drive/v1/files/upload_all, parent_type=explorer). Returns file_token + url. If wiki_space_id is provided, the uploaded file is then attached to that W"
+      "description": "Upload a file from disk to a Feishu Drive folder (drive/v1/files/upload_all, parent_type=explorer). Returns file_token + url. If wiki_space_id is provided, the uploaded file is then attached to that…"
     },
     {
       "name": "manage_drive_file",
-      "description": "Manage a Drive file/doc/folder. action=copy (duplicate to a new name + folder), move (relocate, returns task_id), delete (remove, returns task_id). `type` is always required (Feishu rejects with 10610"
+      "description": "Manage a Drive file/doc/folder. action=copy (duplicate to a new name + folder), move (relocate, returns task_id), delete (remove, returns task_id). `type` is always required (Feishu rejects with…"
     },
     {
       "name": "get_new_events",
-      "description": "Drain real-time events from the machine-level shared event log. v1.3.8 used per-process in-memory buffers (with duplicate-event problem); v1.3.9 uses ~/.feishu-user-plugin/events.jsonl with a single g"
+      "description": "Drain real-time events from the machine-level shared event log. v1.3.8 used per-process in-memory buffers (with duplicate-event problem); v1.3.9 uses ~/.feishu-user-plugin/events.jsonl with a single…"
     },
     {
       "name": "manage_ws_status",
-      "description": "Inspect or control the machine-level WS owner. Actions: info (status dump), reconnect (owner-only; restart WS), claim (try become owner; force=true to steal active lock), rotate (owner-only; force eve"
+      "description": "Inspect or control the machine-level WS owner. Actions: info (status dump), reconnect (owner-only; restart WS), claim (try become owner; force=true to steal active lock), rotate (owner-only; force…"
     },
     {
       "name": "create_group",
@@ -165,7 +165,7 @@
     },
     {
       "name": "manage_members",
-      "description": "Add or remove members from a group chat. The Feishu API rejects with code 9499 when the IDs in `member_ids` do not match `member_id_type` — pass `member_id_type` explicitly when using union_id or user"
+      "description": "Add or remove members from a group chat. The Feishu API rejects with code 9499 when the IDs in `member_ids` do not match `member_id_type` — pass `member_id_type` explicitly when using union_id or…"
     },
     {
       "name": "get_chat_info",
@@ -173,7 +173,7 @@
     },
     {
       "name": "read_p2p_messages",
-      "description": "Read P2P (direct message) chat history using user_access_token. Works for chats the bot cannot access. Returns newest messages first by default. Auto-expands merge_forward messages into their child me"
+      "description": "Read P2P (direct message) chat history using user_access_token. Works for chats the bot cannot access. Returns newest messages first by default. Auto-expands merge_forward messages into their child…"
     },
     {
       "name": "list_user_chats",
@@ -185,15 +185,15 @@
     },
     {
       "name": "read_messages",
-      "description": "Read message history from any group. Accepts oc_xxx ID, numeric ID, or chat name (auto-searched). Auto-falls back to UAT for external groups the bot cannot access. Returns newest messages first by def"
+      "description": "Read message history from any group. Accepts oc_xxx ID, numeric ID, or chat name (auto-searched). Auto-falls back to UAT for external groups the bot cannot access. Returns newest messages first by…"
     },
     {
       "name": "search_messages",
-      "description": "Search the user's IM history by keyword. Wraps Feishu `POST /open-apis/search/v2/message`. Requires UAT with the `search:message` scope (re-run `npx feishu-user-plugin oauth` after v1.3.12 SCOPES upda"
+      "description": "Search the user's IM history by keyword. Wraps Feishu `POST /open-apis/search/v2/message`. Requires UAT with the `search:message` scope (re-run `npx feishu-user-plugin oauth` after v1.3.12 SCOPES…"
     },
     {
       "name": "send_message_as_bot",
-      "description": "Send a message as the bot to any chat. Supports text, post, interactive, etc. This is the reliable path for @-mentions: include `<at user_id=\"ou_xxx\">Name</at>` inline in text content and Feishu resol"
+      "description": "Send a message as the bot to any chat. Supports text, post, interactive, etc. This is the reliable path for @-mentions: include `<at user_id=\"ou_xxx\">Name</at>` inline in text content and Feishu…"
     },
     {
       "name": "reply_message",
@@ -237,11 +237,11 @@
     },
     {
       "name": "batch_send",
-      "description": "Send the same or different content to multiple targets in one call. Each target dispatches sequentially with a small delay (anti-rate-limit) and reports per-target success/error. Identity is the cooki"
+      "description": "Send the same or different content to multiple targets in one call. Each target dispatches sequentially with a small delay (anti-rate-limit) and reports per-target success/error. Identity is the…"
     },
     {
       "name": "send_image_as_user",
-      "description": "Send an image as the logged-in user (NOT bot). Requires image_key from a prior upload_image call. Cookie-protobuf wire format requires both imageKey + thumbnailKey — when no separate thumbnail is prov"
+      "description": "Send an image as the logged-in user (NOT bot). Requires image_key from a prior upload_image call. Cookie-protobuf wire format requires both imageKey + thumbnailKey — when no separate thumbnail is…"
     },
     {
       "name": "send_file_as_user",
@@ -253,7 +253,7 @@
     },
     {
       "name": "send_card_as_user",
-      "description": "Send an interactive Feishu card to a chat via bot identity (Official API). User-identity cookie protobuf path is server-side disabled at the auth tier — confirmed by exhaustive brute-force in v1.3.9, "
+      "description": "Send an interactive Feishu card to a chat via bot identity (Official API). User-identity cookie protobuf path is server-side disabled at the auth tier — confirmed by exhaustive brute-force in…"
     },
     {
       "name": "list_user_okrs",
@@ -269,11 +269,11 @@
     },
     {
       "name": "create_okr_progress_record",
-      "description": "Add a progress note to an OKR objective or key result. Feishu requires `source_title`, `source_url`, and a block-structured `content`; this tool exposes a simple `content_text` and auto-wraps it into "
+      "description": "Add a progress note to an OKR objective or key result. Feishu requires `source_title`, `source_url`, and a block-structured `content`; this tool exposes a simple `content_text` and auto-wraps it…"
     },
     {
       "name": "list_okr_progress_records",
-      "description": "List progress records for an OKR. Feishu has no native list endpoint — this tool calls get_okrs internally and walks the objective_list / kr_list to extract progress_record IDs (with their target_id a"
+      "description": "List progress records for an OKR. Feishu has no native list endpoint — this tool calls get_okrs internally and walks the objective_list / kr_list to extract progress_record IDs (with their target_id…"
     },
     {
       "name": "delete_okr_progress_record",
@@ -281,15 +281,15 @@
     },
     {
       "name": "list_profiles",
-      "description": "List all available identity profiles (each profile has its own LARK_COOKIE / APP_ID / APP_SECRET / UAT). v1.3.9 SSOT: profiles live in ~/.feishu-user-plugin/credentials.json::profiles. Legacy fallback"
+      "description": "List all available identity profiles (each profile has its own LARK_COOKIE / APP_ID / APP_SECRET / UAT). v1.3.9 SSOT: profiles live in ~/.feishu-user-plugin/credentials.json::profiles. Legacy…"
     },
     {
       "name": "switch_profile",
-      "description": "Switch the active identity profile. Atomically writes credentials.json::active; cached clients in this process are invalidated; cross-process MCPs (Codex / another Claude Code) auto-sync via dispatche"
+      "description": "Switch the active identity profile. Atomically writes credentials.json::active; cached clients in this process are invalidated; cross-process MCPs (Codex / another Claude Code) auto-sync via…"
     },
     {
       "name": "manage_profile_hints",
-      "description": "Inspect / set / clear profileHints — the resourceKey → profileName cache the auto-switch middleware uses to remember which profile owns each Feishu resource. Useful when a hint goes stale (e.g., a pro"
+      "description": "Inspect / set / clear profileHints — the resourceKey → profileName cache the auto-switch middleware uses to remember which profile owns each Feishu resource. Useful when a hint goes stale (e.g., a…"
     },
     {
       "name": "list_tasks",
@@ -329,23 +329,23 @@
     },
     {
       "name": "upload_bitable_attachment",
-      "description": "Upload a file as a Bitable attachment (drive/v1/medias/upload_all with parent_type=bitable_image or bitable_file). Returns file_token suitable for writing into a Bitable Attachment-type field via batc"
+      "description": "Upload a file as a Bitable attachment (drive/v1/medias/upload_all with parent_type=bitable_image or bitable_file). Returns file_token suitable for writing into a Bitable Attachment-type field via…"
     },
     {
       "name": "list_wiki_spaces",
-      "description": "List all accessible Wiki spaces. Follows pagination internally and returns ALL spaces (pre-v1.3.17 silently capped at 50). If the upstream cursor stalls, the response carries hasMore:true — treat that"
+      "description": "List all accessible Wiki spaces. Follows pagination internally and returns ALL spaces (pre-v1.3.17 silently capped at 50). If the upstream cursor stalls, the response carries hasMore:true — treat…"
     },
     {
       "name": "search_wiki",
-      "description": "Search Wiki nodes by keyword. UAT-first with app fallback: with user identity (UAT) the search covers wiki spaces visible to YOU; via bot it only covers spaces the bot was invited to. Response carries"
+      "description": "Search Wiki nodes by keyword. UAT-first with app fallback: with user identity (UAT) the search covers wiki spaces visible to YOU; via bot it only covers spaces the bot was invited to. Response…"
     },
     {
       "name": "list_wiki_nodes",
-      "description": "List nodes in a Wiki space (50 per page). When hasMore is true, pass the returned pageToken back as page_token to fetch the next page."
+      "description": "List nodes in a Wiki space (50 per page). When hasMore is true, pass the returned pageToken back as page_token to fetch the next page. A page may be EMPTY while hasMore is still true (Feishu…"
     },
     {
       "name": "get_wiki_node",
-      "description": "Resolve a Wiki node token to its underlying object (docx / bitable / sheet / mindnote / file). Returns obj_type + obj_token + space_id so you can read/write the real resource via the usual docx / bita"
+      "description": "Resolve a Wiki node token to its underlying object (docx / bitable / sheet / mindnote / file). Returns obj_type + obj_token + space_id so you can read/write the real resource via the usual docx /…"
     },
     {
       "name": "create_wiki_node",
@@ -365,7 +365,7 @@
     },
     {
       "name": "delete_wiki_node",
-      "description": "Delete a Wiki node. Calls `DELETE /open-apis/wiki/v2/spaces/{space_id}/nodes/{node_token}`. The Feishu SDK does not type this endpoint, so the call goes through raw REST (UAT-first; bot fallback uses "
+      "description": "Delete a Wiki node. Calls `DELETE /open-apis/wiki/v2/spaces/{space_id}/nodes/{node_token}`. The Feishu SDK does not type this endpoint, so the call goes through raw REST (UAT-first; bot fallback…"
     }
   ],
   "installations": {
