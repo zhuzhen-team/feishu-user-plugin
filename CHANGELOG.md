@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.17] - 2026-06-08
+
+本版围绕读路径完整性做一轮系统性收口：大文档与大列表不再静默截断、批量写的部分失败不再被读作全成功、文档表格 / 媒体块建失败可定位可修复。85 工具数不变，`get_doc_blocks` / `manage_doc_block` / `read_messages` / `read_p2p_messages` / `list_wiki_nodes` / `manage_bitable_record` 等 schema 新增分页或上报字段，无 breaking API。升级后重启 Claude Code / Codex 自动拉 v1.3.17。
+
+### Added
+
+- **get_doc_blocks / read_doc_markdown 分页拉全量**：跟进 `page_token` 拉完整块树，`hasMore:false` 才代表拉全；此前单页静默截断在 500 块，大文档（一次报障是 280+ 块 / ~300KB）尾部"消失"且无任何标志，调用方误以为那部分块没建成功。`get_doc_blocks` 新增 `max_blocks` 限定单次返回 + `nextPageToken` 续拉，被限定的返回带 `truncated:true`；`read_doc_markdown` 块树不完整时末尾追加 `[output truncated]` 注记。（src/clients/official/docs.js）
+- **read_messages / read_p2p_messages / list_wiki_nodes / manage_bitable_record(search) 分页续拉**：四条读路径新增 `page_token` 入参，`hasMore:true` 时把返回的 `pageToken` 回填即可翻页；此前 client 已返回游标但工具层丢弃 / schema 无入参，超出单页窗口（消息默认 20 上限 50、wiki 节点 50、bitable 默认 20）的内容拿不到也续不了，digest / 全表扫描类任务据此得出残缺结论。
+- **manage_members(add) 部分失败上报**：新增 `notExistedIds`（用户不存在）/ `pendingApprovalIds`（卡入群审批、尚未进群），任一非空时响应顶部 ⚠ 逐一点名；此前只透 `invalidIds`，后两类被静默吞掉，半失败读作全员入群（卡审批的"成员"后续 @ 不到）。字段名对照飞书 OpenAPI 生成的 SDK 类型核验。（src/clients/official/groups.js）
+
+### Fixed
+
+- **manage_doc_block 建表填格部分失败可恢复**：mode F 填格遇瞬态错误（`code=2200` scope-check 抖动 / 限频 / 5xx）自动退避重试；重试后仍失败的格子记录 `failedCells:[{row,col,cellId,textBlockId,reason,skipped}]`（row/col 0 起算）随成功结果返回、不再整体抛错，连续 3 格失败止损并标 `skipped`。逐格 `action=update`（block_id 传 textBlockId）补内容即可，不必重建表。一次报障是 7×3 表第 6 行起填格失败、整表残缺且拿不到已填清单。（src/clients/official/docs.js）
+- **list_wiki_spaces 拉全量**：内部跟进 `page_token` 拉完整空间列表；此前单页截断在 50，第 51+ 个空间的 `space_id` 无法发现，后续 `list_wiki_nodes` / `create_wiki_node` 选不到 parent。（src/clients/official/wiki.js）
+- **图片 / 文件块三步建块瞬态重试 + 孤儿可定位**：`createDocBlockWithImage` / `createDocBlockWithFile`（建占位块 → 上传 → PATCH）的上传与 PATCH 步骤自动重试瞬态错误；持续失败时错误携带占位块 `blockId`（上传已成功时附媒体 token + 含 `document_id` 的修复指引），不必全文找空块。（src/clients/official/docs.js）
+- **空页不再当分页终止信号**：飞书因权限过滤可能返回空页 + `has_more:true` 但后面还有数据（其 `spaceNode.list` API 文档明确写"可以继续分页请求"）；`getDocBlocks` / `listWikiSpaces` 内部循环不再在空页停（停滞保护改由 token 守卫 + 页数 backstop），空页 + 前进游标继续翻。`list_wiki_nodes` schema 同步提醒 agent 空页 + hasMore 要续翻。（src/clients/official/docs.js、wiki.js）
+- **error-codes：2200 归类 retry**：docx 的 "check incr user_access_token scope fail" 是 scope-check 服务的瞬态抖动（同一 UAT 前序调用均成功、scope 本已授权），归为可重试。（src/error-codes.js）
+- **server.json 目录描述词边界截断**：registry catalog 描述改为词边界截断 + 省略号，不再切在半个词（32 个长描述受益）；运行时 MCP client 经 `tools/list` 拿的仍是完整描述。（scripts/sync-server-json.js）
+
+### Changed
+
+- **update_text_elements 整段替换语义强调**：`manage_doc_block(action=update)` 的 `update_text_elements` 全量覆盖该块的 elements（**非** patch / append），漏传的 element（加粗前缀、链接等）永久丢失；改局部应先 `get_doc_blocks` 读原块、整组传回。schema 描述 + docs/TOOLS.md + CLAUDE.md + skill reference 四处加粗。
+
+### Test scenarios
+
+- 280+ 块大文档调 `get_doc_blocks` 应返回全部块、`hasMore:false`；`read_doc_markdown` 渲染到末段不截断
+- `read_messages` 对消息密集的群 `hasMore:true` 时回填 `page_token` 应拿到更早的消息
+- `manage_doc_block(action=create, table=7×3)` 21 格应全部填充；瞬态失败时返回 `failedCells` 而非整体报错
+- `list_wiki_spaces` 在加入 >50 个空间的账号应返回全部、`hasMore:false`
+
 ## [1.3.16] - 2026-06-06
 
 修掉发现类读路径的身份盲区：上传到个人空间的文件此前找不到、也因此删不掉。`list_files` / `search_docs` / `search_wiki` / `get_wiki_node` 四条读路径改为 UAT 优先（bot fallback 保留）。85 工具数不变，list_files / search_docs / search_wiki 三个 schema 新增分页参数，无 breaking API。
