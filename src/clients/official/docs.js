@@ -155,10 +155,14 @@ module.exports = {
         if (next) nextPageToken = next;
         break;
       }
-      // Stall/cycle guards (PR #116 parity): an empty page, a missing token, or
-      // a token we've already used means paging forward is futile — stop and
-      // WITHHOLD the cursor rather than hand the caller an infinite loop.
-      if (!next || next === token || seenTokens.has(next) || pageItems.length === 0) break;
+      // Stall/cycle guards (PR #116 parity): a missing token, an unchanged
+      // token, or one we've already used means paging forward is futile — stop
+      // and WITHHOLD the cursor rather than loop forever. An EMPTY page is NOT
+      // a stop signal on its own: Feishu legitimately returns empty pages with
+      // has_more:true (permission filtering) and real data behind them, so we
+      // keep going as long as the cursor advances; the MAX_PAGES backstop bounds
+      // a pathological always-empty-new-token server.
+      if (!next || next === token || seenTokens.has(next)) break;
       token = next;
     }
     // Backstop exhausted mid-document: `token` is the still-unfetched cursor.

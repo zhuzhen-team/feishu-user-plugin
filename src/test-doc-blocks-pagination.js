@@ -90,6 +90,21 @@ async function run() {
     assert.strictEqual(r.hasMore, false);
   });
 
+  await ok('continues past a permission-filtered empty page (empty + ADVANCING token is not a stall)', async () => {
+    // Feishu documents that paginated endpoints may return an empty page with
+    // has_more:true (permission filtering) and the caller should keep paging.
+    // An empty page must NOT end the loop when the cursor is still advancing.
+    const { self, calls } = pagedStub({
+      '':   { items: [blk('b1')], has_more: true, next: 'p2' },
+      'p2': { items: [], has_more: true, next: 'p3' }, // filtered-empty, real data behind it
+      'p3': { items: [blk('b2')], has_more: false },
+    });
+    const r = await docs.getDocBlocks.call(self, 'docX');
+    assert.strictEqual(r.items.length, 2, 'must fetch the data behind the empty page');
+    assert.strictEqual(r.hasMore, false);
+    assert.deepStrictEqual(calls, ['', 'p2', 'p3']);
+  });
+
   await ok('terminates on a stalled cursor (empty page, has_more, same token) and withholds it', async () => {
     const { self, calls } = pagedStub({
       '':   { items: [blk('b1')], has_more: true, next: 'p1' },

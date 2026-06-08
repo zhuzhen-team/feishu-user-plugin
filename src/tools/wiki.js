@@ -23,7 +23,7 @@ const schemas = [
   },
   {
     name: 'list_wiki_nodes',
-    description: '[Official API] List nodes in a Wiki space (50 per page). When hasMore is true, pass the returned pageToken back as page_token to fetch the next page.',
+    description: '[Official API] List nodes in a Wiki space (50 per page). When hasMore is true, pass the returned pageToken back as page_token to fetch the next page. A page may be EMPTY while hasMore is still true (Feishu permission-filters per page) — do not stop at an empty page; keep paging until hasMore is false.',
     inputSchema: {
       type: 'object',
       properties: {

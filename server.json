@@ -341,7 +341,7 @@
     },
     {
       "name": "list_wiki_nodes",
-      "description": "List nodes in a Wiki space (50 per page). When hasMore is true, pass the returned pageToken back as page_token to fetch the next page."
+      "description": "List nodes in a Wiki space (50 per page). When hasMore is true, pass the returned pageToken back as page_token to fetch the next page. A page may be EMPTY while hasMore is still true (Feishu permissio"
     },
     {
       "name": "get_wiki_node",
