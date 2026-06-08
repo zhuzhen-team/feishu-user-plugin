@@ -17,10 +17,23 @@ const SERVER_JSON = path.join(ROOT, 'server.json');
 const PKG = require(path.join(ROOT, 'package.json'));
 const { TOOLS } = require(path.join(ROOT, 'src', 'server'));
 
+// Truncate a description to at most `limit` chars for the registry catalog.
+// Cuts at the last word boundary (when one exists in the tail) and appends an
+// ellipsis, so server.json never ends a description mid-word — the full text
+// still reaches MCP clients at runtime via tools/list (this is catalog
+// metadata only). PR #121 review.
+function truncateForCatalog(s, limit = 200) {
+  if (s.length <= limit) return s;
+  const slice = s.slice(0, limit - 1); // leave room for the ellipsis
+  const lastSpace = slice.lastIndexOf(' ');
+  const cut = lastSpace > limit * 0.6 ? slice.slice(0, lastSpace) : slice;
+  return cut.replace(/[\s,;.:—-]+$/, '') + '…';
+}
+
 function deriveToolEntry(t) {
   // Strip the "[Plugin]"/"[Cookie]"/etc category prefix from descriptions for compactness.
   const desc = (t.description || '').replace(/^\[[^\]]+\]\s*/, '');
-  return { name: t.name, description: desc.split('\n')[0].slice(0, 200) };
+  return { name: t.name, description: truncateForCatalog(desc.split('\n')[0], 200) };
 }
 
 const existing = JSON.parse(fs.readFileSync(SERVER_JSON, 'utf8'));
