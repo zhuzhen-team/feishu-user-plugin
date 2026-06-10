@@ -514,12 +514,74 @@ server.setRequestHandler(GetPromptRequestSchema, async (req) => {
 
 // --- Process-level error handlers ---
 // Prevent stray promise rejections or uncaught exceptions from killing the MCP server.
+//
+// v1.3.14-patch: re-entrancy guard on uncaughtException. Accessing err.stack
+// triggers V8's CaptureAndSetErrorStack → FormatStackTrace chain, which can
+// itself throw (e.g. in CallSitePrototypeToString / SerializeCallSiteInfo),
+// creating an infinite exception→handler→stack→exception loop that pegs the CPU.
+// We track depth and bail out with process.exit when a loop is detected.
+let _exceptionHandling = false;
+let _consecutiveExceptions = 0;
+let _exceptionResetTimer = null;
+const _EXCEPTION_LOOP_LIMIT = 5;
+
 process.on('uncaughtException', (err) => {
-  console.error('[feishu-user-plugin] Uncaught exception:', err.message);
-  console.error(err.stack);
+  // Re-entrancy guard: if we are already inside this handler, another
+  // exception was thrown during error logging (likely from stack trace
+  // formatting). Track the count and emergency-exit when it loops.
+  if (_exceptionHandling) {
+    _consecutiveExceptions++;
+    if (_consecutiveExceptions >= _EXCEPTION_LOOP_LIMIT) {
+      process.stderr.write(
+        `[feishu-user-plugin] FATAL: uncaughtException loop detected ` +
+        `(${_consecutiveExceptions} consecutive re-entrant exceptions). ` +
+        `Exiting to prevent CPU spin.\n`
+      );
+      try { wsServer?.stop(); } catch (_) {}
+      try { ownerHandle?.release(); } catch (_) {}
+      process.exit(70); // EX_SOFTWARE — internal software error
+    }
+    return;
+  }
+
+  _exceptionHandling = true;
+  try {
+    // Use util.inspect with depth limit instead of accessing err.stack
+    // directly, to avoid triggering V8's stack-trace formatting side effects
+    // that can throw inside our handler.
+    const util = require('util');
+    const safe = util.inspect(
+      { message: err?.message, code: err?.code, name: err?.name },
+      { depth: 2, breakLength: Infinity }
+    );
+    console.error('[feishu-user-plugin] Uncaught exception:', safe);
+  } catch (logErr) {
+    // Absolute last resort — raw fd write, no formatting at all.
+    try {
+      process.stderr.write(
+        `[feishu-user-plugin] Uncaught exception: ${String(err && err.message)}\n`
+      );
+    } catch (_) { /* we tried */ }
+  } finally {
+    _exceptionHandling = false;
+  }
+
+  // Reset the consecutive counter after a quiet period so transient
+  // errors don't accumulate toward the bailout limit.
+  if (_exceptionResetTimer) clearTimeout(_exceptionResetTimer);
+  _exceptionResetTimer = setTimeout(() => {
+    _consecutiveExceptions = 0;
+  }, 60000);
 });
+
 process.on('unhandledRejection', (reason) => {
-  console.error('[feishu-user-plugin] Unhandled rejection:', reason);
+  try {
+    const util = require('util');
+    console.error('[feishu-user-plugin] Unhandled rejection:',
+      util.inspect(reason, { depth: 2, breakLength: Infinity }));
+  } catch (_) {
+    console.error('[feishu-user-plugin] Unhandled rejection:', String(reason));
+  }
 });
 process.on('SIGTERM', () => {
   _stopHeartbeat(); _stopNonOwnerPoll();
@@ -534,9 +596,65 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
+// --- Zombie sibling cleanup ---
+// At startup, scan for other feishu-user-plugin node processes that are
+// burning excessive CPU (likely stuck in exception loops like the
+// uncaughtException→stack→exception cycle fixed above). Kill them to
+// prevent CPU / thermal runaway across multiple MCP restarts.
+function _cleanupStaleSiblings() {
+  try {
+    const { execSync } = require('child_process');
+    const currentPid = process.pid;
+    const output = execSync(
+      `ps axo pid,time,comm | grep "feishu-user-plugin" | grep -v grep || true`,
+      { encoding: 'utf8', timeout: 2000 }
+    ).trim();
+    if (!output) return;
+
+    const lines = output.split('\n');
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 3) continue;
+      const pid = parseInt(parts[0], 10);
+      const timeStr = parts[1];
+
+      if (pid === currentPid || isNaN(pid)) continue;
+
+      // Parse accumulated CPU time: MM:SS or HH:MM:SS
+      const timeParts = timeStr.split(':').map(Number);
+      let totalSec;
+      if (timeParts.length === 3) {
+        totalSec = timeParts[0] * 3600 + timeParts[1] * 60 + timeParts[2];
+      } else {
+        totalSec = timeParts[0] * 60 + timeParts[1];
+      }
+
+      // Threshold: > 3 min accumulated CPU in a short-lived MCP server
+      // is pathological (normal startup + tool calls use < 10s total).
+      const STUCK_CPU_SEC = 180;
+      if (totalSec > STUCK_CPU_SEC) {
+        try {
+          process.kill(pid, 'SIGKILL');
+          console.error(
+            `[feishu-user-plugin] cleaned up stuck sibling PID ${pid} ` +
+            `(CPU time: ${timeStr}, threshold: ${STUCK_CPU_SEC}s)`
+          );
+        } catch (e) {
+          // Process may have already exited — ignore.
+        }
+      }
+    }
+  } catch (_) {
+    // Best-effort: never block startup on cleanup failure.
+  }
+}
+
 // --- main ---
 
 async function main() {
+  // Clean up stuck sibling processes before starting. This prevents
+  // accumulation of CPU-spinning zombie instances across MCP restarts.
+  _cleanupStaleSiblings();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
