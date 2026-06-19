@@ -21,6 +21,7 @@ const { appendEvent } = require('./event-log');
 // In v1.3.9 owner mode, we write to events.jsonl directly with a profile tag.
 // In legacy mode (no logPath given) we fall back to the in-memory buffer.
 function _eventRowHandler({ buffer, eventType, getProfile, getWsState, logPath }) {
+  let _droppedSinceAppend = 0;  // events lost to a failed append (e.g. ENOSPC)
   return async (data) => {
     const wsState = getWsState();
     if (wsState !== 'connected') {
@@ -39,9 +40,27 @@ function _eventRowHandler({ buffer, eventType, getProfile, getWsState, logPath }
     if (logPath) {
       try {
         appendEvent(logPath, event);
+        // If a prior append failed (disk full), the owner-arbitrated
+        // get_new_events never drains the in-memory buffer — so once the log is
+        // writable again, emit a sticky marker so log consumers learn events
+        // were dropped instead of silently missing them.
+        if (_droppedSinceAppend > 0) {
+          const n = _droppedSinceAppend;
+          _droppedSinceAppend = 0;
+          try {
+            appendEvent(logPath, {
+              event_id: '_events_dropped', ts: Date.now(), profile: '_system',
+              event_type: '_system.events_dropped',
+              event: { dropped_count: n, reason: 'a prior appendEvent failed (e.g. disk full); those events are NOT in this log and were not delivered' },
+            });
+          } catch (_) { _droppedSinceAppend = n; }  // still unwritable — keep the count
+        }
       } catch (e) {
-        // Disk-full or similar — fall back to in-memory buffer.
-        console.error(`[feishu-user-plugin] events.jsonl append failed: ${e.message}; falling back to in-memory buffer`);
+        // Disk-full or similar. NOTE: in owner mode get_new_events reads the log,
+        // not this buffer, so this event is effectively LOST to consumers; we
+        // count it and surface a marker on the next successful append.
+        _droppedSinceAppend++;
+        console.error(`[feishu-user-plugin] events.jsonl append failed: ${e.message}; event LOST to get_new_events consumers (they read the log, not the in-memory buffer)`);
         buffer.push(event);
       }
     } else {
