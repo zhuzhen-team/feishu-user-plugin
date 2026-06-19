@@ -102,4 +102,26 @@ function resetCursorTo(dir, offset) {
   }, { staleMs: 30_000 });
 }
 
-module.exports = { drain, readSnapshot, resetCursorTo, CURSOR_FILENAME };
+// Run a rotate-and-reset under the SAME mutex that drain() takes, so the
+// events.jsonl rename and the cursor reset are atomic with respect to a
+// concurrent drain on another process (previously the rotate renamed the log
+// and reset the cursor in two unsynchronised steps, racing in-flight drains).
+// `doRotate({ cursorOffset, fileSize })` performs the rename(s) and returns
+// `{ resetCursor: bool }`; when true the cursor is reset to 0 in the same lock.
+function rotateUnderLock(dir, doRotate) {
+  const curPath = _cursorPath(dir);
+  const lockPath = _lockPath(dir);
+  const logPath = path.join(dir, 'events.jsonl');
+  return withMutex(lockPath, () => {
+    let fileSize = 0;
+    try { fileSize = fs.statSync(logPath).size; } catch (_) {}
+    const cursor = _readCursor(curPath, fileSize);
+    const result = doRotate({ cursorOffset: cursor.offset, fileSize }) || {};
+    if (result.resetCursor) {
+      _writeCursorAtomic(curPath, { version: 1, file: 'events.jsonl', offset: 0 });
+    }
+    return result;
+  }, { staleMs: 30_000 });
+}
+
+module.exports = { drain, readSnapshot, resetCursorTo, rotateUnderLock, CURSOR_FILENAME };

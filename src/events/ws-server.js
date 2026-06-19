@@ -146,19 +146,11 @@ function createWSServer({
     }
   }
 
-  // For switching: stop, then start with a new profile/registrations.
-  // The registrations list is currently fixed at construction; full switching
-  // requires re-creating the WSClient. This helper just stops + nulls so the
-  // caller can construct a new server.
-  async function reconfigureProfile(newProfile) {
-    wsState = 'switching';
-    wsProfile = 'switching';   // tag-irrelevant during transition
-    await stop();
-    started = false; stopped = false;
-    wsProfile = newProfile;
-    await start();
-  }
-
+  // NOTE: there is intentionally no reconfigureProfile() here. A previous helper
+  // by that name restarted with the SAME (construction-fixed) registrations, so
+  // it did not actually re-subscribe — an attractive-nuisance API. Profile
+  // switching is done by server.js tearing this server down and constructing a
+  // fresh one via _maybeReconfigure (which rebuilds registrations correctly).
   function getStatus() {
     return {
       state: wsState,
@@ -169,7 +161,7 @@ function createWSServer({
     };
   }
 
-  return { buffer, start, stop, reconfigureProfile, getStatus, get isRunning() { return started && !stopped; } };
+  return { buffer, start, stop, getStatus, get isRunning() { return started && !stopped; } };
 }
 
 module.exports = { createWSServer };

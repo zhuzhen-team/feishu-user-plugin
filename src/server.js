@@ -103,6 +103,19 @@ function _stopNonOwnerPoll() {
   if (nonOwnerPollTimer) { clearInterval(nonOwnerPollTimer); nonOwnerPollTimer = null; }
 }
 
+// Called when our owner heartbeat fails (the lock was force-stolen or vanished).
+// Stop the WS writer + heartbeat, then re-run election. We do NOT release() the
+// lock here: we no longer own it, and release() unlinks the lock path — which
+// would delete the NEW owner's lock and trigger a thundering re-election.
+function _relinquishOwnership() {
+  _stopHeartbeat();
+  const ws = wsServer;
+  wsServer = null;
+  ownerHandle = null;
+  if (ws) { try { ws.stop().catch(() => {}); } catch (_) {} }
+  _claimAndStart().catch((e) => console.error(`[feishu-user-plugin] re-election after lost lock failed: ${e.message}`));
+}
+
 function getEventBuffer() {
   return wsServer ? wsServer.buffer : null;
 }
@@ -232,7 +245,15 @@ async function _claimAndStart() {
   _lastHashMtimes = require('./auth/lark-desktop').listAccountHashes()
     .reduce((acc, h) => { acc[h.hash] = h.mtimeMs; return acc; }, {});
   ownerHeartbeatTimer = setInterval(() => {
-    if (ownerHandle) ownerHandle.heartbeat();
+    if (ownerHandle && !ownerHandle.heartbeat()) {
+      // Lost the owner lock (a peer force-stole it, or the lock file vanished).
+      // Stop writing immediately and re-run election so we don't double-write
+      // events.jsonl alongside the new owner — a phantom second writer would
+      // interleave/corrupt the single-writer log.
+      console.error('[feishu-user-plugin] owner heartbeat failed — lost the WS owner lock; relinquishing to avoid a phantom second writer');
+      _relinquishOwnership();
+      return;
+    }
     const m = _credMtime();
     if (m !== null && m !== lastCredMtime) {
       lastCredMtime = m;
@@ -244,19 +265,21 @@ async function _claimAndStart() {
     } catch (e) {
       console.error(`[feishu-user-plugin] Lark reactor error: ${e.message}`);
     }
-    // Defer-rotate check
+    // Defer-rotate check — rename + cursor reset run under the cursor mutex so
+    // they are atomic with respect to a concurrent drain on a peer process.
     try {
-      const snap = events.cursor.readSnapshot(FEISHU_HOME);
-      const SOFT_CAP = 10 * 1024 * 1024;
-      const HARD_CAP = 20 * 1024 * 1024;
-      const rot = events.log.maybeRotate(EVENTS_LOG_PATH, snap.cursor.offset, SOFT_CAP);
-      if (rot.rotated) {
-        events.cursor.resetCursorTo(FEISHU_HOME, 0);
-      } else if (snap.fileSize > HARD_CAP) {
-        events.log.forceRotate(EVENTS_LOG_PATH, snap.fileSize);
-        events.cursor.resetCursorTo(FEISHU_HOME, 0);
-      }
-      // Also clean up old .dropped files daily-ish (every heartbeat is cheap)
+      events.cursor.rotateUnderLock(FEISHU_HOME, ({ cursorOffset, fileSize }) => {
+        const SOFT_CAP = 10 * 1024 * 1024;
+        const HARD_CAP = 20 * 1024 * 1024;
+        const rot = events.log.maybeRotate(EVENTS_LOG_PATH, cursorOffset, SOFT_CAP);
+        if (rot.rotated) return { resetCursor: true };
+        if (fileSize > HARD_CAP) {
+          events.log.forceRotate(EVENTS_LOG_PATH, fileSize);
+          return { resetCursor: true };
+        }
+        return { resetCursor: false };
+      });
+      // Clean up old .dropped files daily-ish (cheap; outside the cursor lock).
       events.log.cleanupDropped(EVENTS_LOG_PATH, 7);
     } catch (e) {
       console.error(`[feishu-user-plugin] rotation check failed: ${e.message}`);
