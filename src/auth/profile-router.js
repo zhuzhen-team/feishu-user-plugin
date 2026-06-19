@@ -197,17 +197,28 @@ async function withProfileRouting(ctx, name, args, callHandler) {
           continue;
         }
       }
-      // Success — cache hint if we switched, then return.
-      if (switchedFrom && profile !== switchedFrom) {
-        const rk = extractResourceKey(args);
-        if (rk) {
-          try { credentials.setProfileHint(rk, profile); }
-          catch (e) { console.error(`[feishu-user-plugin] profile-router: hint persist failed (${e.message})`); }
-        }
-        // Annotate response.
-        if (res?.content?.[0]?.type === 'text' && typeof res.content[0].text === 'string') {
-          res.content[0].text = `[autoSwitched: ${switchedFrom} → ${profile} on ${rk || 'no-key'}]\n` + res.content[0].text;
-        }
+      // Success. Distinguish a REAL failover (an earlier profile in the order
+      // actually failed) from merely honouring a stored hint on the first
+      // attempt — only the former is an "autoSwitch". Honouring a hint that
+      // already pointed here is the intended primary path, not a recovery.
+      const failedOver = failures.length > 0;
+      const rk = extractResourceKey(args);
+      if (rk && failedOver) {
+        try {
+          if (profile !== wasActive) {
+            // Converge the hint on the profile that actually worked.
+            credentials.setProfileHint(rk, profile);
+          } else {
+            // A hinted profile was tried first and failed; the active profile
+            // won. Clear the now-stale hint so the next call stops re-trying
+            // (and wasting a forbidden round-trip on) the known-bad profile.
+            credentials.clearProfileHint(rk);
+          }
+        } catch (e) { console.error(`[feishu-user-plugin] profile-router: hint update failed (${e.message})`); }
+      }
+      if (failedOver && res?.content?.[0]?.type === 'text' && typeof res.content[0].text === 'string') {
+        const from = (failures[0] && failures[0].profile) || wasActive;
+        res.content[0].text = `[autoSwitched: ${from} → ${profile} on ${rk || 'no-key'}]\n` + res.content[0].text;
       }
       // Restore active to whatever the user had — auto-switch is per-call.
       if (switchedFrom) ctx.setActiveProfile(wasActive);
