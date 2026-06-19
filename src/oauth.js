@@ -351,10 +351,13 @@ server.listen(PORT, '127.0.0.1', async () => {
     console.log('\n请手动在浏览器中打开上面的 URL');
   }
 
-  console.log('\n等待授权回调... (120 秒超时)');
+  // Callback wait timeout — default 120s; override via FEISHU_OAUTH_TIMEOUT_MS
+  // (e.g. when the consent involves an account switch and needs more time).
+  const OAUTH_TIMEOUT_MS = Math.max(10000, parseInt(process.env.FEISHU_OAUTH_TIMEOUT_MS, 10) || 120000);
+  console.log(`\n等待授权回调... (${Math.round(OAUTH_TIMEOUT_MS / 1000)} 秒超时)`);
   setTimeout(() => {
     console.error('\n超时，未收到授权回调。');
     server.close();
     process.exit(1);
-  }, 120000);
+  }, OAUTH_TIMEOUT_MS);
 });
