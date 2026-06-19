@@ -14,7 +14,10 @@ module.exports = {
   // the previous code fell into a `null` and we surfaced "may be from external
   // tenant", which was misleading. UAT can always see the current user.
   async getUserById(userId, userIdType = 'open_id') {
-    if (this._userNameCache.has(userId)) return this._userNameCache.get(userId);
+    // Key by id-type too: the same string under open_id vs union_id vs user_id
+    // is a different lookup, so a type-blind cache could return the wrong name.
+    const _k = `${userIdType}:${userId}`;
+    if (this._userNameCache.has(_k)) return this._userNameCache.get(_k);
 
     // 1. UAT path — works for the current user (self) and any colleague the
     //    UAT owner has access to.
@@ -26,7 +29,7 @@ module.exports = {
           { query: { user_id_type: userIdType } },
         );
         if (data && data.code === 0 && data.data?.user?.name) {
-          this._userNameCache.set(userId, data.data.user.name);
+          this._userNameCache.set(_k, data.data.user.name);
           return data.data.user.name;
         }
       } catch (e) {
@@ -41,7 +44,7 @@ module.exports = {
         params: { user_id_type: userIdType },
       });
       if (res.code === 0 && res.data?.user?.name) {
-        this._userNameCache.set(userId, res.data.user.name);
+        this._userNameCache.set(_k, res.data.user.name);
         return res.data.user.name;
       }
     } catch (e) {

@@ -497,8 +497,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   delete cleanArgs.via_profile;
 
   try {
-    return await profileRouter.withProfileRouting(buildCtx(), name, args || {}, async () => {
-      return handler(cleanArgs, buildCtx());
+    // Build ctx once: the router's ctx and the handler's ctx must be the same
+    // object so the auto-switch restore reasons over one shared currentProfile,
+    // not two independently-built closures.
+    const ctx = buildCtx();
+    return await profileRouter.withProfileRouting(ctx, name, args || {}, async () => {
+      return handler(cleanArgs, ctx);
     });
   } catch (err) {
     return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };

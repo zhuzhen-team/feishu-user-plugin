@@ -213,7 +213,15 @@ const handlers = {
     // If chat_id is not numeric or oc_, try to resolve as user name → P2P chat
     if (!/^\d+$/.test(chatId) && !chatId.startsWith('oc_')) {
       if (uc) {
-        const results = await uc.search(chatId);
+        let results;
+        try {
+          results = await uc.search(chatId);
+        } catch (e) {
+          // Cookie search now throws on a non-2xx gateway (expired cookie / rate
+          // limit) instead of returning []. Fall through to the friendly hint
+          // the surrounding code already provides for unresolvable names.
+          return text(`Cannot resolve "${args.chat_id}" via cookie search (${e.message}). Use search_contacts to find the chat/user ID, then pass it directly.`);
+        }
         const user = results.find(r => r.type === 'user');
         if (user) {
           const pChatId = await uc.createChat(String(user.id));

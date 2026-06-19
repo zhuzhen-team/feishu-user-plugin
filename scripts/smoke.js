@@ -90,10 +90,17 @@ async function runSmoke() {
       } catch {}
     }
   });
-  child.stderr.on('data', () => {}); // discard
+  // Keep the last few KB of server stderr so a crash reports WHY, instead of a
+  // blind "server exited with code N" that forces a manual re-run to diagnose.
+  let stderrTail = '';
+  child.stderr.on('data', (d) => { stderrTail = (stderrTail + d.toString()).slice(-4000); });
 
   let exitErr = null;
-  child.on('exit', (code) => { if (code !== 0 && code !== null) exitErr = new Error(`server exited with code ${code}`); });
+  child.on('exit', (code) => {
+    if (code !== 0 && code !== null) {
+      exitErr = new Error(`server exited with code ${code}${stderrTail ? `\n--- server stderr (tail) ---\n${stderrTail}` : ''}`);
+    }
+  });
 
   child.stdin.write(jsonrpc(1, 'initialize', {
     protocolVersion: '2024-11-05',

@@ -14,7 +14,13 @@
 
 const http = require('http');
 const crypto = require('crypto');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
+
+// Escape values interpolated into the loopback callback HTML so a reflected
+// error message / scope string can't inject markup into the page.
+function _escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 const credentialsModule = require('./auth/credentials');
 const legacyConfig = require('./config');
 const { fetchWithTimeout } = require('./utils');
@@ -264,7 +270,7 @@ const server = http.createServer(async (req, res) => {
       // attestation so the user still sees the flow succeeded.
       res.end(`<h2>✅ 授权成功!</h2>
 <p>access_token: ✅ 已获取（${tokenData.access_token.length} chars）</p>
-<p>scope: ${tokenData.scope}</p>
+<p>scope: ${_escapeHtml(tokenData.scope)}</p>
 <p>expires_in: ${tokenData.expires_in}s</p>
 <p>refresh_token: ${hasRefresh ? '✅ 已获取（7天有效，支持自动续期；每次 refresh 滚动续 7 天）' : '❌ 未返回（token 将在 2 小时后过期，需重新授权）'}</p>
 <p>已保存到 MCP 配置文件，可以关闭此页面。</p>`);
@@ -284,7 +290,7 @@ const server = http.createServer(async (req, res) => {
       setTimeout(() => { server.close(); process.exit(0); }, 1000);
     } catch (e) {
       res.writeHead(500, { 'content-type': 'text/html; charset=utf-8' });
-      res.end(`<h2>Token 交换失败</h2><p>${e.message}</p>`);
+      res.end(`<h2>Token 交换失败</h2><p>${_escapeHtml(e.message)}</p>`);
       console.error('Token exchange error:', e.message);
     }
     return;
@@ -333,8 +339,14 @@ server.listen(PORT, '127.0.0.1', async () => {
   console.log('授权 URL:', authUrl);
 
   try {
-    const openCmd = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open';
-    execSync(`${openCmd} "${authUrl}"`);
+    if (process.platform === 'win32') {
+      // `start` is a cmd builtin and needs the shell; authUrl is fully URL-encoded.
+      execSync(`start "" "${authUrl}"`);
+    } else {
+      // execFileSync passes the URL as a single argv entry — no shell, so a
+      // configured APP_ID or URL can never be interpreted as a shell command.
+      execFileSync(process.platform === 'darwin' ? 'open' : 'xdg-open', [authUrl], { stdio: 'ignore' });
+    }
   } catch {
     console.log('\n请手动在浏览器中打开上面的 URL');
   }
