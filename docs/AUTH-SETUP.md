@@ -90,6 +90,8 @@ npx feishu-user-plugin status    # 检查鉴权状态
 npx feishu-user-plugin keepalive # 刷新 cookie + UAT（cron 用）
 ```
 
+> `oauth` 默认等回调 120s。换账号、或刚在应用后台补开 scope 需要更长时间时，设 `FEISHU_OAUTH_TIMEOUT_MS`（毫秒，最小 10000）放宽，例如 `FEISHU_OAUTH_TIMEOUT_MS=900000 npx feishu-user-plugin oauth`。
+
 ### Token 自动续期 cron（可选）
 
 让 token 在 Claude Code 关闭时也保持活跃：

@@ -91,6 +91,8 @@ post-v1.3.7 phase A 重构后的文件职责矩阵在 **[docs/REFACTOR-NOTES.md]
 - **`manage_bitable_field(action=update)` 必传 `type`**：即使只改 field name
 - **多 profile auto-switch**（v1.3.8）：读路径遇 `91403 / 1254301 / 1254000 / 99991672 / HTTP 403` 自动跨 profile retry。写路径**绝不**自动切。`via_profile: "auto"` 给写路径手动开
 - **CARD 路径**：`send_card_as_user` 仅走 bot。Cookie 通道发卡片在 v1.3.9 通过 brute-force 确认服务端禁用
+- **Task scope 粒度化**（v1.4.0）：飞书把 `task:task` 拆成 `task:task:read` / `task:task:write`，`oauth` 现请求这两枚。任务工具报 `99991679`（用户态）/ `99991672`（应用态）= 应用未开通对应 scope 或 UAT 未含——需在应用后台开通这两枚（`search:message` 同理），再重跑 `npx feishu-user-plugin oauth` 重新授权。看着像「UAT 总掉」实为 scope 覆盖缺口,非续期失败
+- **get_new_events 按 profile 独立游标**（v1.4.0）：每个 profile 走自己的 `events.cursor.<profile>.json`，互不吞；`profile:"*"`/`"any"` 用全局 cursor 看全部。截断（`truncated:true`）时尾部留存待续取，不再丢
 
 更多 caveat 与 known limitation 见 [docs/TOOLS.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/TOOLS.md) + [docs/TROUBLESHOOTING.md](https://github.com/EthanQC/feishu-user-plugin/blob/main/docs/TROUBLESHOOTING.md)。
 
