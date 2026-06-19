@@ -10,6 +10,29 @@
 const { fetchWithTimeout } = require('../../utils');
 const { classifyError } = require('../../error-codes');
 
+// Refuse to buffer an absurdly large attachment fully into memory. Legitimate
+// Feishu message resources are well under this; the guard checks Content-Length
+// BEFORE arrayBuffer() so a giant/hostile attachment can't OOM the process.
+const _DOWNLOAD_HARD_CAP_BYTES = 50 * 1024 * 1024;
+function _guardDownloadSize(res) {
+  const len = parseInt(res.headers.get('content-length') || '0', 10);
+  if (len > _DOWNLOAD_HARD_CAP_BYTES) {
+    throw new Error(`downloadMessageResource: resource is ${(len / 1048576).toFixed(1)} MiB, exceeding the ${_DOWNLOAD_HARD_CAP_BYTES / 1048576} MiB in-memory safety cap — refusing to buffer it. Download it directly from Feishu.`);
+  }
+}
+
+function _applyPageTokenInvariant(out, token) {
+  if (!out.hasMore) return out;
+  if (token) {
+    out.pageToken = token;
+    return out;
+  }
+  out.hasMore = false;
+  out.truncated = true;
+  out.cursorUnavailable = true;
+  return out;
+}
+
 module.exports = {
   // --- UAT-based IM operations (for P2P chats) ---
 
@@ -23,7 +46,8 @@ module.exports = {
       return res.json();
     });
     if (data.code !== 0) throw new Error(`listChatsAsUser failed (${data.code}): ${data.msg}`);
-    return { items: data.data.items || [], pageToken: data.data.page_token, hasMore: data.data.has_more };
+    const d = data.data || {};  // code:0 with absent data (permission-filtered empty envelope) must not throw
+    return _applyPageTokenInvariant({ items: d.items || [], hasMore: !!d.has_more }, d.page_token);
   },
 
   async readMessagesAsUser(chatId, { pageSize = 20, startTime, endTime, pageToken, sortType = 'ByCreateTimeDesc', expandMergeForward = true } = {}, userClient) {
@@ -45,10 +69,11 @@ module.exports = {
       return res.json();
     });
     if (data.code !== 0) throw new Error(`readMessagesAsUser failed (${data.code}): ${data.msg}`);
-    const items = (data.data.items || []).map(m => this._formatMessage(m));
+    const d = data.data || {};  // code:0 with absent data must not throw a TypeError
+    const items = (d.items || []).map(m => this._formatMessage(m));
     await this._populateSenderNames(items, userClient);
     if (expandMergeForward) await this._expandMergeForwardItems(items, userClient, { preferUAT: true });
-    return { items, hasMore: data.data.has_more, pageToken: data.data.page_token };
+    return _applyPageTokenInvariant({ items, hasMore: !!d.has_more }, d.page_token);
   },
 
   // --- IM ---
@@ -58,7 +83,7 @@ module.exports = {
       () => this.client.im.chat.list({ params: { page_size: pageSize, page_token: pageToken } }),
       'listChats'
     );
-    return { items: res.data.items || [], pageToken: res.data.page_token, hasMore: res.data.has_more };
+    return _applyPageTokenInvariant({ items: res.data.items || [], hasMore: !!res.data.has_more }, res.data.page_token);
   },
 
   async readMessages(chatId, { pageSize = 20, startTime, endTime, pageToken, sortType = 'ByCreateTimeDesc', expandMergeForward = true } = {}, userClient) {
@@ -70,7 +95,7 @@ module.exports = {
     const items = (res.data.items || []).map(m => this._formatMessage(m));
     await this._populateSenderNames(items, userClient);
     if (expandMergeForward) await this._expandMergeForwardItems(items, userClient, { preferUAT: false });
-    return { items, hasMore: res.data.has_more, pageToken: res.data.page_token };
+    return _applyPageTokenInvariant({ items, hasMore: !!res.data.has_more }, res.data.page_token);
   },
 
   async getMessage(messageId) {
@@ -98,6 +123,7 @@ module.exports = {
           timeoutMs: 60000,
         });
         if (res.ok && !res.headers.get('content-type')?.includes('application/json')) {
+          _guardDownloadSize(res);
           const buf = Buffer.from(await res.arrayBuffer());
           return {
             base64: buf.toString('base64'),
@@ -123,6 +149,7 @@ module.exports = {
       const errJson = await res.json().catch(() => null);
       throw new Error(`downloadMessageResource failed: ${errJson?.code}: ${errJson?.msg || res.statusText}. Note: app identity requires the bot to be in the same chat.`);
     }
+    _guardDownloadSize(res);
     const buf = Buffer.from(await res.arrayBuffer());
     return {
       base64: buf.toString('base64'),
@@ -479,10 +506,9 @@ module.exports = {
     if (data.code !== 0) {
       throw new Error(`search_messages failed (code=${data.code}): ${data.msg}`);
     }
-    return {
+    return _applyPageTokenInvariant({
       items: data.data?.items || [],
-      pageToken: data.data?.page_token || null,
       hasMore: !!data.data?.has_more,
-    };
+    }, data.data?.page_token || null);
   },
 };

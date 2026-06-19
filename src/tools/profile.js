@@ -51,7 +51,7 @@ const handlers = {
     const target = args.name;
     const all = ctx.listProfiles();
     if (!all.includes(target)) {
-      return text(`Profile "${target}" not found. Available: ${all.join(', ')}. To add more, set LARK_PROFILES_JSON in your MCP env.`);
+      return text(`Profile "${target}" not found. Available: ${all.join(', ')}. To add one, run \`npx feishu-user-plugin setup --profile ${target} --app-id ... --app-secret ... --cookie ...\` (then \`oauth --profile ${target}\` for UAT) — this writes the SSOT credentials.json. The legacy LARK_PROFILES_JSON env still works as a fallback.`);
     }
     ctx.setActiveProfile(target);
     return text(`Switched to profile: ${target}`);

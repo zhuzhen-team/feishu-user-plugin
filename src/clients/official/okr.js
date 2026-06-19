@@ -2,6 +2,18 @@
 // Mixed into LarkOfficialClient.prototype by ./index.js. UAT-first throughout
 // — OKR resources belong to the calling user.
 
+function _applyPageTokenInvariant(out, token) {
+  if (!out.hasMore) return out;
+  if (token) {
+    out.pageToken = token;
+    return out;
+  }
+  out.hasMore = false;
+  out.truncated = true;
+  out.cursorUnavailable = true;
+  return out;
+}
+
 module.exports = {
   // --- OKR read (v1.3.4) ---
 
@@ -53,7 +65,7 @@ module.exports = {
       sdkFn: () => this.client.okr.period.list({ params: { page_size: pageSize, ...(pageToken ? { page_token: pageToken } : {}) } }),
       label: 'listOkrPeriods',
     });
-    return { items: res.data.items || [], pageToken: res.data.page_token, hasMore: res.data.has_more };
+    return _applyPageTokenInvariant({ items: res.data.items || [], hasMore: !!res.data.has_more }, res.data.page_token);
   },
 
   // --- OKR progress record write (v1.3.7) ---
@@ -123,6 +135,8 @@ module.exports = {
       sdkFn: () => this.client.okr.progressRecord.delete({ path: { progress_id: progressId } }),
       label: 'deleteOkrProgressRecord',
     });
-    return { deleted: true, viaUser: !!res._viaUser };
+    const out = { deleted: true, viaUser: !!res._viaUser };
+    if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
+    return out;
   },
 };

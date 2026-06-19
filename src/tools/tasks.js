@@ -145,21 +145,25 @@ const handlers = {
   async complete_task(args, ctx) {
     const completed = args.completed === undefined ? true : !!args.completed;
     const r = await ctx.getOfficialClient().completeTask(args.task_guid, completed);
-    return text(`Task ${completed ? 'completed' : 'uncompleted'}: ${args.task_guid}`);
+    const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
+    return text(`Task ${completed ? 'completed' : 'uncompleted'}: ${args.task_guid}${warn}`);
   },
   async delete_task(args, ctx) {
-    await ctx.getOfficialClient().deleteTask(args.task_guid);
-    return text(`Task deleted: ${args.task_guid}`);
+    const r = await ctx.getOfficialClient().deleteTask(args.task_guid);
+    const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
+    return text(`Task deleted: ${args.task_guid}${warn}`);
   },
   async manage_task_members(args, ctx) {
     const c = ctx.getOfficialClient();
     if (args.action === 'add') {
       const r = await c.addTaskMembers(args.task_guid, args.members);
-      return text(`Members added to ${args.task_guid}: ${args.members.length}\n${JSON.stringify(r.task?.members, null, 2)}`);
+      const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
+      return text(`Members added to ${args.task_guid}: ${args.members.length}\n${JSON.stringify(r.task?.members, null, 2)}${warn}`);
     }
     if (args.action === 'remove') {
       const r = await c.removeTaskMembers(args.task_guid, args.members);
-      return text(`Members removed from ${args.task_guid}: ${args.members.length}\n${JSON.stringify(r.task?.members, null, 2)}`);
+      const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
+      return text(`Members removed from ${args.task_guid}: ${args.members.length}\n${JSON.stringify(r.task?.members, null, 2)}${warn}`);
     }
     throw new Error('manage_task_members: action must be add or remove');
   },

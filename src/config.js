@@ -102,15 +102,42 @@ function _generateTomlServerEntry(serverName, env) {
 }
 
 /**
- * Remove all TOML sections matching a server name.
+ * Remove the `[mcp_servers.<name>]` table and all its sub-tables
+ * (`[mcp_servers.<name>.env]`, …) from a TOML document.
+ *
+ * Line-based, TOML-table-aware: a `[table.header]` line opens a table whose body
+ * runs until the next header line. We drop only the tables belonging to this
+ * server and keep every other table, comment, and top-level line untouched.
+ *
+ * The previous regex (`\[mcp_servers\.<name>[^\]]*\][^\[]*`) was unsafe: the
+ * `[^\[]*` tail stops at the first `[` inside a value such as
+ * `args = ["…"]`, leaving an orphaned `["…"]` fragment behind, and when the
+ * server is the last section it greedily ate every following comment/blank line
+ * to EOF — corrupting unrelated user content in the config.
  */
 function _removeTomlServer(content, serverName) {
-  // Remove [mcp_servers.<name>] and [mcp_servers.<name>.*] sections
-  const pattern = new RegExp(
-    `\\[mcp_servers\\.${serverName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^\\]]*\\][^\\[]*`,
-    'g'
-  );
-  return content.replace(pattern, '');
+  const ours = (tablePath) =>
+    tablePath === `mcp_servers.${serverName}` ||
+    tablePath.startsWith(`mcp_servers.${serverName}.`);
+  const headerRe = /^\s*\[\s*([^\]]*?)\s*\]\s*$/;
+  const out = [];
+  let skipping = false;
+  for (const line of content.split('\n')) {
+    const m = line.match(headerRe);
+    if (m) {
+      // A new table header decides whether the lines that follow are dropped.
+      skipping = ours(m[1].trim());
+      if (skipping) continue;
+      out.push(line);
+    } else if (!skipping) {
+      out.push(line);
+    } else if (/^\s*(#|$)/.test(line)) {
+      // Inside a removed table: drop only key/value body lines; preserve the
+      // user's comments and blank lines rather than risk deleting their content.
+      out.push(line);
+    }
+  }
+  return out.join('\n');
 }
 
 // --- JSON config helpers ---
@@ -365,4 +392,4 @@ function _writeCodexConfig(env, options = {}) {
   return configPath;
 }
 
-module.exports = { findMcpConfig, readCredentials, persistToConfig, writeNewConfig, SERVER_NAMES };
+module.exports = { findMcpConfig, readCredentials, persistToConfig, writeNewConfig, SERVER_NAMES, _removeTomlServer };

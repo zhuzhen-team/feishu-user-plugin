@@ -15,6 +15,17 @@ const _sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // code=2200 scope-check flake / frequency control — a short pause clears it.
 const CELL_RETRY_DELAYS_MS = [400, 1200];
 
+function _withIdentityMeta(res, out) {
+  out.viaUser = !!res._viaUser;
+  if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
+  return out;
+}
+
+function _mergeWarning(existing, next) {
+  if (!next) return existing;
+  return existing ? `${existing}\n\n${next}` : next;
+}
+
 // Run fn(); retry on transient failures (classifyError → 'retry') after the
 // next backoff delay. Permanent failures propagate immediately. Safe here
 // because every retried operation is idempotent (update_text_elements is a
@@ -70,7 +81,10 @@ module.exports = {
     // tail may hold the very personal-space doc the user is hunting).
     // Guard on items.length: an abnormal has_more:true + empty page would
     // otherwise emit nextOffset === offset and stall a paging loop.
-    if (res.data.has_more && out.items.length > 0) out.nextOffset = offset + out.items.length;
+    if (res.data.has_more) {
+      out.nextOffset = offset + (out.items.length > 0 ? out.items.length : size);
+      if (out.items.length === 0) out.cursorWarning = 'Upstream returned has_more=true with an empty page; nextOffset advances by page_size to avoid a stalled cursor.';
+    }
     if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
     return out;
   },
@@ -100,6 +114,7 @@ module.exports = {
         const node = await this.attachToWiki(wikiSpaceId, 'docx', documentId, wikiParentNodeToken);
         if (node?.node_token) out.wikiNodeToken = node.node_token;
         else if (node?.task_id) out.wikiAttachTaskId = node.task_id;
+        out.fallbackWarning = _mergeWarning(out.fallbackWarning, node?.fallbackWarning);
       } catch (e) {
         out.wikiAttachError = e.message;
       }
@@ -127,6 +142,7 @@ module.exports = {
     let fallbackWarning = null;
     let hasMore = false;
     let nextPageToken;
+    let cursorUnavailable = false;
     const seenTokens = new Set();
     // 1000-page backstop (~500k blocks) — a server that keeps minting fresh
     // tokens must not pin the loop forever. Hitting it reports hasMore:true.
@@ -153,6 +169,10 @@ module.exports = {
       const next = res.data.page_token;
       if (cap && items.length >= cap) {
         if (next) nextPageToken = next;
+        else {
+          cursorUnavailable = true;
+          hasMore = false;
+        }
         break;
       }
       // Stall/cycle guards (PR #116 parity): a missing token, an unchanged
@@ -162,13 +182,18 @@ module.exports = {
       // has_more:true (permission filtering) and real data behind them, so we
       // keep going as long as the cursor advances; the MAX_PAGES backstop bounds
       // a pathological always-empty-new-token server.
-      if (!next || next === token || seenTokens.has(next)) break;
+      if (!next || next === token || seenTokens.has(next)) {
+        cursorUnavailable = true;
+        hasMore = false;
+        break;
+      }
       token = next;
     }
     // Backstop exhausted mid-document: `token` is the still-unfetched cursor.
     if (page >= MAX_PAGES && hasMore && token) nextPageToken = token;
     const out = { items, total: items.length, hasMore, viaUser };
-    if (hasMore) out.truncated = true;
+    if (hasMore || cursorUnavailable) out.truncated = true;
+    if (cursorUnavailable) out.cursorUnavailable = true;
     if (nextPageToken) out.nextPageToken = nextPageToken;
     if (fallbackWarning) out.fallbackWarning = fallbackWarning;
     return out;
@@ -178,16 +203,26 @@ module.exports = {
   // whole-document 500-block cap of getDocBlocks. Used by createDocTable to map
   // a table's cells (and each cell's text block) reliably in large documents.
   async getBlockChildren(documentId, blockId) {
-    const res = await this._asUserOrApp({
-      uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks/${blockId}/children`,
-      query: { page_size: '500' },
-      sdkFn: () => this.client.docx.documentBlockChildren.get({
-        path: { document_id: documentId, block_id: blockId },
-        params: { page_size: 500 },
-      }),
-      label: 'getBlockChildren',
-    });
-    return { items: res.data.items || [] };
+    // Paginate to completion: a single page_size:500 request truncated tables
+    // with >500 cells, which made createDocTable abort after the table block was
+    // already created (empty table, no partial-fill map). Bounded at 50 pages.
+    const items = [];
+    let pageToken;
+    for (let page = 0; page < 50; page++) {
+      const res = await this._asUserOrApp({
+        uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks/${blockId}/children`,
+        query: { page_size: '500', ...(pageToken ? { page_token: pageToken } : {}) },
+        sdkFn: () => this.client.docx.documentBlockChildren.get({
+          path: { document_id: documentId, block_id: blockId },
+          params: { page_size: 500, ...(pageToken ? { page_token: pageToken } : {}) },
+        }),
+        label: 'getBlockChildren',
+      });
+      items.push(...(res.data.items || []));
+      pageToken = res.data.page_token;
+      if (!res.data.has_more || !pageToken) break;
+    }
+    return { items };
   },
 
   async createDocBlock(documentId, parentBlockId, children, index) {
@@ -203,7 +238,7 @@ module.exports = {
       }),
       label: 'createDocBlock',
     });
-    return { blocks: res.data.children || [], fallbackWarning: res._fallbackWarning || null };
+    return _withIdentityMeta(res, { blocks: res.data.children || [] });
   },
 
   // Create a Feishu docx table (block_type=31) and optionally fill its cells —
@@ -335,11 +370,11 @@ module.exports = {
       }),
       label: 'updateDocBlock',
     });
-    return { block: res.data.block };
+    return _withIdentityMeta(res, { block: res.data.block });
   },
 
   async deleteDocBlocks(documentId, parentBlockId, startIndex, endIndex) {
-    await this._asUserOrApp({
+    const res = await this._asUserOrApp({
       uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks/${parentBlockId}/children/batch_delete`,
       method: 'DELETE',
       body: { start_index: startIndex, end_index: endIndex },
@@ -349,7 +384,7 @@ module.exports = {
       }),
       label: 'deleteDocBlocks',
     });
-    return { deleted: true };
+    return _withIdentityMeta(res, { deleted: true });
   },
 
   // Create a new image block and populate it from either a local file path or
@@ -399,13 +434,14 @@ module.exports = {
       }
       finalToken = uploaded.fileToken;
       viaUser = viaUser && uploaded.viaUser; // true iff both steps went via user
+      fallbackWarning = _mergeWarning(fallbackWarning, uploaded.fallbackWarning);
     }
 
     // Step 3 — attach token to the placeholder via PATCH replace_image
     // (idempotent full replace), with transient retry.
     const patch = buildReplaceImagePayload(finalToken);
     try {
-      await _withTransientRetry(() => this._asUserOrApp({
+      const patched = await _withTransientRetry(() => this._asUserOrApp({
         uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks/${blockId}`,
         method: 'PATCH',
         body: patch,
@@ -415,6 +451,8 @@ module.exports = {
         }),
         label: 'createDocBlockWithImage.replaceImage',
       }), delays);
+      viaUser = viaUser && !!patched._viaUser;
+      fallbackWarning = _mergeWarning(fallbackWarning, patched._fallbackWarning);
     } catch (e) {
       throw _orphanBlockError('createDocBlockWithImage', documentId, blockId, 'replace_image PATCH', e, finalToken, 'image_token');
     }
@@ -427,7 +465,7 @@ module.exports = {
   // uploadMedia or create_doc_block's image_path shortcut to obtain one.
   async updateDocBlockImage(documentId, blockId, imageToken) {
     const patch = buildReplaceImagePayload(imageToken);
-    await this._asUserOrApp({
+    const res = await this._asUserOrApp({
       uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks/${blockId}`,
       method: 'PATCH',
       body: patch,
@@ -437,7 +475,7 @@ module.exports = {
       }),
       label: 'updateDocBlockImage',
     });
-    return { blockId, imageToken };
+    return _withIdentityMeta(res, { blockId, imageToken });
   },
 
   // Create a file-attachment block in a docx, mirroring createDocBlockWithImage:
@@ -496,11 +534,12 @@ module.exports = {
       }
       finalToken = uploaded.fileToken;
       viaUser = viaUser && uploaded.viaUser;
+      fallbackWarning = _mergeWarning(fallbackWarning, uploaded.fallbackWarning);
     }
 
     const patch = buildReplaceFilePayload(finalToken);
     try {
-      await _withTransientRetry(() => this._asUserOrApp({
+      const patched = await _withTransientRetry(() => this._asUserOrApp({
         uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks/${blockId}`,
         method: 'PATCH',
         body: patch,
@@ -510,6 +549,8 @@ module.exports = {
         }),
         label: 'createDocBlockWithFile.replaceFile',
       }), delays);
+      viaUser = viaUser && !!patched._viaUser;
+      fallbackWarning = _mergeWarning(fallbackWarning, patched._fallbackWarning);
     } catch (e) {
       throw _orphanBlockError('createDocBlockWithFile', documentId, blockId, 'replace_file PATCH', e, finalToken, 'file_token');
     }
@@ -555,7 +596,7 @@ module.exports = {
   // create_doc_block's file_path shortcut).
   async updateDocBlockFile(documentId, blockId, fileToken) {
     const patch = buildReplaceFilePayload(fileToken);
-    await this._asUserOrApp({
+    const res = await this._asUserOrApp({
       uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks/${blockId}`,
       method: 'PATCH',
       body: patch,
@@ -565,6 +606,6 @@ module.exports = {
       }),
       label: 'updateDocBlockFile',
     });
-    return { blockId, fileToken };
+    return _withIdentityMeta(res, { blockId, fileToken });
   },
 };

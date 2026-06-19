@@ -38,12 +38,25 @@ const FAILURE_MAP = {
   // tenant B. Will never be granted. Distinct from 240001 (which is the
   // older code form for the same shape); both surface in production.
   91403: { action: 'uat', reason: 'bot_cross_tenant' },
+  // OAuth scope not granted on the bot/app surface — one of the documented
+  // multi-profile auto-switch read-path codes. classifyError previously fell
+  // through to 'unknown' (which also routes to UAT), so this entry preserves
+  // behaviour while disambiguating logs/monitoring for the scope-missing case.
+  99991672: { action: 'uat', reason: 'oauth_scope_not_granted' },
 
   // Upload pipeline transient errors — the Feishu upload gateway is
   // intermittently flaky; one retry after a moment usually clears.
   // 1254000 / 1254001 are generic upload failures, 1254301 is multipart
   // size mismatch (rare race when the body is being computed concurrently),
   // 1254400 is "upload service busy" the gateway returns under load.
+  //
+  // NOTE: Feishu reuses 1254000/1254301 across APIs — in the BITABLE context
+  // they mean "access denied", which profile-router's SWITCH_CODES treats as a
+  // cross-profile auto-switch trigger. That is not a contradiction: this map
+  // drives classifyError → withUAT retry on the UPLOAD path (a write, so
+  // profile-router never auto-switches it), while SWITCH_CODES drives bitable
+  // READ routing (never an upload). The two never fire on the same call-site;
+  // each interprets the reused code correctly for its own context.
   1254000: { action: 'retry', reason: 'upload_transient' },
   1254001: { action: 'retry', reason: 'upload_transient' },
   1254301: { action: 'retry', reason: 'upload_transient' },

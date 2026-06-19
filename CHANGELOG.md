@@ -4,6 +4,40 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-06-19
+
+本版是一轮多 agent 全仓深度体检后的可靠性收口：写路径的 UAT→bot 身份漂移全部显形、多 profile 切换不再污染跨进程单点真源、实时事件按 profile 独立游标互不吞、cookie 假成功被堵、OAuth 加 state 防护、任务 scope 粒度化。85 工具 + 9 prompts 不变，无 breaking API。升级后重启 Claude Code / Codex 自动拉 v1.4.0。
+
+### Changed
+
+- **OAuth scope 粒度化 (task)**：飞书把 `task:task` 拆为 `task:task:read` + `task:task:write`，`src/oauth.js::SCOPES` 改请求这两枚。命中旧 scope 的任务工具此前返回 99991679（用户态）/ 99991672（应用态）「请重新授权」，看着像 UAT 掉了实为 scope 覆盖缺口。**需在应用后台开通 `task:task:read` / `task:task:write`（`search:message` 同样需开通），再重跑 `npx feishu-user-plugin oauth`**。（src/oauth.js、docs/AUTH-SETUP.md）
+- **OAuth 回调超时可配**：新增 `FEISHU_OAUTH_TIMEOUT_MS` 覆盖默认 120s（换账号 / 补 scope 的 consent 需要更长时间）。（src/oauth.js）
+- **error-codes**：补 `99991672`（`oauth_scope_not_granted`）分类；注明 `1254000 / 1254301` 被飞书跨 API 复用（上传重试 vs bitable 读切 profile），两条路径永不撞同一调用点，非矛盾。（src/error-codes.js、src/auth/profile-router.js）
+
+### Fixed
+
+- **写路径 UAT→bot ownership 漂移全部显形 (簇C)**：`complete_task` / `delete_task`、bitable `update*` / `delete*` client + `text()` handler、`read_doc_markdown` 此前丢弃 `viaUser` / `fallbackWarning`，bot fallback 与 user 成功无从区分。现统一透传并在响应顶部点名；`read_doc_markdown` 在空块（bot fallback 静默隐藏个人空间文档）时也带告警。（src/tools/tasks.js、src/clients/official/bitable.js、src/tools/{bitable,docs}.js）
+- **多 profile auto-switch 不再污染 SSOT (簇A)**：读路径试探切换改为纯内存 `setActiveProfileEphemeral`，不再把试探 profile 写进 `credentials.json::active`（峰值会让并发读进 fsync 级写 + SHA + hook 扇出，且崩溃残留切错身份）；恢复放进 `finally` 保证异常也还原；`keepalive --all` 改 `_persistProfile` 定向持久化、不翻全局 active。`[autoSwitched]` 只在真 failover 标注、陈旧 hint 命中即清。（src/auth/profile-router.js、src/server.js、src/cli.js）
+- **get_new_events 不再丢事件**：`drain` 按 `max_events` 有界消费，被截断的尾巴留存待下次取（此前游标跳到 EOF 永久丢）；每个 profile 独立游标文件（`events.cursor.<profile>.json`），一个 profile 轮询不再吃掉另一 profile 未读事件（`*`/`any` 仍用全局 cursor）；`_system` 事件投递给所有 profile。（src/events/{cursor,event-log}.js、src/tools/events.js）
+- **events 单 owner 选举检测被夺锁**：长期锁带 `ownerToken`，`heartbeat()` 仅在仍持有时刷新——force-steal（rename + 重建）后 `utimesSync` 仍成功会留幽灵双写者，现能检测并主动让位重选；轮转 rename + 游标 reset 进同一 cursor 锁原子化；ENOSPC 丢事件落 `_events_dropped` 标记；`withMutex` 忙等改 `Atomics.wait` 不再冻结 event loop；`repairTail` 扫描窗口随大尾增长。（src/events/{lockfile,cursor,ws-server,event-log}.js、src/server.js）
+- **cookie 假成功被堵 (簇B)**：`search` / `createChat` / `getGroupInfo` 此前丢弃网关 `ok` 标志，把 cookie 过期 / 限流的失败读成空结果，现非 2xx 抛错；`_resolveCookieChatId` 解析 `oc_xxx` 要求唯一精确匹配（此前取第一个同名群可能误发到不相关群），且缓存按 profile 分键（`switch_profile` 后不复用旧 numeric id）。（src/clients/user.js、src/tools/messaging-user.js）
+- **credentials 写并发安全**：`read-modify-write` 串行化到跨进程文件锁，cookie 心跳与 UAT 刷新不再互相覆盖丢字段。（src/auth/credentials.js）
+- **Codex config 改写不再损坏相邻内容**：`_removeTomlServer` 的贪婪正则（`args=["…"]` 里的 `[` 致残留 / 末段吞到 EOF）换成 TOML 表感知逐行删除，保留无关 table 与用户注释。（src/config.js）
+- **一批 nit**：`getBlockChildren` 分页（>500 格表不再 abort）；`manage_bitable_record` 强制 ≤500；`manage_doc_block(create)` 空 `children:[]` 不再算选中 mode；`contacts` 名字缓存按 `id-type` 分键；`im.js` `code:0` 空 `data` 守卫；`buildCtx` 每调用单次构建；`im-read` 包裹 cookie search 错误；`get_wiki_node` 回退改 token 驱动（不再依赖易漏的错误码正则）；`setup.js` pointer-only 日志改用 `harnessActive`；`smoke` 失败时保留 server stderr。
+
+### Security
+
+- **OAuth loopback 回调加 state CSRF 校验**：`/callback` 只接受本次随机生成的 `state`，挡跨站 / 过期 code 注入（OAuth 2.0 §10.12）；开浏览器从 `execSync` 改 `execFileSync` 去 shell；token 交换错误页对 `err.message` / `scope` 做 HTML 转义。（src/oauth.js）
+- **下载内存守卫**：`download_message_resource` 在 `arrayBuffer()` 前按 `Content-Length` 卡 50 MiB，挡超大 / 恶意附件 OOM。（src/clients/official/im.js）
+- **save_path 校验**：拒相对路径与 null 字节，对齐「绝对路径」契约。（src/tools/diagnostics.js）
+- **cookie 报错脱敏**：非 ASCII cookie 校验报错不再回显 40 字符 cookie 片段（可能含 `sl_session` 等 session 字节）。（src/clients/user.js）
+
+### Test scenarios
+
+- 调用 `complete_task` / `delete_task`，bot fallback 下观察响应带 `fallbackWarning` / `(as app)`，UAT 成功时干净无标记
+- 多 profile 下并发 `get_new_events`：各 profile 独立收到自己的事件互不吞；单次 `max_events` 截断后尾部下次仍能取到
+- 应用开通 `task:task:read` / `task:task:write` + 重新 `oauth` 后，`list_tasks` / `create_task` 可用（此前 99991679 / 99991672）
+
 ## [1.3.17] - 2026-06-08
 
 本版围绕读路径完整性做一轮系统性收口：大文档与大列表不再静默截断、批量写的部分失败不再被读作全成功、文档表格 / 媒体块建失败可定位可修复。85 工具数不变，`get_doc_blocks` / `manage_doc_block` / `read_messages` / `read_p2p_messages` / `list_wiki_nodes` / `manage_bitable_record` 等 schema 新增分页或上报字段，无 breaking API。升级后重启 Claude Code / Codex 自动拉 v1.3.17。

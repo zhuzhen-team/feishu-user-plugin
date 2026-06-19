@@ -248,11 +248,13 @@ async function refreshUAT(client) {
 
 function persistUAT(client) {
   const { persistToConfig } = require('./credentials');
+  // client._persistProfile (optional) pins the write to a specific profile so
+  // callers like keepalive --all don't have to flip the global active pointer.
   persistToConfig({
     LARK_USER_ACCESS_TOKEN: client._uat,
     LARK_USER_REFRESH_TOKEN: client._uatRefresh,
     LARK_UAT_EXPIRES: String(client._uatExpires),
-  });
+  }, client._persistProfile);
 }
 
 async function withUAT(client, fn) {

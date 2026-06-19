@@ -4,6 +4,18 @@
 // LarkOfficialClient instance, so they can use this.client, this._safeSDKCall,
 // this._asUserOrApp, this._uatREST, etc. — all defined in base.js.
 
+function _applyNextPageTokenInvariant(out, token) {
+  if (!out.hasMore) return out;
+  if (token) {
+    out.nextPageToken = token;
+    return out;
+  }
+  out.hasMore = false;
+  out.truncated = true;
+  out.cursorUnavailable = true;
+  return out;
+}
+
 module.exports = {
   // --- Drive ---
 
@@ -24,8 +36,8 @@ module.exports = {
       sdkFn: () => this.client.drive.file.list({ params }),
       label: 'listFiles',
     });
-    const out = { items: res.data.files || [], hasMore: res.data.has_more, viaUser: !!res._viaUser };
-    if (res.data.next_page_token) out.nextPageToken = res.data.next_page_token;
+    const out = { items: res.data.files || [], hasMore: !!res.data.has_more, viaUser: !!res._viaUser };
+    _applyNextPageTokenInvariant(out, res.data.next_page_token);
     if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
     // Empty + bot path + ROOT listing only: with an empty folder_token the
     // bot lists its OWN root space (usually empty), not the user's 我的空间 —

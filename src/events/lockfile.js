@@ -94,28 +94,54 @@ function acquireLongLived(lockPath, { info = {}, staleMs = 60_000 } = {}) {
     if (e.code === 'EEXIST') return null;  // someone else won
     throw e;
   }
+  // Unique token for THIS acquisition so heartbeat()/release() can distinguish
+  // our lock from a successor's after a force-steal (rename-away + EXCL recreate).
+  const ownerToken = `${process.pid}:${Date.now()}:${Math.random().toString(16).slice(2)}`;
   try {
-    _writeLockBody(fd, info);
+    _writeLockBody(fd, { ...info, ownerToken });
   } finally {
     fs.closeSync(fd);
   }
 
   return {
+    ownerToken,
     release() {
-      try { fs.unlinkSync(lockPath); } catch (_) {}
+      // Only unlink if we still own it — never delete a successor's lock.
+      try {
+        const body = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+        if (body.ownerToken === ownerToken) fs.unlinkSync(lockPath);
+      } catch (_) { /* gone / not ours / unreadable — nothing to release */ }
     },
     heartbeat() {
+      // Refresh mtime ONLY if we still own the lock. A blind utimesSync would
+      // succeed on a successor's file after a force-steal (rename + recreate),
+      // hiding the ownership loss and leaving us a phantom second writer. Re-read
+      // the body and compare our token first.
       try {
+        const body = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+        if (body.ownerToken !== ownerToken) return false;  // stolen / recreated → not ours
         const now = new Date();
         fs.utimesSync(lockPath, now, now);
+        return true;
       } catch (e) {
-        // If the lock file was stolen, our heartbeat will fail. Caller must
-        // detect this via separate check (e.g., re-stat + compare pid in body).
-        return false;
+        return false;  // file gone or unreadable → ownership lost
       }
-      return true;
     },
   };
+}
+
+// Blocking sleep that parks the thread instead of burning a CPU core.
+// The previous busy-spin (`while (Date.now() < until) {}`) pegged 100% of a
+// core for the full retry delay and froze the single-threaded event loop while
+// a peer process held the cursor lock — a self-inflicted stall under exactly
+// the concurrency the lock exists to handle (v1.3.17 health-check finding).
+function _sleepSync(ms) {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch (_) {
+    const until = Date.now() + ms;
+    while (Date.now() < until) { /* SharedArrayBuffer unavailable — last-resort bounded spin */ }
+  }
 }
 
 // Per-operation mutex. Synchronous wrapper for short critical sections.
@@ -143,8 +169,7 @@ function withMutex(lockPath, fn, { staleMs = 30_000, retries = 30, retryDelayMs 
       if (Date.now() - start > staleMs) {
         throw new Error(`withMutex: lock ${lockPath} held longer than ${staleMs}ms`);
       }
-      const sleepUntil = Date.now() + retryDelayMs;
-      while (Date.now() < sleepUntil) { /* busy wait — short delay */ }
+      _sleepSync(retryDelayMs);
       continue;
     }
 

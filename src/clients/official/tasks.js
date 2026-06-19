@@ -13,6 +13,18 @@
 // completion is a `patch` setting `completed_at` to a unix-millis string
 // ("0" to uncomplete) plus update_fields=['completed_at'].
 
+function _applyPageTokenInvariant(out, token) {
+  if (!out.hasMore) return out;
+  if (token) {
+    out.pageToken = token;
+    return out;
+  }
+  out.hasMore = false;
+  out.truncated = true;
+  out.cursorUnavailable = true;
+  return out;
+}
+
 module.exports = {
   async listTasks({ completed, type, pageSize, pageToken } = {}) {
     const params = {};
@@ -34,11 +46,10 @@ module.exports = {
       }),
       label: 'listTasks',
     });
-    return {
+    return _applyPageTokenInvariant({
       items: res.data.items || [],
-      pageToken: res.data.page_token,
-      hasMore: res.data.has_more,
-    };
+      hasMore: !!res.data.has_more,
+    }, res.data.page_token);
   },
 
   async getTask(taskGuid) {
@@ -102,7 +113,9 @@ module.exports = {
       sdkFn: () => this.client.task.v2.task.delete({ path: { task_guid: taskGuid } }),
       label: 'deleteTask',
     });
-    return { deleted: true, viaUser: !!res._viaUser };
+    const out = { deleted: true, viaUser: !!res._viaUser };
+    if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
+    return out;
   },
 
   // members: array of {id, type?, role, name?}. role is typically "assignee" or "follower".
@@ -120,7 +133,9 @@ module.exports = {
       }),
       label: 'addTaskMembers',
     });
-    return { task: res.data.task, viaUser: !!res._viaUser };
+    const out = { task: res.data.task, viaUser: !!res._viaUser };
+    if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
+    return out;
   },
 
   async removeTaskMembers(taskGuid, members) {
@@ -137,6 +152,8 @@ module.exports = {
       }),
       label: 'removeTaskMembers',
     });
-    return { task: res.data.task, viaUser: !!res._viaUser };
+    const out = { task: res.data.task, viaUser: !!res._viaUser };
+    if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
+    return out;
   },
 };

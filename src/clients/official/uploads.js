@@ -6,6 +6,11 @@
 
 const { fetchWithTimeout } = require('../../utils');
 
+function _uploadFallbackWarning(label, reason) {
+  const why = reason ? `: ${reason}` : '';
+  return `⚠ ${label} used app identity because UAT upload was unavailable or failed${why}. Run \`npx feishu-user-plugin oauth\` to keep user-owned uploads under your identity.`;
+}
+
 module.exports = {
   // --- Upload ---
 
@@ -177,14 +182,17 @@ module.exports = {
     };
 
     // User identity first — host resources are usually user-owned.
+    let userFailure = this.hasUAT ? null : 'UAT not configured';
     if (this.hasUAT) {
       try {
         const data = await this._withUAT(doUpload);
         if (data.code === 0 && data.data?.file_token) {
           return { fileToken: data.data.file_token, viaUser: true };
         }
+        userFailure = `${data.code}: ${data.msg || 'no file_token returned'}`;
         console.error(`[feishu-user-plugin] uploadMedia (${parentType}) as user failed (${data.code}: ${data.msg}), retrying as app`);
       } catch (e) {
+        userFailure = e.message;
         console.error(`[feishu-user-plugin] uploadMedia (${parentType}) as user threw (${e.message}), retrying as app`);
       }
     }
@@ -193,7 +201,7 @@ module.exports = {
     if (data.code !== 0 || !data.data?.file_token) {
       throw new Error(`uploadMedia (${parentType}) failed: ${data.code}: ${data.msg || 'no file_token returned'}`);
     }
-    return { fileToken: data.data.file_token, viaUser: false };
+    return { fileToken: data.data.file_token, viaUser: false, fallbackWarning: _uploadFallbackWarning(`uploadMedia (${parentType})`, userFailure) };
   },
 
   // Backwards-compat alias — old name from v1.3.4.
@@ -239,14 +247,17 @@ module.exports = {
       return res.json();
     };
 
+    let userFailure = this.hasUAT ? null : 'UAT not configured';
     if (this.hasUAT) {
       try {
         const data = await this._withUAT(doUpload);
         if (data.code === 0 && data.data?.file_token) {
           return { fileToken: data.data.file_token, viaUser: true };
         }
+        userFailure = `${data.code}: ${data.msg || 'no file_token returned'}`;
         console.error(`[feishu-user-plugin] uploadDriveFile as user failed (${data.code}: ${data.msg}), retrying as app`);
       } catch (e) {
+        userFailure = e.message;
         console.error(`[feishu-user-plugin] uploadDriveFile as user threw (${e.message}), retrying as app`);
       }
     }
@@ -255,6 +266,6 @@ module.exports = {
     if (data.code !== 0 || !data.data?.file_token) {
       throw new Error(`uploadDriveFile failed: ${data.code}: ${data.msg || 'no file_token returned'}`);
     }
-    return { fileToken: data.data.file_token, viaUser: false };
+    return { fileToken: data.data.file_token, viaUser: false, fallbackWarning: _uploadFallbackWarning('uploadDriveFile', userFailure) };
   },
 };

@@ -103,6 +103,19 @@ function _stopNonOwnerPoll() {
   if (nonOwnerPollTimer) { clearInterval(nonOwnerPollTimer); nonOwnerPollTimer = null; }
 }
 
+// Called when our owner heartbeat fails (the lock was force-stolen or vanished).
+// Stop the WS writer + heartbeat, then re-run election. We do NOT release() the
+// lock here: we no longer own it, and release() unlinks the lock path — which
+// would delete the NEW owner's lock and trigger a thundering re-election.
+function _relinquishOwnership() {
+  _stopHeartbeat();
+  const ws = wsServer;
+  wsServer = null;
+  ownerHandle = null;
+  if (ws) { try { ws.stop().catch(() => {}); } catch (_) {} }
+  _claimAndStart().catch((e) => console.error(`[feishu-user-plugin] re-election after lost lock failed: ${e.message}`));
+}
+
 function getEventBuffer() {
   return wsServer ? wsServer.buffer : null;
 }
@@ -232,7 +245,15 @@ async function _claimAndStart() {
   _lastHashMtimes = require('./auth/lark-desktop').listAccountHashes()
     .reduce((acc, h) => { acc[h.hash] = h.mtimeMs; return acc; }, {});
   ownerHeartbeatTimer = setInterval(() => {
-    if (ownerHandle) ownerHandle.heartbeat();
+    if (ownerHandle && !ownerHandle.heartbeat()) {
+      // Lost the owner lock (a peer force-stole it, or the lock file vanished).
+      // Stop writing immediately and re-run election so we don't double-write
+      // events.jsonl alongside the new owner — a phantom second writer would
+      // interleave/corrupt the single-writer log.
+      console.error('[feishu-user-plugin] owner heartbeat failed — lost the WS owner lock; relinquishing to avoid a phantom second writer');
+      _relinquishOwnership();
+      return;
+    }
     const m = _credMtime();
     if (m !== null && m !== lastCredMtime) {
       lastCredMtime = m;
@@ -244,19 +265,21 @@ async function _claimAndStart() {
     } catch (e) {
       console.error(`[feishu-user-plugin] Lark reactor error: ${e.message}`);
     }
-    // Defer-rotate check
+    // Defer-rotate check — rename + cursor reset run under the cursor mutex so
+    // they are atomic with respect to a concurrent drain on a peer process.
     try {
-      const snap = events.cursor.readSnapshot(FEISHU_HOME);
-      const SOFT_CAP = 10 * 1024 * 1024;
-      const HARD_CAP = 20 * 1024 * 1024;
-      const rot = events.log.maybeRotate(EVENTS_LOG_PATH, snap.cursor.offset, SOFT_CAP);
-      if (rot.rotated) {
-        events.cursor.resetCursorTo(FEISHU_HOME, 0);
-      } else if (snap.fileSize > HARD_CAP) {
-        events.log.forceRotate(EVENTS_LOG_PATH, snap.fileSize);
-        events.cursor.resetCursorTo(FEISHU_HOME, 0);
-      }
-      // Also clean up old .dropped files daily-ish (every heartbeat is cheap)
+      events.cursor.rotateUnderLock(FEISHU_HOME, ({ cursorOffset, fileSize }) => {
+        const SOFT_CAP = 10 * 1024 * 1024;
+        const HARD_CAP = 20 * 1024 * 1024;
+        const rot = events.log.maybeRotate(EVENTS_LOG_PATH, cursorOffset, SOFT_CAP);
+        if (rot.rotated) return { resetCursor: true };
+        if (fileSize > HARD_CAP) {
+          events.log.forceRotate(EVENTS_LOG_PATH, fileSize);
+          return { resetCursor: true };
+        }
+        return { resetCursor: false };
+      });
+      // Clean up old .dropped files daily-ish (cheap; outside the cursor lock).
       events.log.cleanupDropped(EVENTS_LOG_PATH, 7);
     } catch (e) {
       console.error(`[feishu-user-plugin] rotation check failed: ${e.message}`);
@@ -423,6 +446,19 @@ function buildCtx() {
     getEventBuffer,
     listProfiles: () => credentials.listProfileNames(),
     getActiveProfile: () => currentProfile,
+    // Per-call, in-memory-only switch for auto-switch read trials and explicit
+    // via_profile pins: flip currentProfile + invalidate cached clients WITHOUT
+    // writing credentials.json::active or running credMonitor.sync(). A transient
+    // routing trial must not mutate the durable single-source-of-truth that peer
+    // MCP processes read (which corrupted their active identity, and churned the
+    // file + ran an fsync-grade write + SHA + hook fan-out on every hot-path read).
+    setActiveProfileEphemeral: (n) => {
+      credentials.getActiveProfileEnv(n);  // validate exists (throws if unknown)
+      currentProfile = n;
+      userClient = null;
+      officialClient = null;
+      require('./resolver').clearCache();
+    },
     setActiveProfile: (n) => {
       // Validate the profile exists (throws if unknown) before nuking client cache.
       credentials.getActiveProfileEnv(n);
@@ -497,8 +533,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   delete cleanArgs.via_profile;
 
   try {
-    return await profileRouter.withProfileRouting(buildCtx(), name, args || {}, async () => {
-      return handler(cleanArgs, buildCtx());
+    // Build ctx once: the router's ctx and the handler's ctx must be the same
+    // object so the auto-switch restore reasons over one shared currentProfile,
+    // not two independently-built closures.
+    const ctx = buildCtx();
+    return await profileRouter.withProfileRouting(ctx, name, args || {}, async () => {
+      return handler(cleanArgs, ctx);
     });
   } catch (err) {
     return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };

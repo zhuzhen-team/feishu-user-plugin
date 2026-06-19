@@ -75,20 +75,28 @@ const handlers = {
     if (_hasJsonlMode()) {
       const cap = Math.max(1, parseInt(args.max_events, 10) || 50);
       const peek = !!args.peek;
-      const r = drain(FEISHU_HOME, { peek });
       const currentProfile = ctx.getActiveProfile();
-      let filtered = r.events.filter((e) => _filter(e, args, currentProfile));
-      let truncated = false;
-      if (filtered.length > cap) {
-        filtered = filtered.slice(0, cap);
-        truncated = true;
-      }
-      const snap = readSnapshot(FEISHU_HOME);
+      // Each profile drains its OWN cursor file, so one profile's poll never
+      // advances a shared cursor past another profile's unread events. Default =
+      // current profile; "*"/"any" = the shared "all" cursor (every event).
+      const profFilter = args.profile;
+      const drainProfile = (!profFilter || profFilter === 'auto') ? currentProfile
+        : (profFilter === '*' || profFilter === 'any') ? '*'
+          : profFilter;
+      // Bound consumption to `cap`: the cursor advances only past events examined
+      // for this profile, so a capped tail stays pending for the next call.
+      // `truncated` means "more pending — call again" (drain's capped). Secondary
+      // filters (event_type / chat_id / since_seconds) are applied below and are
+      // best-effort within the profile's batch (use peek to inspect without
+      // consuming).
+      const r = drain(FEISHU_HOME, { peek, maxEvents: cap, profile: drainProfile });
+      const filtered = r.events.filter((e) => _filter(e, args, currentProfile));
+      const snap = readSnapshot(FEISHU_HOME, drainProfile);
       return json({
         events: filtered,
-        cursor: { offset: snap.cursor.offset, file: snap.cursor.file },
+        cursor: { offset: snap.cursor.offset, file: snap.cursor.file, profile: drainProfile },
         log: { size_bytes: snap.fileSize, pending_bytes: snap.pending },
-        truncated,
+        truncated: !!r.capped,
       });
     }
     // Legacy in-memory fallback

@@ -44,6 +44,11 @@ function isReadOnlyCall(name, args) {
 
 // --- Error classification ---
 
+// Codes that mean "this profile can't see the resource — try another profile".
+// 1254000/1254301 also appear in error-codes.js as upload-transient retries;
+// that is context-scoped, not contradictory: this set gates bitable/wiki/docx
+// READ auto-switch, while the upload-retry mapping applies only to upload WRITES
+// (which profile-router never auto-switches). See error-codes.js for the note.
 const SWITCH_CODES = new Set([
   91403,    // wiki / docx no permission
   1254301,  // bitable no permission
@@ -131,6 +136,17 @@ function profileOrder(name, args, ctx) {
 // --- Main wrapper ---
 
 async function withProfileRouting(ctx, name, args, callHandler) {
+  // Per-call profile switches (auto-switch read trials + explicit via_profile
+  // pins) must be IN-MEMORY only — never persisted to credentials.json::active —
+  // so a transient routing trial can't corrupt the durable active profile that
+  // peer MCP processes read (and so the hot read path doesn't fsync + SHA + run
+  // the credMonitor hook fan-out on every cross-profile attempt). Prefer the
+  // ephemeral switch; fall back to setActiveProfile for ctx builders/tests that
+  // don't expose it.
+  const switchTo = ctx.setActiveProfileEphemeral
+    ? (n) => ctx.setActiveProfileEphemeral(n)
+    : (n) => ctx.setActiveProfile(n);
+
   // Bail out early when there's nothing to switch to or this is a write.
   const all = ctx.listProfiles();
   const isMultiProfile = all.length > 1;
@@ -153,85 +169,97 @@ async function withProfileRouting(ctx, name, args, callHandler) {
         return { content: [{ type: 'text', text: `via_profile: "${viaProfileArg}" not found. Available: ${all.join(', ')}.` }], isError: true };
       }
       const wasActive = ctx.getActiveProfile();
-      if (viaProfileArg !== wasActive) ctx.setActiveProfile(viaProfileArg);
+      if (viaProfileArg !== wasActive) switchTo(viaProfileArg);
       try {
         return await callHandler();
       } finally {
         // Restore active for subsequent calls in same session — explicit pin
         // is per-call, not a session toggle.
-        if (viaProfileArg !== wasActive) ctx.setActiveProfile(wasActive);
+        if (viaProfileArg !== wasActive) switchTo(wasActive);
       }
     }
     return callHandler();
   }
 
-  // Auto-switch loop.
+  // Auto-switch loop. wasActive is restored in the finally on EVERY exit
+  // (return / throw / exhaust), so an unexpected throw between a switch and the
+  // handler can't leak the trial profile into the process-global currentProfile.
   const order = profileOrder(name, args, ctx);
   const wasActive = ctx.getActiveProfile();
   const failures = [];
   let switchedFrom = null;
   let switchedReason = null;
 
-  for (let i = 0; i < order.length; i++) {
-    const profile = order[i];
-    if (i > 0) {
-      // Switching away from previous profile.
-      if (!switchedFrom) switchedFrom = wasActive;
-      ctx.setActiveProfile(profile);
-      console.error(`[feishu-user-plugin] profile-router: ${order[i - 1]} → ${profile} on ${name} (${switchedReason || 'first attempt failed'})`);
-    } else if (profile !== wasActive) {
-      // Hinted profile differs from active — switch on first attempt too.
-      switchedFrom = wasActive;
-      ctx.setActiveProfile(profile);
-      console.error(`[feishu-user-plugin] profile-router: ${wasActive} → ${profile} on ${name} (hint match)`);
-    }
-
-    try {
-      const res = await callHandler();
-      // Detect handler-level isError responses (not all errors throw).
-      if (res?.isError && res.content?.[0]?.text) {
-        const decision = shouldSwitchOnError({ message: res.content[0].text });
-        if (decision.yes && i + 1 < order.length) {
-          failures.push({ profile, error: res.content[0].text.slice(0, 200) });
-          switchedReason = decision.reason;
-          continue;
-        }
+  try {
+    for (let i = 0; i < order.length; i++) {
+      const profile = order[i];
+      if (i > 0) {
+        // Switching away from previous profile.
+        if (!switchedFrom) switchedFrom = wasActive;
+        switchTo(profile);
+        console.error(`[feishu-user-plugin] profile-router: ${order[i - 1]} → ${profile} on ${name} (${switchedReason || 'first attempt failed'})`);
+      } else if (profile !== wasActive) {
+        // Hinted profile differs from active — switch on first attempt too.
+        switchedFrom = wasActive;
+        switchTo(profile);
+        console.error(`[feishu-user-plugin] profile-router: ${wasActive} → ${profile} on ${name} (hint match)`);
       }
-      // Success — cache hint if we switched, then return.
-      if (switchedFrom && profile !== switchedFrom) {
+
+      try {
+        const res = await callHandler();
+        // Detect handler-level isError responses (not all errors throw).
+        if (res?.isError && res.content?.[0]?.text) {
+          const decision = shouldSwitchOnError({ message: res.content[0].text });
+          if (decision.yes && i + 1 < order.length) {
+            failures.push({ profile, error: res.content[0].text.slice(0, 200) });
+            switchedReason = decision.reason;
+            continue;
+          }
+        }
+        // Success. Distinguish a REAL failover (an earlier profile in the order
+        // actually failed) from merely honouring a stored hint on the first
+        // attempt — only the former is an "autoSwitch". Honouring a hint that
+        // already pointed here is the intended primary path, not a recovery.
+        const failedOver = failures.length > 0;
         const rk = extractResourceKey(args);
-        if (rk) {
-          try { credentials.setProfileHint(rk, profile); }
-          catch (e) { console.error(`[feishu-user-plugin] profile-router: hint persist failed (${e.message})`); }
+        if (rk && failedOver) {
+          try {
+            if (profile !== wasActive) {
+              // Converge the hint on the profile that actually worked.
+              credentials.setProfileHint(rk, profile);
+            } else {
+              // A hinted profile was tried first and failed; the active profile
+              // won. Clear the now-stale hint so the next call stops re-trying
+              // (and wasting a forbidden round-trip on) the known-bad profile.
+              credentials.clearProfileHint(rk);
+            }
+          } catch (e) { console.error(`[feishu-user-plugin] profile-router: hint update failed (${e.message})`); }
         }
-        // Annotate response.
-        if (res?.content?.[0]?.type === 'text' && typeof res.content[0].text === 'string') {
-          res.content[0].text = `[autoSwitched: ${switchedFrom} → ${profile} on ${rk || 'no-key'}]\n` + res.content[0].text;
+        if (failedOver && res?.content?.[0]?.type === 'text' && typeof res.content[0].text === 'string') {
+          const from = (failures[0] && failures[0].profile) || wasActive;
+          res.content[0].text = `[autoSwitched: ${from} → ${profile} on ${rk || 'no-key'}]\n` + res.content[0].text;
         }
+        return res;
+      } catch (err) {
+        const decision = shouldSwitchOnError(err);
+        failures.push({ profile, error: err.message });
+        if (!decision.yes || i + 1 >= order.length) {
+          // Compose a comprehensive error if all profiles failed.
+          if (failures.length > 1) {
+            const lines = failures.map(f => `  ${f.profile}: ${f.error}`).join('\n');
+            throw new Error(`All ${failures.length} profiles failed on ${name}:\n${lines}`);
+          }
+          throw err;
+        }
+        switchedReason = decision.reason;
+        // Loop to next profile.
       }
-      // Restore active to whatever the user had — auto-switch is per-call.
-      if (switchedFrom) ctx.setActiveProfile(wasActive);
-      return res;
-    } catch (err) {
-      const decision = shouldSwitchOnError(err);
-      failures.push({ profile, error: err.message });
-      if (!decision.yes || i + 1 >= order.length) {
-        if (switchedFrom) ctx.setActiveProfile(wasActive);
-        // Compose a comprehensive error if all profiles failed.
-        if (failures.length > 1) {
-          const lines = failures.map(f => `  ${f.profile}: ${f.error}`).join('\n');
-          throw new Error(`All ${failures.length} profiles failed on ${name}:\n${lines}`);
-        }
-        throw err;
-      }
-      switchedReason = decision.reason;
-      // Loop to next profile.
     }
+    // Should not reach: loop returns on success or throws.
+    throw new Error(`profile-router: exhausted ${order.length} profiles on ${name}`);
+  } finally {
+    if (switchedFrom) switchTo(wasActive);
   }
-
-  if (switchedFrom) ctx.setActiveProfile(wasActive);
-  // Should not reach: loop returns on success or throws.
-  throw new Error(`profile-router: exhausted ${order.length} profiles on ${name}`);
 }
 
 module.exports = {

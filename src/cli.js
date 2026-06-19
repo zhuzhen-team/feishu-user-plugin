@@ -240,14 +240,14 @@ async function keepalive() {
       }
     }
 
-    // 2. Refresh UAT (also writes to the same profile via auth/uat.js → persistToConfig
-    //    which goes through the active profile path. For --all we need to switch
-    //    active temporarily so the write lands on the right profile.)
+    // 2. Refresh UAT. The refreshed token is persisted to THIS profile via
+    //    official._persistProfile (threaded through auth/uat.js persistUAT →
+    //    credentials.persistToConfig). We no longer flip the global `active`
+    //    pointer to route the write — that raced a live server and, on a
+    //    mid-flip crash, left credentials.json::active permanently pointed at
+    //    the wrong profile (v1.3.17 health-check 簇A finding).
     if (env.LARK_APP_ID && env.LARK_APP_SECRET && env.LARK_USER_ACCESS_TOKEN && env.LARK_USER_ACCESS_TOKEN !== 'SETUP_NEEDED' && env.LARK_USER_REFRESH_TOKEN) {
-      const prevActive = cred.getActiveProfileName();
-      const needSwitch = all && prevActive !== profileName;
       try {
-        if (needSwitch) cred.setActiveProfile(profileName);
         // v1.3.14 — direct field assignment is the source of truth; do NOT
         // also set process.env (previous comment claimed LarkOfficialClient
         // would read process.env, but loadUAT() is dead code and process.env
@@ -256,15 +256,12 @@ async function keepalive() {
         official._uat = env.LARK_USER_ACCESS_TOKEN;
         official._uatRefresh = env.LARK_USER_REFRESH_TOKEN;
         official._uatExpires = 0; // force refresh
+        official._persistProfile = profileName; // pin the persist; never touch global active
         await official._refreshUAT();
         console.log(`[keepalive][${profileName}] UAT refreshed`);
       } catch (e) {
         console.error(`[keepalive][${profileName}] UAT refresh FAILED: ${e.message}`);
         ok = false;
-      } finally {
-        if (needSwitch) {
-          try { cred.setActiveProfile(prevActive); } catch (_) {}
-        }
       }
     }
     if (!ok) totalOk = false;

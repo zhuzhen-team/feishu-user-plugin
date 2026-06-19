@@ -21,6 +21,7 @@ module.exports = {
     let viaUser = true;
     let fallbackWarning = null;
     let hasMore = false;
+    let cursorUnavailable = false;
     const seenTokens = new Set();
     for (let page = 0; page < 200; page++) {
       if (token) seenTokens.add(token);
@@ -47,11 +48,22 @@ module.exports = {
       // Feishu wiki endpoints document empty pages with has_more:true under
       // permission filtering, with real spaces behind them — keep paging while
       // the cursor advances; the 200-page backstop bounds a pathological server.
-      if (!next || next === token || seenTokens.has(next)) break;
+      if (!next || next === token || seenTokens.has(next)) {
+        cursorUnavailable = true;
+        hasMore = false;
+        break;
+      }
       token = next;
     }
-    const out = { items, viaUser };
-    if (hasMore) out.hasMore = true; // stalled upstream cursor — incompleteness stays visible
+    if (hasMore) {
+      cursorUnavailable = true;
+      hasMore = false;
+    }
+    const out = { items, viaUser, hasMore };
+    if (cursorUnavailable) {
+      out.truncated = true;
+      out.cursorUnavailable = true;
+    }
     if (fallbackWarning) out.fallbackWarning = fallbackWarning;
     // Empty + bot path means scope is missing; surface a clear hint instead
     // of silently returning nothing.
@@ -83,7 +95,10 @@ module.exports = {
     // personal-space doc the user is hunting).
     // Guard on items.length: see searchDocs — prevents a stalled cursor on an
     // abnormal has_more:true + empty page.
-    if (res.data.has_more && out.items.length > 0) out.nextOffset = safeOffset + out.items.length;
+    if (res.data.has_more) {
+      out.nextOffset = safeOffset + (out.items.length > 0 ? out.items.length : size);
+      if (out.items.length === 0) out.cursorWarning = 'Upstream returned has_more=true with an empty page; nextOffset advances by page_size to avoid a stalled cursor.';
+    }
     if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
     return out;
   },
@@ -139,8 +154,14 @@ module.exports = {
     });
     // pageToken accompanies hasMore (2026-06-07 audit) — hasMore without the
     // resume cursor stranded callers at the first 50 nodes forever.
-    const out = { items: res.data.items || [], hasMore: res.data.has_more, viaUser: !!res._viaUser };
-    if (res.data.page_token) out.pageToken = res.data.page_token;
+    const out = { items: res.data.items || [], hasMore: !!res.data.has_more, viaUser: !!res._viaUser };
+    if (out.hasMore && res.data.page_token) out.pageToken = res.data.page_token;
+    else if (out.hasMore) {
+      out.hasMore = false;
+      out.truncated = true;
+      out.cursorUnavailable = true;
+    }
+    if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
     return out;
   },
 
@@ -275,8 +296,13 @@ module.exports = {
       label: 'attachToWiki',
     });
     const data = res.data || {};
-    if (data.wiki_token) return { node_token: data.wiki_token, applied: !!data.applied };
-    if (data.task_id) return { task_id: data.task_id, applied: false };
-    return data;
+    const out = data.wiki_token
+      ? { node_token: data.wiki_token, applied: !!data.applied }
+      : data.task_id
+        ? { task_id: data.task_id, applied: false }
+        : { ...data };
+    out.viaUser = !!res._viaUser;
+    if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
+    return out;
   },
 };

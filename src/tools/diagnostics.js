@@ -8,6 +8,7 @@
 // required and the response only includes a short summary.
 
 const fs = require('fs');
+const path = require('path');
 const { text } = require('./_registry');
 
 const MAX_INLINE_BYTES = 2 * 1024 * 1024; // 2 MiB; Anthropic API cap is 5 MB
@@ -57,6 +58,17 @@ const schemas = [
 
 function maybeSave(savePath, base64) {
   if (!savePath) return null;
+  // save_path is model-controlled. The schema requires an absolute path; enforce
+  // it so a relative path can't resolve against the server process cwd in a
+  // surprising place, and reject null-byte injection. (Writing to an arbitrary
+  // absolute path the caller names is the intended feature; confining writes to
+  // a fixed root is a separate product decision.)
+  if (typeof savePath !== 'string' || savePath.includes('\0')) {
+    return { ok: false, path: savePath, error: 'save_path must be a string with no null bytes.' };
+  }
+  if (!path.isAbsolute(savePath)) {
+    return { ok: false, path: savePath, error: `save_path must be an absolute path (got "${savePath}"); a relative path would resolve against the server process working directory unpredictably.` };
+  }
   try {
     fs.writeFileSync(savePath, Buffer.from(base64, 'base64'));
     return { ok: true, path: savePath };
@@ -176,4 +188,4 @@ const handlers = {
   },
 };
 
-module.exports = { schemas, handlers };
+module.exports = { schemas, handlers, maybeSave };

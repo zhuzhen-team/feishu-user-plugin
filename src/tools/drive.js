@@ -85,11 +85,13 @@ const handlers = {
     const official = ctx.getOfficialClient();
     const up = await official.uploadDriveFile(args.file_path, args.folder_token);
     const out = { fileToken: up.fileToken, viaUser: up.viaUser, url: `https://feishu.cn/file/${up.fileToken}` };
+    if (up.fallbackWarning) out.fallbackWarning = up.fallbackWarning;
     if (args.wiki_space_id) {
       try {
         const node = await official.attachToWiki(args.wiki_space_id, 'file', up.fileToken, args.wiki_parent_node_token);
         out.wikiNodeToken = node.node_token || null;
         out.wikiAttachTaskId = node.task_id || null;
+        if (node.fallbackWarning) out.fallbackWarning = out.fallbackWarning ? `${out.fallbackWarning}\n\n${node.fallbackWarning}` : node.fallbackWarning;
       } catch (e) {
         out.wikiAttachError = e.message;
       }

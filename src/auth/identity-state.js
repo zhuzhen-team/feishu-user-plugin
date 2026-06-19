@@ -206,11 +206,13 @@ async function withIdentityFallback({ client, uatFn, botFn, label }) {
   // fallback warning the caller can surface to the LLM.
   const data = { ...botData };
   data._viaUser = false;
+  // _buildFallbackWarning always returns a non-empty string (BOT_ONLY included),
+  // so assign unconditionally — the old `if (fallbackWarning)` guards were
+  // always-true dead branches that implied a falsy case that cannot occur.
   const fallbackWarning = _buildFallbackWarning({ identity, viaReason: uatSummary, hadUAT });
-  if (fallbackWarning) data._fallbackWarning = fallbackWarning;
-  const out = { data, via: 'bot', identity };
+  data._fallbackWarning = fallbackWarning;
+  const out = { data, via: 'bot', identity, fallbackWarning };
   if (uatSummary) out.viaReason = uatSummary;
-  if (fallbackWarning) out.fallbackWarning = fallbackWarning;
   return out;
 }
 

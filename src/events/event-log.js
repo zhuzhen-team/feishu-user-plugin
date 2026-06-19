@@ -22,17 +22,30 @@ function appendEvent(logPath, eventObj) {
   fs.appendFileSync(logPath, line, { encoding: 'utf8' });
 }
 
-// Read from `offset` to EOF; return { events: [...], nextOffset }.
+// Read from `offset` to EOF; return { events, nextOffset, fileSize, capped }.
 // Tolerates a trailing partial line (no \n) — partial line not consumed,
 // nextOffset stops at the last full \n.
-function readFrom(logPath, offset) {
+//
+// `maxEvents` bounds how many events are consumed: nextOffset advances only past
+// the lines actually returned, so the unread tail stays pending for the next
+// call. Without this bound a caller that caps its own result silently strands —
+// and permanently loses — every event past the cap, because the cursor had
+// already jumped to EOF (the v1.3.17 health-check HIGH finding on get_new_events).
+//
+// `match(event)` (optional) returns true for events this caller WANTS. Only
+// matching events count toward maxEvents and are returned, but the cursor
+// advances past non-matching events too — they belong to OTHER profiles, which
+// track their own position via their own cursor file. This is what lets a
+// per-profile cursor consume its events exactly once without one profile's
+// drain stranding another profile's events behind a shared cursor.
+function readFrom(logPath, offset, { maxEvents = Infinity, match = null } = {}) {
   let stat;
   try { stat = fs.statSync(logPath); } catch (e) {
-    if (e.code === 'ENOENT') return { events: [], nextOffset: 0, fileSize: 0 };
+    if (e.code === 'ENOENT') return { events: [], nextOffset: 0, fileSize: 0, capped: false };
     throw e;
   }
   const fileSize = stat.size;
-  if (offset >= fileSize) return { events: [], nextOffset: offset, fileSize };
+  if (offset >= fileSize) return { events: [], nextOffset: offset, fileSize, capped: false };
   if (offset < 0) offset = 0;
 
   const fd = fs.openSync(logPath, 'r');
@@ -45,15 +58,33 @@ function readFrom(logPath, offset) {
     const lastNl = text.lastIndexOf('\n');
     if (lastNl < 0) {
       // Entire chunk is partial; no events consumed.
-      return { events: [], nextOffset: offset, fileSize };
+      return { events: [], nextOffset: offset, fileSize, capped: false };
     }
     const fullText = text.slice(0, lastNl + 1);  // include the \n
     const events = [];
-    for (const line of fullText.split('\n')) {
-      if (!line) continue;
-      try { events.push(JSON.parse(line)); } catch (_) { /* skip malformed */ }
+    let consumedLen = 0;  // byte length of the lines we actually consume (incl their \n)
+    let capped = false;
+    let pos = 0;
+    while (pos < fullText.length) {
+      const nl = fullText.indexOf('\n', pos);
+      if (nl < 0) break;  // no more complete lines (fullText ends in \n, so unreachable)
+      const line = fullText.slice(pos, nl);
+      const lineBytes = Buffer.byteLength(fullText.slice(pos, nl + 1), 'utf8');
+      if (line) {
+        let evt;
+        let parsed = false;
+        try { evt = JSON.parse(line); parsed = true; } catch (_) { /* skip malformed, but still consume */ }
+        const wanted = parsed && (!match || match(evt));
+        if (wanted) {
+          if (events.length >= maxEvents) { capped = true; break; }  // stop BEFORE consuming the next wanted event
+          events.push(evt);
+        }
+        // non-matching (other profile) / malformed lines: not returned, but still consumed below
+      }
+      consumedLen += lineBytes;
+      pos = nl + 1;
     }
-    return { events, nextOffset: offset + Buffer.byteLength(fullText, 'utf8'), fileSize };
+    return { events, nextOffset: offset + consumedLen, fileSize, capped };
   } finally {
     fs.closeSync(fd);
   }
@@ -71,21 +102,34 @@ function repairTail(logPath, scanBytes = 8192) {
 
   const fd = fs.openSync(logPath, 'r+');
   try {
-    const readLen = Math.min(scanBytes, stat.size);
-    const buf = Buffer.allocUnsafe(readLen);
-    fs.readSync(fd, buf, 0, readLen, stat.size - readLen);
-    // If the file already ends in \n, no repair needed.
-    if (buf[buf.length - 1] === 0x0A) return { repaired: false, sizeBefore: stat.size, sizeAfter: stat.size };
-    // Find last \n in the scanned tail.
-    let i = buf.length - 1;
-    while (i >= 0 && buf[i] !== 0x0A) i--;
-    if (i < 0) {
-      // No \n in last 8 KB — pathological. Don't truncate (might lose data); leave as is.
-      return { repaired: false, sizeBefore: stat.size, sizeAfter: stat.size, warning: 'no \\n in scan window' };
+    // Grow the scan window until we find a newline or reach the file start, so a
+    // crash that left a partial trailing record LARGER than the initial window
+    // is still repaired (the old code gave up at 8 KB and left the unterminated
+    // tail, which the next append then concatenated into one corrupt line).
+    let win = Math.min(scanBytes, stat.size);
+    for (;;) {
+      const buf = Buffer.allocUnsafe(win);
+      fs.readSync(fd, buf, 0, win, stat.size - win);
+      // If the file already ends in \n, no repair needed.
+      if (buf[buf.length - 1] === 0x0A) return { repaired: false, sizeBefore: stat.size, sizeAfter: stat.size };
+      // Find the last \n in the scanned window.
+      let i = buf.length - 1;
+      while (i >= 0 && buf[i] !== 0x0A) i--;
+      if (i >= 0) {
+        const truncateAt = stat.size - win + i + 1;  // +1 to keep the \n
+        fs.ftruncateSync(fd, truncateAt);
+        return { repaired: true, sizeBefore: stat.size, sizeAfter: truncateAt };
+      }
+      if (win >= stat.size) {
+        // No \n in the ENTIRE file and it doesn't end in \n: the whole file is a
+        // single never-terminated (corrupt) record from a crash mid-first-write.
+        // Truncate to empty so appendEvent starts clean rather than concatenating
+        // onto a partial line forever.
+        fs.ftruncateSync(fd, 0);
+        return { repaired: true, sizeBefore: stat.size, sizeAfter: 0, warning: 'no \\n in entire file; truncated corrupt single-record log to empty' };
+      }
+      win = Math.min(win * 4, stat.size);  // grow and retry
     }
-    const truncateAt = stat.size - readLen + i + 1;  // +1 to keep the \n
-    fs.ftruncateSync(fd, truncateAt);
-    return { repaired: true, sizeBefore: stat.size, sizeAfter: truncateAt };
   } finally {
     fs.closeSync(fd);
   }

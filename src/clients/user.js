@@ -17,10 +17,12 @@ class LarkUserClient {
     const nonAsciiMatch = cookieStr.match(/[^\x00-\xff]/);
     if (nonAsciiMatch) {
       const idx = cookieStr.indexOf(nonAsciiMatch[0]);
-      const context = cookieStr.substring(Math.max(0, idx - 20), idx + 20);
+      // Do NOT echo the surrounding cookie bytes — the window can overlap live
+      // session material (sl_session / swp_csrf_token) and this error bubbles to
+      // logs / the agent transcript. Report only the offending (pasted) char +
+      // its position; that's the accidentally-copied text, not credential bytes.
       throw new Error(
-        `LARK_COOKIE contains non-ASCII character "${nonAsciiMatch[0]}" (U+${nonAsciiMatch[0].charCodeAt(0).toString(16).toUpperCase()}) at index ${idx}.\n` +
-        `Context: ...${context}...\n` +
+        `LARK_COOKIE contains non-ASCII character "${nonAsciiMatch[0]}" (U+${nonAsciiMatch[0].charCodeAt(0).toString(16).toUpperCase()}) at index ${idx} of ${cookieStr.length} (surrounding cookie bytes redacted).\n` +
         'This usually means extra text was accidentally copied with the cookie.\n' +
         'Fix: In DevTools Network tab → first request → Request Headers → Cookie → copy ONLY the cookie value.'
       );
@@ -187,6 +189,14 @@ class LarkUserClient {
     if (!ok) {
       throw new Error(`_sendMsg: cookie protobuf gateway returned non-2xx for type=${type}. The wire format likely doesn't match what Feishu expects.`);
     }
+    // Why no packet.status failure guard here: a successful send returns
+    // status:null (verified live), and a malformed/invalid chatId is rejected by
+    // the gateway with a non-2xx (caught above, verified live with a bogus id).
+    // There is no observed 2xx-with-nonzero-status failure sentinel to test, so
+    // a "status !== 0 → fail" check would false-positive on the null success.
+    // The documented "valid-shape-but-wrong id → empty packet, goes nowhere"
+    // path is mitigated upstream by _resolveCookieChatId requiring a unique
+    // exact match (no silent fuzzy resolution).
     return { success: true, status: packet.status };
   }
 
@@ -344,7 +354,7 @@ class LarkUserClient {
   // --- Search (cmd=11021) ---
 
   async search(query) {
-    const { packet } = await this._gateway(11021, 'UniversalSearchRequest', {
+    const { packet, ok } = await this._gateway(11021, 'UniversalSearchRequest', {
       header: {
         searchSession: generateCid(),
         sessionSeqId: 1,
@@ -363,6 +373,7 @@ class LarkUserClient {
       },
     });
 
+    if (!ok) throw new Error('search: cookie protobuf gateway returned non-2xx (cookie may be expired or rate-limited) — distinct from an empty result set.');
     if (!packet.payload) return [];
     const searchRes = this._decode('UniversalSearchResponse', packet.payload);
     const items = (searchRes.results || []).map((r) => ({
@@ -381,11 +392,12 @@ class LarkUserClient {
   // --- Create P2P Chat (cmd=13) ---
 
   async createChat(userId) {
-    const { packet } = await this._gateway(13, 'PutChatRequest', {
+    const { packet, ok } = await this._gateway(13, 'PutChatRequest', {
       type: 1,
       chatterIds: [userId],
     });
 
+    if (!ok) throw new Error('createChat: cookie protobuf gateway returned non-2xx (cookie may be expired or rate-limited).');
     if (!packet.payload) return null;
     const chatRes = this._decode('PutChatResponse', packet.payload);
     return chatRes.chat?.id || null;
@@ -394,8 +406,9 @@ class LarkUserClient {
   // --- Get Group Info (cmd=64) ---
 
   async getGroupInfo(chatId) {
-    const { packet } = await this._gateway(64, 'GetGroupInfoRequest', { chatId });
+    const { packet, ok } = await this._gateway(64, 'GetGroupInfoRequest', { chatId });
 
+    if (!ok) throw new Error('getGroupInfo: cookie protobuf gateway returned non-2xx (cookie may be expired or rate-limited) — distinct from "chat not found".');
     if (!packet.payload) return null;
     const res = this._decode('GetGroupInfoResponse', packet.payload);
     const chat = res.chat;

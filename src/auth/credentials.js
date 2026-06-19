@@ -15,9 +15,9 @@
 //     exposes `setActiveProfile` for the handler to call).
 //   - Cookie heartbeat (still lives in src/clients/user.js, calls
 //     `persistToConfig` here).
-//   - UAT refresh + cross-process file lock (still lives in
-//     src/clients/official/base.js, calls `readCredentials` + `persistToConfig`
-//     here). Plan to extract into src/auth/{cookie,uat}.js once stable.
+//   - UAT refresh mechanics (still lives in src/clients/official/base.js, calls
+//     `readCredentials` + `persistToConfig` here). Plan to extract into
+//     src/auth/{cookie,uat}.js once stable.
 //
 // Public API (stable for callers):
 //   - readCredentials() → flat env block of the active profile (back-compat
@@ -66,6 +66,10 @@ function _credentialsPath() {
   return path.join(_credentialsDir(), 'credentials.json');
 }
 
+function _credentialsLockPath() {
+  return path.join(_credentialsDir(), 'credentials.lock');
+}
+
 // --- Atomic file IO ---
 
 function _atomicWriteJson(filePath, obj) {
@@ -78,6 +82,96 @@ function _atomicWriteJson(filePath, obj) {
   fs.renameSync(tmpPath, filePath);
   // chmod again post-rename in case of umask interference
   try { fs.chmodSync(filePath, 0o600); } catch (_) {}
+}
+
+function _sleepSync(ms) {
+  const buf = new SharedArrayBuffer(4);
+  Atomics.wait(new Int32Array(buf), 0, 0, ms);
+}
+
+function _tryBreakStaleLock(lockPath, staleMs) {
+  const breakerPath = `${lockPath}.breaker`;
+  let breakerFd = null;
+  try {
+    breakerFd = fs.openSync(breakerPath, 'wx', 0o600);
+  } catch (e) {
+    if (e.code === 'EEXIST') {
+      try {
+        const st = fs.statSync(breakerPath);
+        if (Date.now() - st.mtimeMs > staleMs) fs.unlinkSync(breakerPath);
+      } catch (_) {}
+      return false;
+    }
+    throw e;
+  }
+
+  try {
+    const st = fs.statSync(lockPath);
+    if (Date.now() - st.mtimeMs > staleMs) {
+      try { fs.unlinkSync(lockPath); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+      return true;
+    }
+    return false;
+  } catch (e) {
+    if (e.code === 'ENOENT') return true;
+    throw e;
+  } finally {
+    try { fs.closeSync(breakerFd); } catch (_) {}
+    try { fs.unlinkSync(breakerPath); } catch (_) {}
+  }
+}
+
+function _acquireCredentialsLock({ timeoutMs = 5000, staleMs = 30000 } = {}) {
+  const lockPath = _credentialsLockPath();
+  const dir = path.dirname(lockPath);
+  try { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); } catch (_) {}
+  try { fs.chmodSync(dir, 0o700); } catch (_) {}
+
+  const started = Date.now();
+  for (;;) {
+    let fd = null;
+    try {
+      const owner = `${process.pid}:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+      fd = fs.openSync(lockPath, 'wx', 0o600);
+      fs.writeFileSync(fd, JSON.stringify({ owner, pid: process.pid, createdAt: new Date().toISOString() }) + '\n');
+      return () => {
+        try { fs.closeSync(fd); } catch (_) {}
+        try {
+          const raw = fs.readFileSync(lockPath, 'utf8');
+          const current = JSON.parse(raw);
+          if (current.owner === owner) fs.unlinkSync(lockPath);
+        } catch (_) {}
+      };
+    } catch (e) {
+      if (fd !== null) {
+        try { fs.closeSync(fd); } catch (_) {}
+      }
+      if (e.code !== 'EEXIST') throw e;
+      try {
+        const st = fs.statSync(lockPath);
+        if (Date.now() - st.mtimeMs > staleMs) {
+          _tryBreakStaleLock(lockPath, staleMs);
+          continue;
+        }
+      } catch (statErr) {
+        if (statErr.code === 'ENOENT') continue;
+        throw statErr;
+      }
+      if (Date.now() - started > timeoutMs) {
+        throw new Error(`Timed out waiting for credentials.json lock at ${lockPath}`);
+      }
+      _sleepSync(25);
+    }
+  }
+}
+
+function _withCredentialsLock(fn) {
+  const release = _acquireCredentialsLock();
+  try {
+    return fn();
+  } finally {
+    release();
+  }
 }
 
 function _readFile() {
@@ -108,6 +202,41 @@ function _readFile() {
 
 function readCanonical() {
   return _readFile();
+}
+
+function writeCanonical(canonical) {
+  if (!canonical || typeof canonical !== 'object') {
+    throw new Error('writeCanonical: canonical credentials object is required');
+  }
+  if (canonical.version !== SCHEMA_VERSION) {
+    throw new Error(`writeCanonical: version must be ${SCHEMA_VERSION}`);
+  }
+  if (!canonical.profiles || typeof canonical.profiles !== 'object') {
+    throw new Error('writeCanonical: profiles object is required');
+  }
+  if (typeof canonical.active !== 'string' || !canonical.profiles[canonical.active]) {
+    throw new Error(`writeCanonical: active profile "${canonical.active}" must exist in profiles`);
+  }
+  if (!canonical.profileHints || typeof canonical.profileHints !== 'object') {
+    canonical.profileHints = {};
+  }
+  return _withCredentialsLock(() => {
+    _atomicWriteJson(_credentialsPath(), canonical);
+    return true;
+  });
+}
+
+function updateCanonical(mutator) {
+  if (typeof mutator !== 'function') throw new Error('updateCanonical: mutator function is required');
+  return _withCredentialsLock(() => {
+    const f = _readFile();
+    if (!f) throw new Error('No credentials.json — cannot update canonical credentials.');
+    const result = mutator(f);
+    if (result === false) return false;
+    if (!f.profileHints || typeof f.profileHints !== 'object') f.profileHints = {};
+    _atomicWriteJson(_credentialsPath(), f);
+    return result === undefined ? true : result;
+  });
 }
 
 function getActiveProfileName() {
@@ -171,38 +300,40 @@ function _normalizeEnv(profile) {
 }
 
 function setActiveProfile(name) {
-  const f = _readFile();
-  if (!f) {
-    throw new Error('No credentials.json — run `npx feishu-user-plugin migrate --confirm` to create one.');
-  }
-  if (!f.profiles[name]) {
-    throw new Error(`Profile "${name}" not found in credentials.json. Available: ${Object.keys(f.profiles).join(', ')}`);
-  }
-  f.active = name;
-  _atomicWriteJson(_credentialsPath(), f);
+  return updateCanonical((f) => {
+    if (!f.profiles[name]) {
+      throw new Error(`Profile "${name}" not found in credentials.json. Available: ${Object.keys(f.profiles).join(', ')}`);
+    }
+    f.active = name;
+    return true;
+  });
 }
 
 function persistProfileUpdate(profileName, updates) {
-  const f = _readFile();
-  if (!f) return false;
-  if (!f.profiles[profileName]) {
-    console.error(`[feishu-user-plugin] persistProfileUpdate: profile "${profileName}" not found in credentials.json`);
-    return false;
+  try {
+    return updateCanonical((f) => {
+      if (!f.profiles[profileName]) {
+        console.error(`[feishu-user-plugin] persistProfileUpdate: profile "${profileName}" not found in credentials.json`);
+        return false;
+      }
+      // LARK_UAT_EXPIRES sometimes comes through as string; preserve number when possible.
+      const normalized = {};
+      for (const [k, v] of Object.entries(updates)) {
+        if (v === undefined || v === null) continue;
+        if (k === 'LARK_UAT_EXPIRES' && typeof v === 'string') {
+          const n = parseInt(v, 10);
+          normalized[k] = Number.isFinite(n) ? n : v;
+        } else {
+          normalized[k] = v;
+        }
+      }
+      Object.assign(f.profiles[profileName], normalized);
+      return true;
+    });
+  } catch (e) {
+    if (/No credentials\.json/.test(e.message)) return false;
+    throw e;
   }
-  // LARK_UAT_EXPIRES sometimes comes through as string; preserve number when possible.
-  const normalized = {};
-  for (const [k, v] of Object.entries(updates)) {
-    if (v === undefined || v === null) continue;
-    if (k === 'LARK_UAT_EXPIRES' && typeof v === 'string') {
-      const n = parseInt(v, 10);
-      normalized[k] = Number.isFinite(n) ? n : v;
-    } else {
-      normalized[k] = v;
-    }
-  }
-  Object.assign(f.profiles[profileName], normalized);
-  _atomicWriteJson(_credentialsPath(), f);
-  return true;
 }
 
 // Back-compat drop-in for src/config::readCredentials. Resolution order:
@@ -228,10 +359,14 @@ function readCredentials() {
 // Back-compat drop-in for src/config::persistToConfig. Routes writes to:
 //   - credentials.json (active profile) when the file exists
 //   - legacy mcpServers env block otherwise
-function persistToConfig(updates) {
+function persistToConfig(updates, targetProfile) {
   const f = _readFile();
   if (f) {
-    return persistProfileUpdate(f.active, updates);
+    // targetProfile lets a caller (e.g. keepalive --all) persist to a specific
+    // profile WITHOUT flipping the global `active` pointer — which would race a
+    // live server and, on a mid-flip crash, permanently switch the user's
+    // default identity. Defaults to the active profile when omitted.
+    return persistProfileUpdate(targetProfile || f.active, updates);
   }
   return legacy.persistToConfig(updates);
 }
@@ -317,7 +452,7 @@ function migrate({ dryRun = true } = {}) {
     return { ok: true, dryRun: true, credentials };
   }
 
-  _atomicWriteJson(filePath, credentials);
+  writeCanonical(credentials);
   console.log(`✓ Wrote ${filePath} (mode 0600)`);
   console.log('');
   console.log('Next steps:');
@@ -352,12 +487,11 @@ function getProfileEvents(name) {
 
 function setProfileEvents(name, eventList) {
   if (!Array.isArray(eventList)) throw new Error('setProfileEvents: eventList must be an array');
-  const f = _readFile();
-  if (!f) throw new Error('No credentials.json — cannot set profile events.');
-  if (!f.profiles[name]) throw new Error(`Profile "${name}" not found.`);
-  f.profiles[name].events = eventList.slice();
-  _atomicWriteJson(_credentialsPath(), f);
-  return true;
+  return updateCanonical((f) => {
+    if (!f.profiles[name]) throw new Error(`Profile "${name}" not found.`);
+    f.profiles[name].events = eventList.slice();
+    return true;
+  });
 }
 
 // --- Lark Desktop hash bindings (v1.3.11 §A) ---
@@ -384,15 +518,14 @@ function setProfileLarkHash(name, hash) {
   if (hash !== null && (typeof hash !== 'string' || !_LARK_HASH_RE.test(hash))) {
     throw new Error('setProfileLarkHash: hash must be 32-char hex (a-f, 0-9) or null');
   }
-  const f = _readFile();
-  if (!f) throw new Error('No credentials.json — cannot set profile larkHash. Run `npx feishu-user-plugin migrate --confirm` first.');
-  if (!f.profiles[name]) {
-    throw new Error(`setProfileLarkHash: profile "${name}" not found. Available: ${Object.keys(f.profiles).join(', ')}`);
-  }
-  if (hash === null) delete f.profiles[name].larkHash;
-  else f.profiles[name].larkHash = hash;
-  _atomicWriteJson(_credentialsPath(), f);
-  return true;
+  return updateCanonical((f) => {
+    if (!f.profiles[name]) {
+      throw new Error(`setProfileLarkHash: profile "${name}" not found. Available: ${Object.keys(f.profiles).join(', ')}`);
+    }
+    if (hash === null) delete f.profiles[name].larkHash;
+    else f.profiles[name].larkHash = hash;
+    return true;
+  });
 }
 
 function findProfileByHash(hash) {
@@ -424,30 +557,37 @@ function setProfileHint(resourceKey, profileName) {
   if (typeof resourceKey !== 'string' || !resourceKey) {
     throw new Error('setProfileHint: resourceKey must be a non-empty string');
   }
-  const f = _readFile();
-  if (!f) return false;
-  if (!f.profiles[profileName]) {
-    throw new Error(`setProfileHint: profile "${profileName}" not in credentials.json. Known: ${Object.keys(f.profiles).join(', ')}`);
+  try {
+    return updateCanonical((f) => {
+      if (!f.profiles[profileName]) {
+        throw new Error(`setProfileHint: profile "${profileName}" not in credentials.json. Known: ${Object.keys(f.profiles).join(', ')}`);
+      }
+      if (f.profileHints[resourceKey] === profileName) return true;
+      f.profileHints[resourceKey] = profileName;
+      return true;
+    });
+  } catch (e) {
+    if (/No credentials\.json/.test(e.message)) return false;
+    throw e;
   }
-  if (f.profileHints[resourceKey] === profileName) return true;
-  f.profileHints[resourceKey] = profileName;
-  _atomicWriteJson(_credentialsPath(), f);
-  return true;
 }
 
 function clearProfileHint(resourceKey) {
-  const f = _readFile();
-  if (!f) return false;
-  if (resourceKey === undefined) {
-    if (Object.keys(f.profileHints).length === 0) return true;
-    f.profileHints = {};
-    _atomicWriteJson(_credentialsPath(), f);
-    return true;
+  try {
+    return updateCanonical((f) => {
+      if (resourceKey === undefined) {
+        if (Object.keys(f.profileHints).length === 0) return true;
+        f.profileHints = {};
+        return true;
+      }
+      if (!(resourceKey in f.profileHints)) return false;
+      delete f.profileHints[resourceKey];
+      return true;
+    });
+  } catch (e) {
+    if (/No credentials\.json/.test(e.message)) return false;
+    throw e;
   }
-  if (!(resourceKey in f.profileHints)) return false;
-  delete f.profileHints[resourceKey];
-  _atomicWriteJson(_credentialsPath(), f);
-  return true;
 }
 
 // --- Re-exports for back-compat ---
@@ -455,6 +595,8 @@ function clearProfileHint(resourceKey) {
 module.exports = {
   // canonical API
   readCanonical,
+  writeCanonical,
+  updateCanonical,
   getActiveProfileName,
   listProfileNames,
   getActiveProfileEnv,

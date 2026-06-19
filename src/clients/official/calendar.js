@@ -2,6 +2,18 @@
 // Mixed into LarkOfficialClient.prototype by ./index.js. UAT-first for all
 // methods (calendar resources are user-owned by default).
 
+function _applyPageTokenInvariant(out, token) {
+  if (!out.hasMore) return out;
+  if (token) {
+    out.pageToken = token;
+    return out;
+  }
+  out.hasMore = false;
+  out.truncated = true;
+  out.cursorUnavailable = true;
+  return out;
+}
+
 module.exports = {
   // --- Calendar read (v1.3.4) ---
 
@@ -19,12 +31,12 @@ module.exports = {
       sdkFn: () => this.client.calendar.calendar.list({ params: { page_size: ps, ...(pageToken ? { page_token: pageToken } : {}), ...(syncToken ? { sync_token: syncToken } : {}) } }),
       label: 'listCalendars',
     });
-    return {
+    const out = {
       items: res.data.calendar_list || [],
-      pageToken: res.data.page_token,
       syncToken: res.data.sync_token,
-      hasMore: res.data.has_more,
+      hasMore: !!res.data.has_more,
     };
+    return _applyPageTokenInvariant(out, res.data.page_token);
   },
 
   async listCalendarEvents(calendarId, { startTime, endTime, pageSize = 50, pageToken, syncToken } = {}) {
@@ -49,12 +61,12 @@ module.exports = {
       }),
       label: 'listCalendarEvents',
     });
-    return {
+    const out = {
       items: res.data.items || [],
-      pageToken: res.data.page_token,
       syncToken: res.data.sync_token,
-      hasMore: res.data.has_more,
+      hasMore: !!res.data.has_more,
     };
+    return _applyPageTokenInvariant(out, res.data.page_token);
   },
 
   async getCalendarEvent(calendarId, eventId) {
@@ -173,6 +185,8 @@ module.exports = {
       sdkFn: () => this.client.calendar.freebusy.batch({ data: body }),
       label: 'getFreebusy',
     });
-    return { freebusyLists: res.data.freebusy_lists || [], viaUser: !!res._viaUser };
+    const out = { freebusyLists: res.data.freebusy_lists || [], viaUser: !!res._viaUser };
+    if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
+    return out;
   },
 };

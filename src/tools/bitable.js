@@ -119,6 +119,16 @@ function need(arg, name, action) {
   }
 }
 
+// Feishu's batch record endpoints cap at 500 per call. Enforce it locally with a
+// clear error instead of letting an oversized array hit the API as an opaque
+// failure (or, worse, a partial write with no per-record reporting). Callers
+// should chunk into <=500-record batches.
+function capBatch(arr, name, action) {
+  if (Array.isArray(arr) && arr.length > 500) {
+    throw new Error(`manage_bitable: ${name} has ${arr.length} items for action=${action}, exceeding Feishu's 500-per-call cap. Split into batches of <=500.`);
+  }
+}
+
 const handlers = {
   async manage_bitable_app(args, ctx) {
     const c = ctx.getOfficialClient();
@@ -163,11 +173,15 @@ const handlers = {
       case 'update': {
         need(args.table_id, 'table_id', 'update');
         need(args.name, 'name', 'update');
-        return text(`Table renamed: ${(await c.updateBitableTable(appToken, args.table_id, args.name)).name}`);
+        const r = await c.updateBitableTable(appToken, args.table_id, args.name);
+        const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
+        return text(`Table renamed: ${r.name}${warn}`);
       }
       case 'delete': {
         need(args.table_id, 'table_id', 'delete');
-        return text(`Table deleted: ${(await c.deleteBitableTable(appToken, args.table_id)).deleted}`);
+        const r = await c.deleteBitableTable(appToken, args.table_id);
+        const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
+        return text(`Table deleted: ${r.deleted}${warn}`);
       }
     }
   },
@@ -196,7 +210,8 @@ const handlers = {
       case 'delete': {
         need(args.field_id, 'field_id', 'delete');
         const r = await c.deleteBitableField(appToken, args.table_id, args.field_id);
-        return text(r.deleted ? `Field ${r.fieldId} deleted` : `Field deletion returned deleted=${r.deleted}`);
+        const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
+        return text((r.deleted ? `Field ${r.fieldId} deleted` : `Field deletion returned deleted=${r.deleted}`) + warn);
       }
     }
   },
@@ -212,7 +227,9 @@ const handlers = {
       }
       case 'delete': {
         need(args.view_id, 'view_id', 'delete');
-        return text(`View deleted: ${(await c.deleteBitableView(appToken, args.table_id, args.view_id)).deleted}`);
+        const r = await c.deleteBitableView(appToken, args.table_id, args.view_id);
+        const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
+        return text(`View deleted: ${r.deleted}${warn}`);
       }
     }
   },
@@ -230,14 +247,17 @@ const handlers = {
       }
       case 'create': {
         need(args.records, 'records', 'create');
+        capBatch(args.records, 'records', 'create');
         return json(await c.batchCreateBitableRecords(appToken, args.table_id, args.records));
       }
       case 'update': {
         need(args.records, 'records', 'update');
+        capBatch(args.records, 'records', 'update');
         return json(await c.batchUpdateBitableRecords(appToken, args.table_id, args.records));
       }
       case 'delete': {
         need(args.record_ids, 'record_ids', 'delete');
+        capBatch(args.record_ids, 'record_ids', 'delete');
         return json(await c.batchDeleteBitableRecords(appToken, args.table_id, args.record_ids));
       }
     }
