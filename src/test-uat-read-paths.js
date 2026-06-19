@@ -235,23 +235,28 @@ async function run() {
     assert.equal(body.count, 20, 'searchWiki NaN page size falls back to default');
   }
 
-  // --- 11b. abnormal has_more:true + empty page must NOT emit a stalled cursor ---
-  // nextOffset === offset would loop a paging caller forever (final release
-  // review, v1.3.16). hasMore stays visible; the unusable cursor is withheld.
+  // --- 11b. abnormal has_more:true + empty page emits an ADVANCING cursor ---
+  // hasMore:true must always carry a resumable cursor (v1.4.0 invariant). On an
+  // abnormal empty page nextOffset advances by page_size (never === offset, so a
+  // paging caller can't stall) and a cursorWarning is attached — superseding the
+  // old behaviour of withholding the cursor, which left hasMore:true with no way
+  // to page forward.
   {
     const c = fakeClient({
       uatResult: { code: 0, data: { docs_entities: [], has_more: true }, _viaUser: true },
     });
     const res = await docsMixin.searchDocs.call(c, 'q', { pageToken: '5' });
     assert.equal(res.hasMore, true);
-    assert.equal(res.nextOffset, undefined, 'searchDocs empty page must not emit nextOffset === offset');
+    assert.equal(res.nextOffset, 15, 'searchDocs empty page advances by page_size (5+10), not stalled at offset');
+    assert.ok(res.cursorWarning, 'searchDocs flags the abnormal empty page');
   }
   {
     const c = fakeClient({
       uatResult: { code: 0, data: { docs_entities: [], has_more: true }, _viaUser: true },
     });
     const res = await wikiMixin.searchWiki.call(c, 'q', { offset: 5 });
-    assert.equal(res.nextOffset, undefined, 'searchWiki empty page must not emit nextOffset === offset');
+    assert.equal(res.nextOffset, 25, 'searchWiki empty page advances by page_size (5+20), not stalled at offset');
+    assert.ok(res.cursorWarning, 'searchWiki flags the abnormal empty page');
   }
 
   // --- 11c. explicit offset:0 is honored by the handlers (not dropped as falsy) ---
