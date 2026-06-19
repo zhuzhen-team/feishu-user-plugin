@@ -423,6 +423,19 @@ function buildCtx() {
     getEventBuffer,
     listProfiles: () => credentials.listProfileNames(),
     getActiveProfile: () => currentProfile,
+    // Per-call, in-memory-only switch for auto-switch read trials and explicit
+    // via_profile pins: flip currentProfile + invalidate cached clients WITHOUT
+    // writing credentials.json::active or running credMonitor.sync(). A transient
+    // routing trial must not mutate the durable single-source-of-truth that peer
+    // MCP processes read (which corrupted their active identity, and churned the
+    // file + ran an fsync-grade write + SHA + hook fan-out on every hot-path read).
+    setActiveProfileEphemeral: (n) => {
+      credentials.getActiveProfileEnv(n);  // validate exists (throws if unknown)
+      currentProfile = n;
+      userClient = null;
+      officialClient = null;
+      require('./resolver').clearCache();
+    },
     setActiveProfile: (n) => {
       // Validate the profile exists (throws if unknown) before nuking client cache.
       credentials.getActiveProfileEnv(n);

@@ -85,6 +85,28 @@ async function run() {
       assert.equal(hintCalls.set.length, 0);
       assert.equal(hintCalls.clear.length, 0);
     });
+
+    await check('E: routing uses EPHEMERAL switch (never durable persist) + restores in finally on throw', async () => {
+      installCreds({});
+      const eph = [];
+      const dur = [];
+      let active = 'default';
+      const ctx = {
+        listProfiles: () => ['default', 'work'],
+        getActiveProfile: () => active,
+        setActiveProfileEphemeral: (p) => { eph.push(p); active = p; },
+        setActiveProfile: (p) => { dur.push(p); active = p; },
+      };
+      // 'default' returns a switch-code error → router moves to 'work'; 'work'
+      // throws a non-switch error → router rethrows. The finally MUST restore.
+      await assert.rejects(() => router.withProfileRouting(ctx, 'read_doc_markdown', ARGS, async () => {
+        if (active === 'default') return { content: [{ type: 'text', text: switchErr }], isError: true };
+        throw new Error('boom on work (non-switch)');
+      }));
+      assert.deepEqual(eph, ['work', 'default'], 'switched to work then restored to default — all ephemeral');
+      assert.equal(dur.length, 0, 'auto-switch must NEVER call the durable setActiveProfile (no SSOT churn)');
+      assert.equal(active, 'default', 'finally restored the original active profile');
+    });
   } finally {
     Object.assign(credentials, orig);
   }
