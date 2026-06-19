@@ -192,7 +192,9 @@ const handlers = {
         if (typeof args.start_index !== 'number' || typeof args.end_index !== 'number') {
           throw new Error('manage_doc_block(delete): start_index and end_index (numbers) required.');
         }
-        return text(`Blocks deleted: ${(await official.deleteDocBlocks(docId, args.parent_block_id, args.start_index, args.end_index)).deleted}`);
+        const r = await official.deleteDocBlocks(docId, args.parent_block_id, args.start_index, args.end_index);
+        const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
+        return text(`Blocks deleted: ${r.deleted}${warn}`);
       }
     }
   },

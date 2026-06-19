@@ -163,11 +163,15 @@ const handlers = {
       case 'update': {
         need(args.table_id, 'table_id', 'update');
         need(args.name, 'name', 'update');
-        return text(`Table renamed: ${(await c.updateBitableTable(appToken, args.table_id, args.name)).name}`);
+        const r = await c.updateBitableTable(appToken, args.table_id, args.name);
+        const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
+        return text(`Table renamed: ${r.name}${warn}`);
       }
       case 'delete': {
         need(args.table_id, 'table_id', 'delete');
-        return text(`Table deleted: ${(await c.deleteBitableTable(appToken, args.table_id)).deleted}`);
+        const r = await c.deleteBitableTable(appToken, args.table_id);
+        const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
+        return text(`Table deleted: ${r.deleted}${warn}`);
       }
     }
   },
@@ -196,7 +200,8 @@ const handlers = {
       case 'delete': {
         need(args.field_id, 'field_id', 'delete');
         const r = await c.deleteBitableField(appToken, args.table_id, args.field_id);
-        return text(r.deleted ? `Field ${r.fieldId} deleted` : `Field deletion returned deleted=${r.deleted}`);
+        const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
+        return text((r.deleted ? `Field ${r.fieldId} deleted` : `Field deletion returned deleted=${r.deleted}`) + warn);
       }
     }
   },
@@ -212,7 +217,9 @@ const handlers = {
       }
       case 'delete': {
         need(args.view_id, 'view_id', 'delete');
-        return text(`View deleted: ${(await c.deleteBitableView(appToken, args.table_id, args.view_id)).deleted}`);
+        const r = await c.deleteBitableView(appToken, args.table_id, args.view_id);
+        const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
+        return text(`View deleted: ${r.deleted}${warn}`);
       }
     }
   },

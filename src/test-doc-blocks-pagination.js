@@ -105,7 +105,7 @@ async function run() {
     assert.deepStrictEqual(calls, ['', 'p2', 'p3']);
   });
 
-  await ok('terminates on a stalled cursor (empty page, has_more, same token) and withholds it', async () => {
+  await ok('terminates on a stalled cursor (empty page, has_more, same token) and marks cursorUnavailable', async () => {
     const { self, calls } = pagedStub({
       '':   { items: [blk('b1')], has_more: true, next: 'p1' },
       'p1': { items: [], has_more: true, next: 'p1' }, // server stall — would loop forever
@@ -113,7 +113,9 @@ async function run() {
     const r = await docs.getDocBlocks.call(self, 'docX');
     assert.ok(calls.length <= 3, `must terminate, made ${calls.length} calls`);
     assert.strictEqual(r.items.length, 1);
-    assert.strictEqual(r.hasMore, true, 'incompleteness is reported, not hidden');
+    assert.strictEqual(r.hasMore, false, 'hasMore:true must never be returned without a resumable cursor');
+    assert.strictEqual(r.truncated, true, 'incompleteness is still reported');
+    assert.strictEqual(r.cursorUnavailable, true, 'caller can distinguish upstream cursor failure from complete fetch');
     assert.strictEqual(r.nextPageToken, undefined, 'stalled cursor is withheld (PR #116 parity)');
   });
 

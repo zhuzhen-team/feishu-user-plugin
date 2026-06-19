@@ -5,7 +5,7 @@ const { json } = require('./_registry');
 const schemas = [
   {
     name: 'list_wiki_spaces',
-    description: '[Official API] List all accessible Wiki spaces. Follows pagination internally and returns ALL spaces (pre-v1.3.17 silently capped at 50). If the upstream cursor stalls, the response carries hasMore:true — treat that as a partial list.',
+    description: '[Official API] List all accessible Wiki spaces. Follows pagination internally and returns ALL spaces (pre-v1.3.17 silently capped at 50). If the upstream cursor stalls, the response carries truncated:true + cursorUnavailable:true instead of hasMore:true because there is no safe resume cursor.',
     inputSchema: { type: 'object', properties: {} },
   },
   {

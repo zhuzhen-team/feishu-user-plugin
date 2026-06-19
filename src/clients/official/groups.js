@@ -4,6 +4,18 @@
 // LarkOfficialClient instance, so they can use this.client, this._safeSDKCall,
 // this._asUserOrApp, this._uatREST, etc. — all defined in base.js.
 
+function _applyPageTokenInvariant(out, token) {
+  if (!out.hasMore) return out;
+  if (token) {
+    out.pageToken = token;
+    return out;
+  }
+  out.hasMore = false;
+  out.truncated = true;
+  out.cursorUnavailable = true;
+  return out;
+}
+
 module.exports = {
   // --- IM: Chat Management ---
 
@@ -39,7 +51,7 @@ module.exports = {
       }),
       'listChatMembers'
     );
-    return { items: res.data.items || [], hasMore: res.data.has_more, pageToken: res.data.page_token };
+    return _applyPageTokenInvariant({ items: res.data.items || [], hasMore: !!res.data.has_more }, res.data.page_token);
   },
 
   async addChatMembers(chatId, userIds, memberIdType = 'open_id') {

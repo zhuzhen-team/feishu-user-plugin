@@ -152,7 +152,8 @@ const handlers = {
   },
   async delete_okr_progress_record(args, ctx) {
     const r = await ctx.getOfficialClient().deleteOkrProgressRecord(args.progress_id);
-    return text(`Progress record ${args.progress_id} deleted${r.viaUser ? '' : ' (as app)'}`);
+    const warn = r.fallbackWarning ? `\n\n${r.fallbackWarning}` : '';
+    return text(`Progress record ${args.progress_id} deleted${r.viaUser ? '' : ' (as app)'}${warn}`);
   },
 };
 

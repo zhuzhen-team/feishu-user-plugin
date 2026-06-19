@@ -10,6 +10,18 @@
 const { fetchWithTimeout } = require('../../utils');
 const { classifyError } = require('../../error-codes');
 
+function _applyPageTokenInvariant(out, token) {
+  if (!out.hasMore) return out;
+  if (token) {
+    out.pageToken = token;
+    return out;
+  }
+  out.hasMore = false;
+  out.truncated = true;
+  out.cursorUnavailable = true;
+  return out;
+}
+
 module.exports = {
   // --- UAT-based IM operations (for P2P chats) ---
 
@@ -23,7 +35,7 @@ module.exports = {
       return res.json();
     });
     if (data.code !== 0) throw new Error(`listChatsAsUser failed (${data.code}): ${data.msg}`);
-    return { items: data.data.items || [], pageToken: data.data.page_token, hasMore: data.data.has_more };
+    return _applyPageTokenInvariant({ items: data.data.items || [], hasMore: !!data.data.has_more }, data.data.page_token);
   },
 
   async readMessagesAsUser(chatId, { pageSize = 20, startTime, endTime, pageToken, sortType = 'ByCreateTimeDesc', expandMergeForward = true } = {}, userClient) {
@@ -48,7 +60,7 @@ module.exports = {
     const items = (data.data.items || []).map(m => this._formatMessage(m));
     await this._populateSenderNames(items, userClient);
     if (expandMergeForward) await this._expandMergeForwardItems(items, userClient, { preferUAT: true });
-    return { items, hasMore: data.data.has_more, pageToken: data.data.page_token };
+    return _applyPageTokenInvariant({ items, hasMore: !!data.data.has_more }, data.data.page_token);
   },
 
   // --- IM ---
@@ -58,7 +70,7 @@ module.exports = {
       () => this.client.im.chat.list({ params: { page_size: pageSize, page_token: pageToken } }),
       'listChats'
     );
-    return { items: res.data.items || [], pageToken: res.data.page_token, hasMore: res.data.has_more };
+    return _applyPageTokenInvariant({ items: res.data.items || [], hasMore: !!res.data.has_more }, res.data.page_token);
   },
 
   async readMessages(chatId, { pageSize = 20, startTime, endTime, pageToken, sortType = 'ByCreateTimeDesc', expandMergeForward = true } = {}, userClient) {
@@ -70,7 +82,7 @@ module.exports = {
     const items = (res.data.items || []).map(m => this._formatMessage(m));
     await this._populateSenderNames(items, userClient);
     if (expandMergeForward) await this._expandMergeForwardItems(items, userClient, { preferUAT: false });
-    return { items, hasMore: res.data.has_more, pageToken: res.data.page_token };
+    return _applyPageTokenInvariant({ items, hasMore: !!res.data.has_more }, res.data.page_token);
   },
 
   async getMessage(messageId) {
@@ -479,10 +491,9 @@ module.exports = {
     if (data.code !== 0) {
       throw new Error(`search_messages failed (code=${data.code}): ${data.msg}`);
     }
-    return {
+    return _applyPageTokenInvariant({
       items: data.data?.items || [],
-      pageToken: data.data?.page_token || null,
       hasMore: !!data.data?.has_more,
-    };
+    }, data.data?.page_token || null);
   },
 };

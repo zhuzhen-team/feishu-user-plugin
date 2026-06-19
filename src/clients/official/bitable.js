@@ -5,6 +5,29 @@
 // this._asUserOrApp, this.attachToWiki (mixed in via wiki.js), etc. — all
 // defined in base.js or mixed in via other domain modules.
 
+function _withIdentityMeta(res, out) {
+  out.viaUser = !!res._viaUser;
+  if (res._fallbackWarning) out.fallbackWarning = res._fallbackWarning;
+  return out;
+}
+
+function _applyPageTokenInvariant(out, token) {
+  if (!out.hasMore) return out;
+  if (token) {
+    out.pageToken = token;
+    return out;
+  }
+  out.hasMore = false;
+  out.truncated = true;
+  out.cursorUnavailable = true;
+  return out;
+}
+
+function _mergeWarning(existing, next) {
+  if (!next) return existing;
+  return existing ? `${existing}\n\n${next}` : next;
+}
+
 module.exports = {
   // --- Bitable ---
 
@@ -26,6 +49,7 @@ module.exports = {
         const node = await this.attachToWiki(wikiSpaceId, 'bitable', appToken, wikiParentNodeToken);
         if (node?.node_token) out.wikiNodeToken = node.node_token;
         else if (node?.task_id) out.wikiAttachTaskId = node.task_id;
+        out.fallbackWarning = _mergeWarning(out.fallbackWarning, node?.fallbackWarning);
       } catch (e) {
         out.wikiAttachError = e.message;
       }
@@ -39,7 +63,7 @@ module.exports = {
       sdkFn: () => this.client.bitable.appTable.list({ path: { app_token: appToken } }),
       label: 'listTables',
     });
-    return { items: res.data.items || [] };
+    return _withIdentityMeta(res, { items: res.data.items || [] });
   },
 
   async createBitableTable(appToken, name, fields) {
@@ -53,7 +77,7 @@ module.exports = {
       sdkFn: () => this.client.bitable.appTable.create({ path: { app_token: appToken }, data }),
       label: 'createTable',
     });
-    return { tableId: res.data.table_id, fallbackWarning: res._fallbackWarning || null };
+    return _withIdentityMeta(res, { tableId: res.data.table_id });
   },
 
   async listBitableFields(appToken, tableId) {
@@ -62,7 +86,7 @@ module.exports = {
       sdkFn: () => this.client.bitable.appTableField.list({ path: { app_token: appToken, table_id: tableId } }),
       label: 'listFields',
     });
-    return { items: res.data.items || [] };
+    return _withIdentityMeta(res, { items: res.data.items || [] });
   },
 
   async createBitableField(appToken, tableId, fieldConfig) {
@@ -73,7 +97,7 @@ module.exports = {
       sdkFn: () => this.client.bitable.appTableField.create({ path: { app_token: appToken, table_id: tableId }, data: fieldConfig }),
       label: 'createField',
     });
-    return { field: res.data.field, fallbackWarning: res._fallbackWarning || null };
+    return _withIdentityMeta(res, { field: res.data.field });
   },
 
   async updateBitableField(appToken, tableId, fieldId, fieldConfig) {
@@ -84,7 +108,7 @@ module.exports = {
       sdkFn: () => this.client.bitable.appTableField.update({ path: { app_token: appToken, table_id: tableId, field_id: fieldId }, data: fieldConfig }),
       label: 'updateField',
     });
-    return { field: res.data.field };
+    return _withIdentityMeta(res, { field: res.data.field });
   },
 
   async deleteBitableField(appToken, tableId, fieldId) {
@@ -94,7 +118,7 @@ module.exports = {
       sdkFn: () => this.client.bitable.appTableField.delete({ path: { app_token: appToken, table_id: tableId, field_id: fieldId } }),
       label: 'deleteField',
     });
-    return { fieldId: res.data.field_id, deleted: res.data.deleted };
+    return _withIdentityMeta(res, { fieldId: res.data.field_id, deleted: res.data.deleted });
   },
 
   async searchBitableRecords(appToken, tableId, { filter, sort, pageSize = 20, pageToken } = {}) {
@@ -119,9 +143,8 @@ module.exports = {
     // pageToken accompanies hasMore (2026-06-07 audit) — hasMore + total
     // without the resume cursor stranded callers at the first page of a
     // potentially thousands-row table.
-    const out = { items: res.data.items || [], total: res.data.total, hasMore: res.data.has_more };
-    if (res.data.page_token) out.pageToken = res.data.page_token;
-    return out;
+    const out = _withIdentityMeta(res, { items: res.data.items || [], total: res.data.total, hasMore: !!res.data.has_more });
+    return _applyPageTokenInvariant(out, res.data.page_token);
   },
 
   async createBitableRecord(appToken, tableId, fields) {
@@ -132,7 +155,7 @@ module.exports = {
       sdkFn: () => this.client.bitable.appTableRecord.create({ path: { app_token: appToken, table_id: tableId }, data: { fields } }),
       label: 'createRecord',
     });
-    return { recordId: res.data.record?.record_id, fallbackWarning: res._fallbackWarning || null };
+    return _withIdentityMeta(res, { recordId: res.data.record?.record_id });
   },
 
   async updateBitableRecord(appToken, tableId, recordId, fields) {
@@ -143,7 +166,7 @@ module.exports = {
       sdkFn: () => this.client.bitable.appTableRecord.update({ path: { app_token: appToken, table_id: tableId, record_id: recordId }, data: { fields } }),
       label: 'updateRecord',
     });
-    return { recordId: res.data.record?.record_id };
+    return _withIdentityMeta(res, { recordId: res.data.record?.record_id });
   },
 
   async deleteBitableRecord(appToken, tableId, recordId) {
@@ -153,7 +176,7 @@ module.exports = {
       sdkFn: () => this.client.bitable.appTableRecord.delete({ path: { app_token: appToken, table_id: tableId, record_id: recordId } }),
       label: 'deleteRecord',
     });
-    return { deleted: res.data.deleted };
+    return _withIdentityMeta(res, { deleted: res.data.deleted });
   },
 
   async batchCreateBitableRecords(appToken, tableId, records) {
@@ -164,7 +187,7 @@ module.exports = {
       sdkFn: () => this.client.bitable.appTableRecord.batchCreate({ path: { app_token: appToken, table_id: tableId }, data: { records } }),
       label: 'batchCreateRecords',
     });
-    return { records: res.data.records || [], fallbackWarning: res._fallbackWarning || null };
+    return _withIdentityMeta(res, { records: res.data.records || [] });
   },
 
   async batchUpdateBitableRecords(appToken, tableId, records) {
@@ -175,7 +198,7 @@ module.exports = {
       sdkFn: () => this.client.bitable.appTableRecord.batchUpdate({ path: { app_token: appToken, table_id: tableId }, data: { records } }),
       label: 'batchUpdateRecords',
     });
-    return { records: res.data.records || [] };
+    return _withIdentityMeta(res, { records: res.data.records || [] });
   },
 
   async batchDeleteBitableRecords(appToken, tableId, recordIds) {
@@ -186,7 +209,7 @@ module.exports = {
       sdkFn: () => this.client.bitable.appTableRecord.batchDelete({ path: { app_token: appToken, table_id: tableId }, data: { records: recordIds } }),
       label: 'batchDeleteRecords',
     });
-    return { records: res.data.records || [] };
+    return _withIdentityMeta(res, { records: res.data.records || [] });
   },
 
   async listBitableViews(appToken, tableId) {
@@ -196,7 +219,7 @@ module.exports = {
       sdkFn: () => this.client.bitable.appTableView.list({ path: { app_token: appToken, table_id: tableId }, params: { page_size: 50 } }),
       label: 'listViews',
     });
-    return { items: res.data.items || [] };
+    return _withIdentityMeta(res, { items: res.data.items || [] });
   },
 
   async getBitableRecord(appToken, tableId, recordId) {
@@ -205,17 +228,17 @@ module.exports = {
       sdkFn: () => this.client.bitable.appTableRecord.get({ path: { app_token: appToken, table_id: tableId, record_id: recordId } }),
       label: 'getRecord',
     });
-    return { record: res.data.record };
+    return _withIdentityMeta(res, { record: res.data.record });
   },
 
   async deleteBitableTable(appToken, tableId) {
-    await this._asUserOrApp({
+    const res = await this._asUserOrApp({
       uatPath: `/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}`,
       method: 'DELETE',
       sdkFn: () => this.client.bitable.appTable.delete({ path: { app_token: appToken, table_id: tableId } }),
       label: 'deleteTable',
     });
-    return { deleted: true };
+    return _withIdentityMeta(res, { deleted: true });
   },
 
   async getBitableMeta(appToken) {
@@ -224,7 +247,7 @@ module.exports = {
       sdkFn: () => this.client.bitable.app.get({ path: { app_token: appToken } }),
       label: 'getBitableMeta',
     });
-    return { app: res.data.app };
+    return _withIdentityMeta(res, { app: res.data.app });
   },
 
   async updateBitableTable(appToken, tableId, name) {
@@ -235,7 +258,7 @@ module.exports = {
       sdkFn: () => this.client.bitable.appTable.patch({ path: { app_token: appToken, table_id: tableId }, data: { name } }),
       label: 'updateTable',
     });
-    return { name: res.data.name };
+    return _withIdentityMeta(res, { name: res.data.name });
   },
 
   async createBitableView(appToken, tableId, viewName, viewType = 'grid') {
@@ -246,17 +269,17 @@ module.exports = {
       sdkFn: () => this.client.bitable.appTableView.create({ path: { app_token: appToken, table_id: tableId }, data: { view_name: viewName, view_type: viewType } }),
       label: 'createView',
     });
-    return { view: res.data.view, fallbackWarning: res._fallbackWarning || null };
+    return _withIdentityMeta(res, { view: res.data.view });
   },
 
   async deleteBitableView(appToken, tableId, viewId) {
-    await this._asUserOrApp({
+    const res = await this._asUserOrApp({
       uatPath: `/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/views/${viewId}`,
       method: 'DELETE',
       sdkFn: () => this.client.bitable.appTableView.delete({ path: { app_token: appToken, table_id: tableId, view_id: viewId } }),
       label: 'deleteView',
     });
-    return { deleted: true };
+    return _withIdentityMeta(res, { deleted: true });
   },
 
   async copyBitable(appToken, name, folderId) {
@@ -269,6 +292,6 @@ module.exports = {
       sdkFn: () => this.client.bitable.app.copy({ path: { app_token: appToken }, data }),
       label: 'copyBitable',
     });
-    return { app: res.data.app, fallbackWarning: res._fallbackWarning || null };
+    return _withIdentityMeta(res, { app: res.data.app });
   },
 };

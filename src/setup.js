@@ -192,37 +192,45 @@ async function main() {
     if (existingEnv.LARK_USER_REFRESH_TOKEN) profileValues.LARK_USER_REFRESH_TOKEN = existingEnv.LARK_USER_REFRESH_TOKEN;
 
     if (mode === 'fresh') {
-      fs.mkdirSync(path.dirname(credsPath), { recursive: true, mode: 0o700 });
       const data = { version: 1, active: targetProfile, profiles: { [targetProfile]: profileValues }, profileHints: {} };
-      fs.writeFileSync(credsPath, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
+      credentials.writeCanonical(data);
       console.log(`Created ${credsPath} with profile "${targetProfile}"`);
     } else {
       // mode === 'update'
-      const canonical = credentials.readCanonical();
-      const profileExists = !!(canonical && canonical.profiles[targetProfile]);
-      if (profileExists && targetProfile === 'default' && !cliArgs.force && !cliArgs.profile) {
-        console.error(`Profile "default" already exists. Pass --force to overwrite, or --profile <name> to create a new profile.`);
+      let updateResult;
+      try {
+        updateResult = credentials.updateCanonical((canonical) => {
+          const profileExists = !!canonical.profiles[targetProfile];
+          if (profileExists && targetProfile === 'default' && !cliArgs.force && !cliArgs.profile) {
+            const err = new Error('Profile "default" already exists. Pass --force to overwrite, or --profile <name> to create a new profile.');
+            err.setupExit = true;
+            throw err;
+          }
+          if (profileExists && cliArgs.profile && !cliArgs.force) {
+            const err = new Error(`Profile "${targetProfile}" already exists. Pass --force to overwrite, or pick a different --profile name.`);
+            err.setupExit = true;
+            throw err;
+          }
+          canonical.profiles[targetProfile] = { ...(canonical.profiles[targetProfile] || {}), ...profileValues };
+          // v1.3.9 fix: only flip credentials.json::active when --activate is given.
+          // Without --activate, adding/updating a non-active profile leaves the
+          // current active alone (least-surprise: "I added work2, default is still
+          // active, I'll switch when I want via MCP switch_profile").
+          if (cliArgs.activate || (cliArgs.force && targetProfile === canonical.active)) {
+            canonical.active = targetProfile;
+          }
+          return { active: canonical.active };
+        });
+      } catch (e) {
+        if (!e.setupExit) throw e;
+        console.error(e.message);
         rl.close();
         process.exit(1);
       }
-      if (profileExists && cliArgs.profile && !cliArgs.force) {
-        console.error(`Profile "${targetProfile}" already exists. Pass --force to overwrite, or pick a different --profile name.`);
-        rl.close();
-        process.exit(1);
-      }
-      canonical.profiles[targetProfile] = { ...(canonical.profiles[targetProfile] || {}), ...profileValues };
-      // v1.3.9 fix: only flip credentials.json::active when --activate is given.
-      // Without --activate, adding/updating a non-active profile leaves the
-      // current active alone (least-surprise: "I added work2, default is still
-      // active, I'll switch when I want via MCP switch_profile").
-      if (cliArgs.activate || (cliArgs.force && targetProfile === canonical.active)) {
-        canonical.active = targetProfile;
-      }
-      fs.writeFileSync(credsPath, JSON.stringify(canonical, null, 2) + '\n', { mode: 0o600 });
       console.log(`Updated profile "${targetProfile}" in ${credsPath}`);
       if (cliArgs.activate) console.log(`  → active profile flipped to "${targetProfile}"`);
-      else if (canonical.active !== targetProfile) {
-        console.log(`  → active profile unchanged ("${canonical.active}"). Pass --activate to flip, or use switch_profile MCP tool at runtime.`);
+      else if (updateResult.active !== targetProfile) {
+        console.log(`  → active profile unchanged ("${updateResult.active}"). Pass --activate to flip, or use switch_profile MCP tool at runtime.`);
       }
       if (cliArgs.force) console.warn(`  warning: overwrote existing profile credentials with --force`);
     }

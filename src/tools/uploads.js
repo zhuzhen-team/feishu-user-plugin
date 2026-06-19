@@ -56,7 +56,7 @@ const handlers = {
     const kind = args.kind === 'image' ? 'bitable_image' : 'bitable_file';
     const appToken = await ctx.resolveDocId(args.app_token);
     const up = await ctx.getOfficialClient().uploadMedia(args.file_path, appToken, kind);
-    return json({ fileToken: up.fileToken, viaUser: up.viaUser, parentType: kind, hint: `Pass [{ file_token: "${up.fileToken}" }] as the value of an Attachment-type Bitable field.` });
+    return json({ fileToken: up.fileToken, viaUser: up.viaUser, fallbackWarning: up.fallbackWarning, parentType: kind, hint: `Pass [{ file_token: "${up.fileToken}" }] as the value of an Attachment-type Bitable field.` });
   },
 };
 

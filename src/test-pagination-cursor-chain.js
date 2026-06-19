@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Unit tests for the cursor-chain fixes (2026-06-07 systemic audit, follow-up
-// to PR #118): clients that return hasMore but drop the resume cursor, tool
-// schemas/handlers that never expose page_token, and partial-failure arrays
-// silently swallowed.
+// to PR #118): clients that return hasMore without a usable resume cursor,
+// tool schemas/handlers that never expose page_token, and partial-failure
+// arrays silently swallowed.
 //
 // Covers:
 //   1. read_messages / read_p2p_messages — page_token passthrough (client ready)
@@ -142,7 +142,7 @@ async function run() {
     assert.ok(!r.hasMore, 'complete fetch must not flag hasMore');
   });
 
-  await ok('listWikiSpaces terminates on a stalled cursor and reports hasMore', async () => {
+  await ok('listWikiSpaces terminates on a stalled cursor and marks cursorUnavailable', async () => {
     let n = 0;
     const self = {
       async _asUserOrApp() {
@@ -153,7 +153,9 @@ async function run() {
     const r = await wikiClient.listWikiSpaces.call(self);
     assert.ok(n <= 3, `must terminate, made ${n} calls`);
     assert.strictEqual(r.items.length, 1);
-    assert.strictEqual(r.hasMore, true, 'incompleteness must be visible');
+    assert.strictEqual(r.hasMore, false, 'hasMore:true must never be returned without a resumable cursor');
+    assert.strictEqual(r.truncated, true, 'incompleteness must be visible');
+    assert.strictEqual(r.cursorUnavailable, true, 'caller can distinguish upstream cursor failure from complete fetch');
   });
 
   // --- 5. manage_members(add) partial-failure arrays ---
