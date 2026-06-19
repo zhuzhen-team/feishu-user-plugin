@@ -359,10 +359,14 @@ function readCredentials() {
 // Back-compat drop-in for src/config::persistToConfig. Routes writes to:
 //   - credentials.json (active profile) when the file exists
 //   - legacy mcpServers env block otherwise
-function persistToConfig(updates) {
+function persistToConfig(updates, targetProfile) {
   const f = _readFile();
   if (f) {
-    return persistProfileUpdate(f.active, updates);
+    // targetProfile lets a caller (e.g. keepalive --all) persist to a specific
+    // profile WITHOUT flipping the global `active` pointer — which would race a
+    // live server and, on a mid-flip crash, permanently switch the user's
+    // default identity. Defaults to the active profile when omitted.
+    return persistProfileUpdate(targetProfile || f.active, updates);
   }
   return legacy.persistToConfig(updates);
 }

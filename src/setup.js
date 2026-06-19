@@ -306,7 +306,7 @@ async function main() {
   const result = writeNewConfig(pointerEnv, undefined, undefined, client, { pointerOnly: true });
   if (result.configPath) console.log(`Written to ${result.configPath} (Claude Code)`);
   if (result.codexConfigPath) console.log(`Written to ${result.codexConfigPath} (Codex)`);
-  console.log(`Mode: pointer-only (env block contains only FEISHU_PLUGIN_PROFILE=${targetProfile})`);
+  console.log(`Mode: pointer-only (env block contains only FEISHU_PLUGIN_PROFILE=${harnessActive})`);
 
   // Summary
   console.log('\n' + '='.repeat(60));

@@ -406,6 +406,7 @@ main().catch(console.error).finally(() => {
     'test-config-toml-removal',         // Claude: 簇E TOML rewrite data-loss
     'test-events-drain-bounded',        // Claude: 簇D get_new_events tail-loss
     'test-cookie-gateway-ok',           // Claude: 簇B gateway-ok vs empty-result
+    'test-resolve-and-save',            // Claude: 簇A/B oc_ resolve + 簇E save_path
     'test-fallback-warning-propagation',// Codex: fallbackWarning across domains
     'test-pagination-cursor-invariant', // Codex: hasMore+cursor invariant
     'test-credentials-write-contract',  // Codex: credentials locked write contract

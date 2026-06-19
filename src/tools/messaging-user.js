@@ -21,7 +21,13 @@ const _ocCache = new Map();
 async function _resolveCookieChatId(chatId, ctx) {
   if (!chatId || typeof chatId !== 'string') return chatId;
   if (!chatId.startsWith('oc_')) return chatId;
-  if (_ocCache.has(chatId)) return _ocCache.get(chatId);
+  // Numeric chat ids are identity/tenant-scoped, so the oc_→numeric mapping is
+  // only valid under the profile (cookie identity) that resolved it. Key the
+  // cache by active profile, else a switch_profile silently reuses the previous
+  // profile's numeric id and sends to the wrong/nonexistent chat.
+  const profile = (ctx.getActiveProfile && ctx.getActiveProfile()) || 'default';
+  const cacheKey = `${profile}:${chatId}`;
+  if (_ocCache.has(cacheKey)) return _ocCache.get(cacheKey);
   let name;
   try {
     const info = await ctx.getOfficialClient().getChatInfo(chatId);
@@ -34,14 +40,26 @@ async function _resolveCookieChatId(chatId, ctx) {
   }
   const c = await ctx.getUserClient();
   const results = await c.search(name);
-  // Prefer exact name match on a group; fall back to first group / user with this name.
-  const exact = results.find((r) => r.title === name && r.type === 'group');
-  const looser = exact || results.find((r) => r.type === 'group') || results.find((r) => r.title === name);
-  if (!looser) {
-    throw new Error(`Cannot resolve ${chatId} (chat "${name}"): no matching chat in cookie search. The chat may be a P2P with someone outside your search index, or you may not be a member. Use create_p2p_chat for P2P, or pass numeric chat_id directly.`);
+  // Require a UNIQUE exact-name match — never silently pick the first fuzzy hit.
+  // Cookie search is substring/fuzzy, so picking "the first group" for a common
+  // or ambiguous name could resolve oc_xxx to an unrelated chat and send the
+  // message there (a confidentiality bug, not just a missed send).
+  const exactGroups = results.filter((r) => r.title === name && r.type === 'group');
+  let resolved;
+  if (exactGroups.length === 1) {
+    resolved = exactGroups[0];
+  } else if (exactGroups.length > 1) {
+    throw new Error(`Cannot safely resolve ${chatId}: cookie search returned ${exactGroups.length} groups exactly named "${name}" — ambiguous. Pass a numeric chat_id directly (list_user_chats / search_contacts).`);
+  } else {
+    const exactAny = results.filter((r) => r.title === name);
+    if (exactAny.length === 1) {
+      resolved = exactAny[0];
+    } else {
+      throw new Error(`Cannot resolve ${chatId} (chat "${name}") to a unique chat: cookie search returned ${exactAny.length} exact-name candidate(s). Pass a numeric chat_id directly — get one via create_p2p_chat (P2P) or list_user_chats (group).`);
+    }
   }
-  const numeric = String(looser.id);
-  _ocCache.set(chatId, numeric);
+  const numeric = String(resolved.id);
+  _ocCache.set(cacheKey, numeric);
   return numeric;
 }
 
@@ -298,4 +316,4 @@ const handlers = {
   },
 };
 
-module.exports = { schemas, handlers };
+module.exports = { schemas, handlers, _resolveCookieChatId, _ocCache };
