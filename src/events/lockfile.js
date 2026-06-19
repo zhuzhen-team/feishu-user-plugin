@@ -118,6 +118,20 @@ function acquireLongLived(lockPath, { info = {}, staleMs = 60_000 } = {}) {
   };
 }
 
+// Blocking sleep that parks the thread instead of burning a CPU core.
+// The previous busy-spin (`while (Date.now() < until) {}`) pegged 100% of a
+// core for the full retry delay and froze the single-threaded event loop while
+// a peer process held the cursor lock — a self-inflicted stall under exactly
+// the concurrency the lock exists to handle (v1.3.17 health-check finding).
+function _sleepSync(ms) {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch (_) {
+    const until = Date.now() + ms;
+    while (Date.now() < until) { /* SharedArrayBuffer unavailable — last-resort bounded spin */ }
+  }
+}
+
 // Per-operation mutex. Synchronous wrapper for short critical sections.
 function withMutex(lockPath, fn, { staleMs = 30_000, retries = 30, retryDelayMs = 100 } = {}) {
   _ensureDir(lockPath);
@@ -143,8 +157,7 @@ function withMutex(lockPath, fn, { staleMs = 30_000, retries = 30, retryDelayMs 
       if (Date.now() - start > staleMs) {
         throw new Error(`withMutex: lock ${lockPath} held longer than ${staleMs}ms`);
       }
-      const sleepUntil = Date.now() + retryDelayMs;
-      while (Date.now() < sleepUntil) { /* busy wait — short delay */ }
+      _sleepSync(retryDelayMs);
       continue;
     }
 

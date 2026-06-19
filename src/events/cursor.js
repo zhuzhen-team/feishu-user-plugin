@@ -52,7 +52,7 @@ function _sanitize(cursor, fileSize) {
 //
 // Returns { events, nextOffset, advanced }.
 // `events` is the raw event objects from events.jsonl (filter applied by caller).
-function drain(dir, { peek = false } = {}) {
+function drain(dir, { peek = false, maxEvents = Infinity } = {}) {
   const logPath = path.join(dir, 'events.jsonl');
   const curPath = _cursorPath(dir);
   const lockPath = _lockPath(dir);
@@ -60,16 +60,18 @@ function drain(dir, { peek = false } = {}) {
   return withMutex(lockPath, () => {
     let stat;
     try { stat = fs.statSync(logPath); } catch (e) {
-      if (e.code === 'ENOENT') return { events: [], nextOffset: 0, advanced: false };
+      if (e.code === 'ENOENT') return { events: [], nextOffset: 0, advanced: false, capped: false };
       throw e;
     }
     let cursor = _readCursor(curPath, stat.size);
     cursor = _sanitize(cursor, stat.size);
 
-    const { events, nextOffset } = readFrom(logPath, cursor.offset);
+    // Consume at most maxEvents; the cursor advances only past the events we
+    // actually return, so a capped tail stays pending instead of being skipped.
+    const { events, nextOffset, capped } = readFrom(logPath, cursor.offset, { maxEvents });
     if (!peek && nextOffset !== cursor.offset) {
       _writeCursorAtomic(curPath, { version: 1, file: 'events.jsonl', offset: nextOffset });
-      return { events, nextOffset, advanced: true };
+      return { events, nextOffset, advanced: true, capped };
     }
     // Always persist cursor.json on first drain (ENOENT) so subsequent calls
     // don't trigger the conservative-reset-to-EOF path.
@@ -77,7 +79,7 @@ function drain(dir, { peek = false } = {}) {
       const exists = (() => { try { fs.statSync(curPath); return true; } catch (_) { return false; } })();
       if (!exists) _writeCursorAtomic(curPath, { version: 1, file: 'events.jsonl', offset: nextOffset });
     }
-    return { events, nextOffset, advanced: false };
+    return { events, nextOffset, advanced: false, capped };
   }, { staleMs: 30_000 });
 }
 

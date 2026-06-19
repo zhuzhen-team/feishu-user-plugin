@@ -35,7 +35,8 @@ module.exports = {
       return res.json();
     });
     if (data.code !== 0) throw new Error(`listChatsAsUser failed (${data.code}): ${data.msg}`);
-    return _applyPageTokenInvariant({ items: data.data.items || [], hasMore: !!data.data.has_more }, data.data.page_token);
+    const d = data.data || {};  // code:0 with absent data (permission-filtered empty envelope) must not throw
+    return _applyPageTokenInvariant({ items: d.items || [], hasMore: !!d.has_more }, d.page_token);
   },
 
   async readMessagesAsUser(chatId, { pageSize = 20, startTime, endTime, pageToken, sortType = 'ByCreateTimeDesc', expandMergeForward = true } = {}, userClient) {
@@ -57,10 +58,11 @@ module.exports = {
       return res.json();
     });
     if (data.code !== 0) throw new Error(`readMessagesAsUser failed (${data.code}): ${data.msg}`);
-    const items = (data.data.items || []).map(m => this._formatMessage(m));
+    const d = data.data || {};  // code:0 with absent data must not throw a TypeError
+    const items = (d.items || []).map(m => this._formatMessage(m));
     await this._populateSenderNames(items, userClient);
     if (expandMergeForward) await this._expandMergeForwardItems(items, userClient, { preferUAT: true });
-    return _applyPageTokenInvariant({ items, hasMore: !!data.data.has_more }, data.data.page_token);
+    return _applyPageTokenInvariant({ items, hasMore: !!d.has_more }, d.page_token);
   },
 
   // --- IM ---

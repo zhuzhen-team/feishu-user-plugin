@@ -13,6 +13,7 @@
  */
 
 const http = require('http');
+const crypto = require('crypto');
 const { execSync } = require('child_process');
 const credentialsModule = require('./auth/credentials');
 const legacyConfig = require('./config');
@@ -64,6 +65,12 @@ const APP_ID = creds.LARK_APP_ID;
 const APP_SECRET = creds.LARK_APP_SECRET;
 const PORT = 9997;
 const REDIRECT_URI = `http://127.0.0.1:${PORT}/callback`;
+// CSRF guard for the loopback callback: the local server must only exchange a
+// code that came back with the exact state we generated for this run. Without
+// it, any page in the user's browser (or another local process) could deliver
+// an attacker-obtained code during the ~120s window and mint tokens for the
+// attacker's identity into the user's credentials file. (OAuth 2.0 §10.12.)
+const OAUTH_STATE = crypto.randomBytes(16).toString('hex');
 // offline_access is required to get refresh_token for auto-renewal
 // Write scopes (docx:document, drive:drive, bitable:app) allow creating resources as the user, not the app
 // v1.3.4 additions:
@@ -231,6 +238,13 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
 
   if (url.pathname === '/callback') {
+    const state = url.searchParams.get('state');
+    if (state !== OAUTH_STATE) {
+      res.writeHead(400, { 'content-type': 'text/html; charset=utf-8' });
+      res.end('<h2>授权失败：state 校验未通过</h2><p>回调缺少或带有不匹配的 state（可能是跨站请求或过期的回调链接）。请重新运行 oauth。</p>');
+      console.error('OAuth callback rejected: state mismatch — refusing to exchange the code (CSRF guard).');
+      return;
+    }
     const code = url.searchParams.get('code');
     if (!code) {
       res.writeHead(400, { 'content-type': 'text/html; charset=utf-8' });
@@ -291,7 +305,7 @@ server.on('error', (e) => {
 });
 
 server.listen(PORT, '127.0.0.1', async () => {
-  const authUrl = `https://accounts.feishu.cn/open-apis/authen/v1/authorize?client_id=${APP_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(SCOPES)}`;
+  const authUrl = `https://accounts.feishu.cn/open-apis/authen/v1/authorize?client_id=${APP_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(SCOPES)}&state=${OAUTH_STATE}`;
 
   console.log('='.repeat(60));
   console.log('  飞书 OAuth 授权');

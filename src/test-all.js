@@ -396,4 +396,21 @@ main().catch(console.error).finally(() => {
   require('./test-cli-tool').run();
   require('./test-lark-desktop').run();
   require('./test-display-label');  // standalone — runs on require, exits non-zero on fail
+
+  // v1.3.17 health-check regression tests (fixture/stub-based, no live API).
+  // Run as child processes so a failure fails CI regardless of each file's
+  // internal harness style (run()-export vs IIFE-with-process.exit).
+  const { execSync } = require('child_process');
+  const _p = require('path');
+  for (const t of [
+    'test-config-toml-removal',         // Claude: 簇E TOML rewrite data-loss
+    'test-events-drain-bounded',        // Claude: 簇D get_new_events tail-loss
+    'test-cookie-gateway-ok',           // Claude: 簇B gateway-ok vs empty-result
+    'test-fallback-warning-propagation',// Codex: fallbackWarning across domains
+    'test-pagination-cursor-invariant', // Codex: hasMore+cursor invariant
+    'test-credentials-write-contract',  // Codex: credentials locked write contract
+  ]) {
+    try { execSync(`node ${_p.join(__dirname, t + '.js')}`, { stdio: 'inherit' }); }
+    catch (e) { console.error(`${t}: FAIL`); process.exitCode = 1; }
+  }
 });

@@ -344,7 +344,7 @@ class LarkUserClient {
   // --- Search (cmd=11021) ---
 
   async search(query) {
-    const { packet } = await this._gateway(11021, 'UniversalSearchRequest', {
+    const { packet, ok } = await this._gateway(11021, 'UniversalSearchRequest', {
       header: {
         searchSession: generateCid(),
         sessionSeqId: 1,
@@ -363,6 +363,7 @@ class LarkUserClient {
       },
     });
 
+    if (!ok) throw new Error('search: cookie protobuf gateway returned non-2xx (cookie may be expired or rate-limited) — distinct from an empty result set.');
     if (!packet.payload) return [];
     const searchRes = this._decode('UniversalSearchResponse', packet.payload);
     const items = (searchRes.results || []).map((r) => ({
@@ -381,11 +382,12 @@ class LarkUserClient {
   // --- Create P2P Chat (cmd=13) ---
 
   async createChat(userId) {
-    const { packet } = await this._gateway(13, 'PutChatRequest', {
+    const { packet, ok } = await this._gateway(13, 'PutChatRequest', {
       type: 1,
       chatterIds: [userId],
     });
 
+    if (!ok) throw new Error('createChat: cookie protobuf gateway returned non-2xx (cookie may be expired or rate-limited).');
     if (!packet.payload) return null;
     const chatRes = this._decode('PutChatResponse', packet.payload);
     return chatRes.chat?.id || null;
@@ -394,8 +396,9 @@ class LarkUserClient {
   // --- Get Group Info (cmd=64) ---
 
   async getGroupInfo(chatId) {
-    const { packet } = await this._gateway(64, 'GetGroupInfoRequest', { chatId });
+    const { packet, ok } = await this._gateway(64, 'GetGroupInfoRequest', { chatId });
 
+    if (!ok) throw new Error('getGroupInfo: cookie protobuf gateway returned non-2xx (cookie may be expired or rate-limited) — distinct from "chat not found".');
     if (!packet.payload) return null;
     const res = this._decode('GetGroupInfoResponse', packet.payload);
     const chat = res.chat;

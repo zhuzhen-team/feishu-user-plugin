@@ -38,6 +38,11 @@ const FAILURE_MAP = {
   // tenant B. Will never be granted. Distinct from 240001 (which is the
   // older code form for the same shape); both surface in production.
   91403: { action: 'uat', reason: 'bot_cross_tenant' },
+  // OAuth scope not granted on the bot/app surface — one of the documented
+  // multi-profile auto-switch read-path codes. classifyError previously fell
+  // through to 'unknown' (which also routes to UAT), so this entry preserves
+  // behaviour while disambiguating logs/monitoring for the scope-missing case.
+  99991672: { action: 'uat', reason: 'oauth_scope_not_granted' },
 
   // Upload pipeline transient errors — the Feishu upload gateway is
   // intermittently flaky; one retry after a moment usually clears.

@@ -22,17 +22,23 @@ function appendEvent(logPath, eventObj) {
   fs.appendFileSync(logPath, line, { encoding: 'utf8' });
 }
 
-// Read from `offset` to EOF; return { events: [...], nextOffset }.
+// Read from `offset` to EOF; return { events, nextOffset, fileSize, capped }.
 // Tolerates a trailing partial line (no \n) — partial line not consumed,
 // nextOffset stops at the last full \n.
-function readFrom(logPath, offset) {
+//
+// `maxEvents` bounds how many events are consumed: nextOffset advances only past
+// the lines actually returned, so the unread tail stays pending for the next
+// call. Without this bound a caller that caps its own result silently strands —
+// and permanently loses — every event past the cap, because the cursor had
+// already jumped to EOF (the v1.3.17 health-check HIGH finding on get_new_events).
+function readFrom(logPath, offset, { maxEvents = Infinity } = {}) {
   let stat;
   try { stat = fs.statSync(logPath); } catch (e) {
-    if (e.code === 'ENOENT') return { events: [], nextOffset: 0, fileSize: 0 };
+    if (e.code === 'ENOENT') return { events: [], nextOffset: 0, fileSize: 0, capped: false };
     throw e;
   }
   const fileSize = stat.size;
-  if (offset >= fileSize) return { events: [], nextOffset: offset, fileSize };
+  if (offset >= fileSize) return { events: [], nextOffset: offset, fileSize, capped: false };
   if (offset < 0) offset = 0;
 
   const fd = fs.openSync(logPath, 'r');
@@ -45,15 +51,26 @@ function readFrom(logPath, offset) {
     const lastNl = text.lastIndexOf('\n');
     if (lastNl < 0) {
       // Entire chunk is partial; no events consumed.
-      return { events: [], nextOffset: offset, fileSize };
+      return { events: [], nextOffset: offset, fileSize, capped: false };
     }
     const fullText = text.slice(0, lastNl + 1);  // include the \n
     const events = [];
-    for (const line of fullText.split('\n')) {
-      if (!line) continue;
-      try { events.push(JSON.parse(line)); } catch (_) { /* skip malformed */ }
+    let consumedLen = 0;  // byte length of the lines we actually consume (incl their \n)
+    let capped = false;
+    let pos = 0;
+    while (pos < fullText.length) {
+      const nl = fullText.indexOf('\n', pos);
+      if (nl < 0) break;  // no more complete lines (fullText ends in \n, so unreachable)
+      const line = fullText.slice(pos, nl);
+      const lineBytes = Buffer.byteLength(fullText.slice(pos, nl + 1), 'utf8');
+      if (line) {
+        if (events.length >= maxEvents) { capped = true; break; }  // stop BEFORE consuming the next event
+        try { events.push(JSON.parse(line)); } catch (_) { /* skip malformed, but still consume */ }
+      }
+      consumedLen += lineBytes;
+      pos = nl + 1;
     }
-    return { events, nextOffset: offset + Buffer.byteLength(fullText, 'utf8'), fileSize };
+    return { events, nextOffset: offset + consumedLen, fileSize, capped };
   } finally {
     fs.closeSync(fd);
   }

@@ -75,20 +75,23 @@ const handlers = {
     if (_hasJsonlMode()) {
       const cap = Math.max(1, parseInt(args.max_events, 10) || 50);
       const peek = !!args.peek;
-      const r = drain(FEISHU_HOME, { peek });
+      // Bound consumption to `cap` at the drain layer: the cursor advances only
+      // past the events returned, so a capped tail is preserved for the next
+      // call instead of being silently skipped (v1.3.17 fix). `truncated` now
+      // means "more events are pending — call again", driven by drain's capped.
+      // Known limitation: a non-"*" profile filter still consumes (advances the
+      // single global cursor past) events belonging to other profiles within
+      // this batch; cross-profile concurrent pollers should pass profile="*" or
+      // peek. A per-profile cursor would remove that and is tracked separately.
+      const r = drain(FEISHU_HOME, { peek, maxEvents: cap });
       const currentProfile = ctx.getActiveProfile();
-      let filtered = r.events.filter((e) => _filter(e, args, currentProfile));
-      let truncated = false;
-      if (filtered.length > cap) {
-        filtered = filtered.slice(0, cap);
-        truncated = true;
-      }
+      const filtered = r.events.filter((e) => _filter(e, args, currentProfile));
       const snap = readSnapshot(FEISHU_HOME);
       return json({
         events: filtered,
         cursor: { offset: snap.cursor.offset, file: snap.cursor.file },
         log: { size_bytes: snap.fileSize, pending_bytes: snap.pending },
-        truncated,
+        truncated: !!r.capped,
       });
     }
     // Legacy in-memory fallback
