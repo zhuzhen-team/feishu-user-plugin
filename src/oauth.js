@@ -106,7 +106,7 @@ const OAUTH_STATE = crypto.randomBytes(16).toString('hex');
 //
 // To add a scope: edit this line + add a row in docs/AUTH-SETUP.md scope table.
 // scripts/check-scopes.js enforces both in CI.
-const SCOPES = 'offline_access auth:user.id:read im:message im:message:readonly im:chat im:chat:readonly im:resource search:message contact:user.base:readonly contact:user.id:readonly contact:contact.base:readonly docx:document drive:drive drive:file:upload bitable:app wiki:wiki:readonly wiki:wiki okr:okr:readonly okr:okr.period:readonly okr:okr.content:readonly okr:okr.content:writeonly calendar:calendar:readonly calendar:calendar.event:read calendar:calendar.event:create calendar:calendar.event:update calendar:calendar.event:delete calendar:calendar.event:reply docs:document.media:download docs:document.media:upload sheets:spreadsheet task:task';
+const SCOPES = 'offline_access auth:user.id:read im:message im:message:readonly im:chat im:chat:readonly im:resource search:message contact:user.base:readonly contact:user.id:readonly contact:contact.base:readonly docx:document drive:drive drive:file:upload bitable:app wiki:wiki:readonly wiki:wiki okr:okr:readonly okr:okr.period:readonly okr:okr.content:readonly okr:okr.content:writeonly calendar:calendar:readonly calendar:calendar.event:read calendar:calendar.event:create calendar:calendar.event:update calendar:calendar.event:delete calendar:calendar.event:reply docs:document.media:download docs:document.media:upload sheets:spreadsheet task:task:read task:task:write';
 
 if (!APP_ID || !APP_SECRET) {
   console.error('Missing LARK_APP_ID or LARK_APP_SECRET.');

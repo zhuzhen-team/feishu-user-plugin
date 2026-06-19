@@ -58,7 +58,7 @@ npx feishu-user-plugin migrate --confirm    # 真写 credentials.json
    - 消息：`im:message`、`im:message:readonly`、`im:chat:readonly`
    - 文档：`docx:document`、`bitable:app`、`wiki:wiki:readonly`、`drive:drive:readonly`
    - 联系人：`contact:user.base:readonly`
-   - 按需：`okr:okr:readonly`、`calendar:calendar:readonly`、`task:task`、`drive:drive`、`docs:document.media:upload`、`wiki:wiki` 等
+   - 按需：`okr:okr:readonly`、`calendar:calendar:readonly`、`task:task:read`、`task:task:write`、`drive:drive`、`docs:document.media:upload`、`wiki:wiki` 等
 4. 凭证与基础信息 → 复制 App ID（`cli_xxx`）+ App Secret
 5. 创建版本 → 提交审核 → 管理员审批
 6. 把 bot 加到要读消息的群里
@@ -140,7 +140,7 @@ crontab -e
 | OKR 进度写（v1.3.7：`create_okr_progress_record` / `delete_okr_progress_record`） | `okr:okr.content:writeonly`（Feishu catalog 是 `:writeonly`，不是 `:write` —— `check-scopes.js` 把后者列入 banlist） |
 | 日历读 | `calendar:calendar:readonly`、`calendar:calendar.event:read` |
 | 日历写（v1.3.7：`create_calendar_event` / `update_calendar_event` / `delete_calendar_event` / `respond_calendar_event`） | `calendar:calendar.event:create`、`calendar:calendar.event:update`、`calendar:calendar.event:delete`、`calendar:calendar.event:reply`（Feishu 把"写"拆 4 个动词；用 `:write` 总词 OAuth 端会 422-reject 整次 authorize） |
-| Tasks v2（v1.3.7：list / get / create / update / complete / delete_task、`manage_task_members`） | `task:task` |
+| Tasks v2（v1.3.7：list / get / create / update / complete / delete_task、`manage_task_members`） | `task:task:read` `task:task:write`（飞书已把旧的 `task:task` 拆分为读/写两枚；需在应用后台同时开通这两枚权限，然后重新 `oauth` 授权） |
 
 ### 应用身份额外 scope（仅在应用控制台开，不走 OAuth）
 
