@@ -44,6 +44,11 @@ function isReadOnlyCall(name, args) {
 
 // --- Error classification ---
 
+// Codes that mean "this profile can't see the resource — try another profile".
+// 1254000/1254301 also appear in error-codes.js as upload-transient retries;
+// that is context-scoped, not contradictory: this set gates bitable/wiki/docx
+// READ auto-switch, while the upload-retry mapping applies only to upload WRITES
+// (which profile-router never auto-switches). See error-codes.js for the note.
 const SWITCH_CODES = new Set([
   91403,    // wiki / docx no permission
   1254301,  // bitable no permission

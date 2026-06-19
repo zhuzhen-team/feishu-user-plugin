@@ -408,6 +408,7 @@ main().catch(console.error).finally(() => {
     'test-cookie-gateway-ok',           // Claude: 簇B gateway-ok vs empty-result
     'test-resolve-and-save',            // Claude: 簇A/B oc_ resolve + 簇E save_path
     'test-profile-router-hint',         // Claude: auto-switch banner + stale-hint clear
+    'test-nits-batch',                  // Claude: repairTail window, bitable 500-cap, getBlockChildren pagination
     'test-fallback-warning-propagation',// Codex: fallbackWarning across domains
     'test-pagination-cursor-invariant', // Codex: hasMore+cursor invariant
     'test-credentials-write-contract',  // Codex: credentials locked write contract

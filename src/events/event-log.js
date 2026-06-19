@@ -88,21 +88,34 @@ function repairTail(logPath, scanBytes = 8192) {
 
   const fd = fs.openSync(logPath, 'r+');
   try {
-    const readLen = Math.min(scanBytes, stat.size);
-    const buf = Buffer.allocUnsafe(readLen);
-    fs.readSync(fd, buf, 0, readLen, stat.size - readLen);
-    // If the file already ends in \n, no repair needed.
-    if (buf[buf.length - 1] === 0x0A) return { repaired: false, sizeBefore: stat.size, sizeAfter: stat.size };
-    // Find last \n in the scanned tail.
-    let i = buf.length - 1;
-    while (i >= 0 && buf[i] !== 0x0A) i--;
-    if (i < 0) {
-      // No \n in last 8 KB — pathological. Don't truncate (might lose data); leave as is.
-      return { repaired: false, sizeBefore: stat.size, sizeAfter: stat.size, warning: 'no \\n in scan window' };
+    // Grow the scan window until we find a newline or reach the file start, so a
+    // crash that left a partial trailing record LARGER than the initial window
+    // is still repaired (the old code gave up at 8 KB and left the unterminated
+    // tail, which the next append then concatenated into one corrupt line).
+    let win = Math.min(scanBytes, stat.size);
+    for (;;) {
+      const buf = Buffer.allocUnsafe(win);
+      fs.readSync(fd, buf, 0, win, stat.size - win);
+      // If the file already ends in \n, no repair needed.
+      if (buf[buf.length - 1] === 0x0A) return { repaired: false, sizeBefore: stat.size, sizeAfter: stat.size };
+      // Find the last \n in the scanned window.
+      let i = buf.length - 1;
+      while (i >= 0 && buf[i] !== 0x0A) i--;
+      if (i >= 0) {
+        const truncateAt = stat.size - win + i + 1;  // +1 to keep the \n
+        fs.ftruncateSync(fd, truncateAt);
+        return { repaired: true, sizeBefore: stat.size, sizeAfter: truncateAt };
+      }
+      if (win >= stat.size) {
+        // No \n in the ENTIRE file and it doesn't end in \n: the whole file is a
+        // single never-terminated (corrupt) record from a crash mid-first-write.
+        // Truncate to empty so appendEvent starts clean rather than concatenating
+        // onto a partial line forever.
+        fs.ftruncateSync(fd, 0);
+        return { repaired: true, sizeBefore: stat.size, sizeAfter: 0, warning: 'no \\n in entire file; truncated corrupt single-record log to empty' };
+      }
+      win = Math.min(win * 4, stat.size);  // grow and retry
     }
-    const truncateAt = stat.size - readLen + i + 1;  // +1 to keep the \n
-    fs.ftruncateSync(fd, truncateAt);
-    return { repaired: true, sizeBefore: stat.size, sizeAfter: truncateAt };
   } finally {
     fs.closeSync(fd);
   }

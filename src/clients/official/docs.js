@@ -203,16 +203,26 @@ module.exports = {
   // whole-document 500-block cap of getDocBlocks. Used by createDocTable to map
   // a table's cells (and each cell's text block) reliably in large documents.
   async getBlockChildren(documentId, blockId) {
-    const res = await this._asUserOrApp({
-      uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks/${blockId}/children`,
-      query: { page_size: '500' },
-      sdkFn: () => this.client.docx.documentBlockChildren.get({
-        path: { document_id: documentId, block_id: blockId },
-        params: { page_size: 500 },
-      }),
-      label: 'getBlockChildren',
-    });
-    return { items: res.data.items || [] };
+    // Paginate to completion: a single page_size:500 request truncated tables
+    // with >500 cells, which made createDocTable abort after the table block was
+    // already created (empty table, no partial-fill map). Bounded at 50 pages.
+    const items = [];
+    let pageToken;
+    for (let page = 0; page < 50; page++) {
+      const res = await this._asUserOrApp({
+        uatPath: `/open-apis/docx/v1/documents/${documentId}/blocks/${blockId}/children`,
+        query: { page_size: '500', ...(pageToken ? { page_token: pageToken } : {}) },
+        sdkFn: () => this.client.docx.documentBlockChildren.get({
+          path: { document_id: documentId, block_id: blockId },
+          params: { page_size: 500, ...(pageToken ? { page_token: pageToken } : {}) },
+        }),
+        label: 'getBlockChildren',
+      });
+      items.push(...(res.data.items || []));
+      pageToken = res.data.page_token;
+      if (!res.data.has_more || !pageToken) break;
+    }
+    return { items };
   },
 
   async createDocBlock(documentId, parentBlockId, children, index) {

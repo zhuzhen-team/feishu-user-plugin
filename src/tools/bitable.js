@@ -119,6 +119,16 @@ function need(arg, name, action) {
   }
 }
 
+// Feishu's batch record endpoints cap at 500 per call. Enforce it locally with a
+// clear error instead of letting an oversized array hit the API as an opaque
+// failure (or, worse, a partial write with no per-record reporting). Callers
+// should chunk into <=500-record batches.
+function capBatch(arr, name, action) {
+  if (Array.isArray(arr) && arr.length > 500) {
+    throw new Error(`manage_bitable: ${name} has ${arr.length} items for action=${action}, exceeding Feishu's 500-per-call cap. Split into batches of <=500.`);
+  }
+}
+
 const handlers = {
   async manage_bitable_app(args, ctx) {
     const c = ctx.getOfficialClient();
@@ -237,14 +247,17 @@ const handlers = {
       }
       case 'create': {
         need(args.records, 'records', 'create');
+        capBatch(args.records, 'records', 'create');
         return json(await c.batchCreateBitableRecords(appToken, args.table_id, args.records));
       }
       case 'update': {
         need(args.records, 'records', 'update');
+        capBatch(args.records, 'records', 'update');
         return json(await c.batchUpdateBitableRecords(appToken, args.table_id, args.records));
       }
       case 'delete': {
         need(args.record_ids, 'record_ids', 'delete');
+        capBatch(args.record_ids, 'record_ids', 'delete');
         return json(await c.batchDeleteBitableRecords(appToken, args.table_id, args.record_ids));
       }
     }

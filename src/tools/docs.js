@@ -136,7 +136,11 @@ const handlers = {
     switch (args.action) {
       case 'create': {
         need(args.parent_block_id, 'parent_block_id', 'create');
-        const modes = [args.children, args.image_path, args.image_token, args.file_path, args.file_token, args.table].filter(Boolean);
+        // Count only meaningfully-provided modes. An empty children:[] is
+        // truthy under filter(Boolean) and was wrongly counted as a selected
+        // mode (`[].filter(Boolean)` keeps []), confusing the exactly-one check.
+        const modes = [args.children, args.image_path, args.image_token, args.file_path, args.file_token, args.table]
+          .filter((m) => m !== undefined && m !== null && m !== '' && !(Array.isArray(m) && m.length === 0));
         if (modes.length > 1) return text('manage_doc_block(create): pass exactly ONE of children / image_path / image_token / file_path / file_token / table.');
         if (args.table) {
           const t = args.table;
