@@ -410,6 +410,7 @@ main().catch(console.error).finally(() => {
     'test-profile-router-hint',         // Claude: auto-switch banner + stale-hint clear
     'test-nits-batch',                  // Claude: repairTail window, bitable 500-cap, getBlockChildren pagination
     'test-events-concurrency',          // Claude: owner-lock steal detection + rotateUnderLock
+    'test-events-per-profile-cursor',   // Claude: per-profile cursor isolation (no cross-profile loss)
     'test-fallback-warning-propagation',// Codex: fallbackWarning across domains
     'test-pagination-cursor-invariant', // Codex: hasMore+cursor invariant
     'test-credentials-write-contract',  // Codex: credentials locked write contract

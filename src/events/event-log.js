@@ -31,7 +31,14 @@ function appendEvent(logPath, eventObj) {
 // call. Without this bound a caller that caps its own result silently strands —
 // and permanently loses — every event past the cap, because the cursor had
 // already jumped to EOF (the v1.3.17 health-check HIGH finding on get_new_events).
-function readFrom(logPath, offset, { maxEvents = Infinity } = {}) {
+//
+// `match(event)` (optional) returns true for events this caller WANTS. Only
+// matching events count toward maxEvents and are returned, but the cursor
+// advances past non-matching events too — they belong to OTHER profiles, which
+// track their own position via their own cursor file. This is what lets a
+// per-profile cursor consume its events exactly once without one profile's
+// drain stranding another profile's events behind a shared cursor.
+function readFrom(logPath, offset, { maxEvents = Infinity, match = null } = {}) {
   let stat;
   try { stat = fs.statSync(logPath); } catch (e) {
     if (e.code === 'ENOENT') return { events: [], nextOffset: 0, fileSize: 0, capped: false };
@@ -64,8 +71,15 @@ function readFrom(logPath, offset, { maxEvents = Infinity } = {}) {
       const line = fullText.slice(pos, nl);
       const lineBytes = Buffer.byteLength(fullText.slice(pos, nl + 1), 'utf8');
       if (line) {
-        if (events.length >= maxEvents) { capped = true; break; }  // stop BEFORE consuming the next event
-        try { events.push(JSON.parse(line)); } catch (_) { /* skip malformed, but still consume */ }
+        let evt;
+        let parsed = false;
+        try { evt = JSON.parse(line); parsed = true; } catch (_) { /* skip malformed, but still consume */ }
+        const wanted = parsed && (!match || match(evt));
+        if (wanted) {
+          if (events.length >= maxEvents) { capped = true; break; }  // stop BEFORE consuming the next wanted event
+          events.push(evt);
+        }
+        // non-matching (other profile) / malformed lines: not returned, but still consumed below
       }
       consumedLen += lineBytes;
       pos = nl + 1;

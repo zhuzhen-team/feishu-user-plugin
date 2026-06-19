@@ -10,6 +10,17 @@
 const { fetchWithTimeout } = require('../../utils');
 const { classifyError } = require('../../error-codes');
 
+// Refuse to buffer an absurdly large attachment fully into memory. Legitimate
+// Feishu message resources are well under this; the guard checks Content-Length
+// BEFORE arrayBuffer() so a giant/hostile attachment can't OOM the process.
+const _DOWNLOAD_HARD_CAP_BYTES = 50 * 1024 * 1024;
+function _guardDownloadSize(res) {
+  const len = parseInt(res.headers.get('content-length') || '0', 10);
+  if (len > _DOWNLOAD_HARD_CAP_BYTES) {
+    throw new Error(`downloadMessageResource: resource is ${(len / 1048576).toFixed(1)} MiB, exceeding the ${_DOWNLOAD_HARD_CAP_BYTES / 1048576} MiB in-memory safety cap — refusing to buffer it. Download it directly from Feishu.`);
+  }
+}
+
 function _applyPageTokenInvariant(out, token) {
   if (!out.hasMore) return out;
   if (token) {
@@ -112,6 +123,7 @@ module.exports = {
           timeoutMs: 60000,
         });
         if (res.ok && !res.headers.get('content-type')?.includes('application/json')) {
+          _guardDownloadSize(res);
           const buf = Buffer.from(await res.arrayBuffer());
           return {
             base64: buf.toString('base64'),
@@ -137,6 +149,7 @@ module.exports = {
       const errJson = await res.json().catch(() => null);
       throw new Error(`downloadMessageResource failed: ${errJson?.code}: ${errJson?.msg || res.statusText}. Note: app identity requires the bot to be in the same chat.`);
     }
+    _guardDownloadSize(res);
     const buf = Buffer.from(await res.arrayBuffer());
     return {
       base64: buf.toString('base64'),

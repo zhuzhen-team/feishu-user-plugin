@@ -187,6 +187,14 @@ class LarkUserClient {
     if (!ok) {
       throw new Error(`_sendMsg: cookie protobuf gateway returned non-2xx for type=${type}. The wire format likely doesn't match what Feishu expects.`);
     }
+    // Why no packet.status failure guard here: a successful send returns
+    // status:null (verified live), and a malformed/invalid chatId is rejected by
+    // the gateway with a non-2xx (caught above, verified live with a bogus id).
+    // There is no observed 2xx-with-nonzero-status failure sentinel to test, so
+    // a "status !== 0 → fail" check would false-positive on the null success.
+    // The documented "valid-shape-but-wrong id → empty packet, goes nowhere"
+    // path is mitigated upstream by _resolveCookieChatId requiring a unique
+    // exact match (no silent fuzzy resolution).
     return { success: true, status: packet.status };
   }
 
