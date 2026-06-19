@@ -17,10 +17,12 @@ class LarkUserClient {
     const nonAsciiMatch = cookieStr.match(/[^\x00-\xff]/);
     if (nonAsciiMatch) {
       const idx = cookieStr.indexOf(nonAsciiMatch[0]);
-      const context = cookieStr.substring(Math.max(0, idx - 20), idx + 20);
+      // Do NOT echo the surrounding cookie bytes — the window can overlap live
+      // session material (sl_session / swp_csrf_token) and this error bubbles to
+      // logs / the agent transcript. Report only the offending (pasted) char +
+      // its position; that's the accidentally-copied text, not credential bytes.
       throw new Error(
-        `LARK_COOKIE contains non-ASCII character "${nonAsciiMatch[0]}" (U+${nonAsciiMatch[0].charCodeAt(0).toString(16).toUpperCase()}) at index ${idx}.\n` +
-        `Context: ...${context}...\n` +
+        `LARK_COOKIE contains non-ASCII character "${nonAsciiMatch[0]}" (U+${nonAsciiMatch[0].charCodeAt(0).toString(16).toUpperCase()}) at index ${idx} of ${cookieStr.length} (surrounding cookie bytes redacted).\n` +
         'This usually means extra text was accidentally copied with the cookie.\n' +
         'Fix: In DevTools Network tab → first request → Request Headers → Cookie → copy ONLY the cookie value.'
       );

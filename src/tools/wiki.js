@@ -167,18 +167,19 @@ const handlers = {
       return json(await ctx.getOfficialClient().getWikiNode(token));
     } catch (e) {
       // search_wiki returns underlying obj_tokens (docxXXX / bascnXXX), which
-      // wiki.v2.getNode rejects. Detect the wiki-only error codes and return
-      // a synthesized node-shape so callers can pass either token kind.
-      const msg = String(e.message || '');
-      if (/95300\d|invalid.*token|node.*not.*found/i.test(msg)) {
-        const objType = inferObjTypeFromToken(token);
-        if (objType) {
-          return json({
-            obj_type: objType,
-            obj_token: token,
-            note: `Token does not look like a wiki node token; treating as a direct ${objType} obj_token. Pass it to ${objType === 'bitable' ? 'list_bitable_tables / search_bitable_records' : objType === 'docx' ? 'read_doc / get_doc_blocks' : 'the matching read tool'} directly.`,
-          });
-        }
+      // wiki.v2.getNode rejects. Rather than match Feishu's (brittle, evolving)
+      // wiki error codes, key off the TOKEN: if it's a recognizable non-wiki
+      // obj_token, getNode can never succeed on it regardless of the exact error
+      // code, so synthesize a node-shape pointing at the right read tool. A real
+      // wiki node token returns null from inferObjTypeFromToken, so a genuine
+      // wiki-node failure still surfaces.
+      const objType = inferObjTypeFromToken(token);
+      if (objType) {
+        return json({
+          obj_type: objType,
+          obj_token: token,
+          note: `Token does not look like a wiki node token; treating as a direct ${objType} obj_token. Pass it to ${objType === 'bitable' ? 'list_bitable_tables / search_bitable_records' : objType === 'docx' ? 'read_doc / get_doc_blocks' : 'the matching read tool'} directly.`,
+        });
       }
       throw e;
     }

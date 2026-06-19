@@ -15,6 +15,7 @@ const path = require('path');
 const { repairTail, appendEvent } = require('./events/event-log');
 const bitable = require('./tools/bitable');
 const docsClient = require('./clients/official/docs');
+const wiki = require('./tools/wiki');
 
 async function run() {
   let pass = 0;
@@ -78,6 +79,18 @@ async function run() {
     const r = await docsClient.getBlockChildren.call(fakeThis, 'doc', 'blk');
     assert.equal(call, 2, 'should make 2 paginated calls');
     assert.deepEqual(r.items.map((i) => i.block_id), ['a', 'b', 'c'], 'should concatenate all pages');
+  });
+
+  // --- get_wiki_node: synthesize for a non-wiki obj_token regardless of error code ---
+  await check('get_wiki_node synthesizes a node-shape for a docx obj_token when getNode fails', async () => {
+    const ctx2 = { getOfficialClient: () => ({ getWikiNode: async () => { throw new Error('some new wiki error code Feishu invented'); } }) };
+    const resp = await wiki.handlers.get_wiki_node({ node_token: 'docxAbCdEfGhIjKlMnOpencode' }, ctx2);
+    const txt = resp.content.map((c) => c.text).join('');
+    assert.match(txt, /"obj_type":\s*"docx"/, 'should synthesize a docx obj_type, got: ' + txt);
+  });
+  await check('get_wiki_node still propagates the error for a real wiki token', async () => {
+    const ctx2 = { getOfficialClient: () => ({ getWikiNode: async () => { throw new Error('genuine wiki failure'); } }) };
+    await assert.rejects(() => wiki.handlers.get_wiki_node({ node_token: 'wikcnRealWikiNodeToken123' }, ctx2), /genuine wiki failure/);
   });
 
   console.log(`\nnits-batch: ${pass} passed, ${fail} failed`);
