@@ -54,7 +54,7 @@ Layers are independent — configure any subset.
 - OKR: `list_user_okrs` / `get_okrs` / `create/list/delete_okr_progress_record`
 
 **Realtime events (v1.3.9)**
-- Machine-level SSOT: a single MCP process holds the WS owner lock, all processes share `events.jsonl`, every event delivered exactly once across the entire machine
+- Machine-level SSOT: a single MCP process holds the WS owner lock, all processes share `events.jsonl`, with per-profile drain cursors (v1.4.0), every event delivered exactly once across the machine
 - `get_new_events` for incremental drain; `manage_ws_status` to diagnose / reconnect / steal / reconfigure
 
 **Multi-account** (v1.3.8 / v1.3.9 multi-profile auto-switch)

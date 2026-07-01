@@ -54,7 +54,7 @@ lang: zh-CN
 - OKR：`list_user_okrs` / `get_okrs` / `create/list/delete_okr_progress_record`
 
 **实时事件（v1.3.9）**
-- 机器级 SSOT：单进程持有 WS owner 锁，全机所有 MCP 进程共享 `events.jsonl`，每条事件全机恰好一次送达
+- 机器级 SSOT：单进程持有 WS owner 锁，全机所有 MCP 进程共享 `events.jsonl`；游标按 profile 独立（v1.4.0），每条事件全机恰好一次送达
 - `get_new_events` 拉取增量；`manage_ws_status` 诊断 / 重连 / 抢锁 / 重配
 
 **多账号**（v1.3.8 / v1.3.9）

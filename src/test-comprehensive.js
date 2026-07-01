@@ -303,4 +303,12 @@ async function main() {
   process.exit(fail > 0 ? 1 : 0);
 }
 
-main().catch(e => { console.error('Fatal:', e); process.exit(1); });
+// Only auto-run the (live, credential-gated) suite when invoked directly as a
+// script. Guarding behind require.main lets test-all.js require this module as a
+// load-smoke without executing the live suite — previously the bare main() call
+// meant any require would run it, which is why the file was never wired anywhere.
+if (require.main === module) {
+  main().catch(e => { console.error('Fatal:', e); process.exit(1); });
+}
+
+module.exports = { main };

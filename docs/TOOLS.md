@@ -14,13 +14,15 @@
 - [Official API — Docs（7 tools）](#official-api--docs7-tools)
 - [Official API — Bitable（5 tools，v1.3.7 整合）](#official-api--bitable5-toolsv137-整合)
 - [Official API — Wiki（9 tools）](#official-api--wiki9-tools)
-- [Official API — Drive（5 tools）](#official-api--drive5-tools)
+- [Official API — Drive（4 tools）+ Uploads 辅助（3 tools）](#official-api--drive4-tools-uploads-辅助3-tools)
 - [Official API — OKR（6 tools）](#official-api--okr6-tools)
 - [Official API — Calendar（8 tools）](#official-api--calendar8-tools)
 - [Official API — Tasks v2（7 tools，v1.3.7 新域）](#official-api--tasks-v27-toolsv137-新域)
 - [Plugin — Diagnostics & Profiles（4 tools）](#plugin--diagnostics--profiles4-tools)
 - [Plugin — Realtime Events（2 tools，v1.3.9）](#plugin--realtime-events2-toolsv139)
 - [常见用法 patterns](#常见用法-patterns)
+
+> 计数口径：**85 个唯一工具**。`get_login_status` 在 Contacts & Info 与 Diagnostics & Profiles 下交叉列出；Uploads 辅助（3）是跨域 helper（分属 cookie 消息 / docx 媒体 / bitable 附件）。逐类表头相加会略多于 85，以 **85** 为准（CI `check-tool-count.js` 校验）。
 
 ## User Identity — Messaging（cookie protobuf，8 tools）
 `send_to_user` / `send_to_group` / `send_as_user` / `send_image_as_user` / `send_file_as_user` / `send_post_as_user` / `send_card_as_user` / `batch_send`
@@ -114,7 +116,7 @@
 
 - 标识符是 `task_guid`，不是 v1 的 numeric `task_id`
 - `update_task` 必传显式 `update_fields=["summary","due","completed_at",...]` 数组 —— 飞书只 patch 列出的字段
-- 需要 `task:task` scope
+- 需要 `task:task:read` / `task:task:write` scope（v1.4.0 拆分；在应用后台开通这两枚后重跑 `npx feishu-user-plugin oauth`）
 
 ## Plugin — Diagnostics & Profiles（4 tools）
 `get_login_status` / `list_profiles` / `switch_profile` / `manage_profile_hints`
@@ -125,7 +127,7 @@
 ## Plugin — Realtime Events（2 tools，v1.3.9）
 `get_new_events` / `manage_ws_status`
 
-- **v1.3.9 机器级 SSOT**：单 MCP 进程持有 WS owner（通过 `~/.feishu-user-plugin/ws-owner.lock`）。事件写 `~/.feishu-user-plugin/events.jsonl`（append-only，10 MB 软 / 20 MB 硬上限）。所有 harness 共享 `events.cursor.json` —— **每条事件全机精确投递一次**，无重复
+- **v1.3.9 机器级 SSOT**：单 MCP 进程持有 WS owner（通过 `~/.feishu-user-plugin/ws-owner.lock`）。事件写 `~/.feishu-user-plugin/events.jsonl`（append-only，10 MB 软 / 20 MB 硬上限）。**游标按 profile 独立**（v1.4.0）：每个 profile 走自己的 `events.cursor.<profile>.json`，互不吞；`profile:"*"` / `"any"` 用全局 `events.cursor.json` 看全部。同一游标视角下 **每条事件全机精确投递一次**，无重复
 - WS 在 MCP 启动时连飞书（前提是配了 APP_ID + APP_SECRET）。仅支持 feishu.cn —— Lark 国际版不支持
 - 默认订阅 `["im.message.receive_v1"]`。要订阅其他事件（`approval.instance.created_v4` / `calendar.calendar.event.changed_v4` 等），编辑 `credentials.json::profiles[<active>].events` 然后 `manage_ws_status(action=reconfig)` 不重启重新订阅
 - `get_new_events` 通过 `event_type` / `event_types` / `chat_id` / `since_seconds` / `profile` 过滤。`peek=true` 不推进 cursor。**默认 `profile` 过滤 = 当前活跃**
@@ -187,7 +189,7 @@
 
 ### Tasks（v2，v1.3.7）
 
-全新域。标识符是 `task_guid`（不是 v1 的 numeric `task_id`）。需要 `task:task` scope。
+全新域。标识符是 `task_guid`（不是 v1 的 numeric `task_id`）。需要 `task:task:read` / `task:task:write` scope（v1.4.0 起拆分）。
 
 1. `list_tasks(completed?, type?)` —— 当前用户任务，分页
 2. `get_task(task_guid)` —— 完整详情

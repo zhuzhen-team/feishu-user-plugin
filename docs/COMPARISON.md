@@ -85,7 +85,7 @@
 - `manage_bitable_record(action=create|update|delete)` 接受单条或最多 500 条数组
 - UAT-first 写入 + ⚠ fallback warning：写工具优先 UAT，失败 fallback 到 bot 时 response 里追加 warning 提醒 ownership 漂移
 - 多 profile auto-switch（v1.3.8+）：91403 / 1254301 / 1254000 / 99991672 / HTTP 403 自动跨 profile retry，写路径不切
-- 机器级 WS SSOT（v1.3.9+）：单进程持 WS owner 锁，所有 MCP 进程共享 events.jsonl + cursor，全机每事件精确一次
+- 机器级 WS SSOT（v1.3.9+）：单进程持 WS owner 锁，所有 MCP 进程共享 events.jsonl；游标按 profile 独立（v1.4.0，`*` 看全部），同一视角下全机每事件精确一次
 
 ### 维护状态
 

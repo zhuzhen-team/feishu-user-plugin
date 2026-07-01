@@ -23,4 +23,32 @@ const stderrLogger = {
   trace: () => {},
 };
 
-module.exports = { stderrLogger, installStdoutGuard };
+// Bounded, total error serialiser for the process-level uncaughtException /
+// unhandledRejection handlers (see server.js). A thrown or rejected value may
+// not be an Error (message/stack undefined), and formatting a huge or circular
+// value unbounded can itself throw inside the handler — turning a single fault
+// into a handler→format→throw→handler loop that pegs the CPU. This projects
+// Errors to plain fields, hard-caps the TOTAL output length regardless of the
+// value's shape (a rejected promise's reason may be a many-key object, which
+// util.inspect's per-value maxStringLength does NOT bound), and NEVER throws: if
+// even the projection fails (e.g. a getter that throws) it returns a placeholder.
+// Lands the self-contained, reviewer-approved part of PR #110 (util.inspect
+// hardening) without its disputed re-entrancy/SIGKILL/ps-cleanup changes.
+const util = require('util');
+const _INSPECT_CAP = 8000;
+function inspectError(val) {
+  try {
+    const projection = (val instanceof Error)
+      ? { name: val.name, message: val.message, code: val.code, stack: val.stack }
+      : val;
+    const s = util.inspect(projection, { depth: 3, breakLength: Infinity, maxStringLength: 4000, maxArrayLength: 200 });
+    // Per-value caps (maxStringLength / maxArrayLength) don't limit the number of
+    // object properties, so hard-truncate the assembled string as a final bound.
+    return s.length > _INSPECT_CAP ? s.slice(0, _INSPECT_CAP) + `… <+${s.length - _INSPECT_CAP} chars truncated>` : s;
+  } catch (_) {
+    try { return `<unserializable ${Object.prototype.toString.call(val)}>`; }
+    catch (_) { return '<unserializable>'; }
+  }
+}
+
+module.exports = { stderrLogger, installStdoutGuard, inspectError };

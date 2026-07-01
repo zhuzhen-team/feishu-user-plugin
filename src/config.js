@@ -12,6 +12,47 @@ function _atomicWrite(filePath, content) {
   fs.renameSync(tmpPath, filePath);
 }
 
+// Read an existing JSON config without ever silently discarding it.
+//   • ENOENT (no file yet) or an empty / whitespace-only file → {}  (a fresh
+//     config is safe to create).
+//   • A non-empty file that fails to JSON.parse is USER DATA we must not
+//     overwrite — throw so setup aborts instead of clobbering the file.
+// Previously both call sites did `try { JSON.parse(...) } catch {}`, so a
+// hand-edited trailing comma in ~/.claude.json left config={} and the atomic
+// write then wiped every other mcpServers entry, the projects history and all
+// settings. See test-config-write-safety.js.
+function _readJsonConfigOrThrow(configPath) {
+  let raw;
+  try {
+    raw = fs.readFileSync(configPath, 'utf8');
+  } catch (e) {
+    if (e.code === 'ENOENT') return {};
+    throw e; // permission / IO error — surface it rather than overwrite blindly
+  }
+  if (raw.trim() === '') return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(
+      `Refusing to overwrite ${configPath}: it exists but is not valid JSON (${e.message}). ` +
+      'Fix or remove the file, then re-run `npx feishu-user-plugin setup`. ' +
+      'Overwriting it would erase your other MCP servers and settings.'
+    );
+  }
+  // Valid JSON but not a config object (null / array / primitive) is still
+  // unexpected user content — refuse rather than crash downstream or write a
+  // malformed config.
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    const kind = Array.isArray(parsed) ? 'array' : parsed === null ? 'null' : typeof parsed;
+    throw new Error(
+      `Refusing to overwrite ${configPath}: it is valid JSON but not a config object (got ${kind}). ` +
+      'Fix or remove the file, then re-run `npx feishu-user-plugin setup`.'
+    );
+  }
+  return parsed;
+}
+
 // --- Minimal TOML helpers (only handles MCP server config structure) ---
 
 function _tomlEscape(s) {
@@ -323,18 +364,14 @@ function _writeClaudeConfig(env, configPath, projectPath, options = {}) {
   }
 
   if (projectPath) {
-    let existing = {};
-    try { existing = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch {}
+    const existing = _readJsonConfigOrThrow(configPath);
     if (!existing.projects?.[projectPath]) {
       console.error(`[feishu-user-plugin] Warning: project entry "${projectPath}" not found in ${configPath}, writing to top-level mcpServers`);
       projectPath = null;
     }
   }
 
-  let config = {};
-  try {
-    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  } catch {}
+  const config = _readJsonConfigOrThrow(configPath);
 
   const serverEntry = {
     command: 'npx',
@@ -374,7 +411,11 @@ function _writeCodexConfig(env, options = {}) {
   }
 
   let content = '';
-  try { content = fs.readFileSync(configPath, 'utf8'); } catch {}
+  try {
+    content = fs.readFileSync(configPath, 'utf8');
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e; // don't overwrite an existing config we merely failed to read
+  }
 
   // Remove existing feishu entries
   for (const name of SERVER_NAMES) {

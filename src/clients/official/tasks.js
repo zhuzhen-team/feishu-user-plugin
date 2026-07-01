@@ -4,7 +4,8 @@
 //   https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/task-v2/task/overview
 //
 // All methods are UAT-first since tasks are user-owned by default. Requires
-// `task:task` scope on the OAuth.
+// `task:task:read` / `task:task:write` scope on the OAuth (v1.4.0 split the
+// old undivided `task:task`).
 //
 // Note on identifiers: v2 uses `task_guid` (not numeric task_id like v1). All
 // our methods accept and return guid strings.
