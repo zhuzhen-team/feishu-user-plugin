@@ -103,6 +103,19 @@ async function run() {
     });
   });
 
+  ok('valid JSON but not an object (null / array / number) → refuse, file intact', () => {
+    for (const content of ['null', '[1,2,3]', '42', '"a string"']) {
+      withTmp(content, (p) => {
+        let threw = false, msg = '';
+        try { writeNewConfig(ENV, p, null, 'claude'); }
+        catch (e) { threw = true; msg = e.message; }
+        assert.ok(threw, `non-object JSON ${content} must be refused, not written`);
+        assert.ok(/not a config object/.test(msg), `error should explain the shape: ${msg}`);
+        assert.strictEqual(fs.readFileSync(p, 'utf8'), content, 'file must be left intact');
+      });
+    }
+  });
+
   console.log(`\n=== test-config-write-safety: ${pass} passed, ${fail} failed ===`);
   if (fail > 0) process.exit(1);
 }

@@ -347,7 +347,6 @@ main().catch(console.error).finally(() => {
   require('./test-events-cursor').run();
   require('./test-events-owner').run();
   require('./test-error-codes').run();
-  require('./test-inspect-error').run();
   require('./test-identity-state').run().catch(e => {
     console.error('identity-state: FAIL', e);
     process.exitCode = 1;
@@ -417,6 +416,7 @@ main().catch(console.error).finally(() => {
   for (const t of [
     'test-config-toml-removal',         // Claude: 簇E TOML rewrite data-loss
     'test-config-write-safety',         // Claude: setup must not clobber invalid ~/.claude.json
+    'test-inspect-error',               // Claude: process-handler error serialiser is bounded + total
     'test-write-path-payloads',         // Claude: calendar/tasks/okr/drive/uploads request-body contracts
     'test-events-drain-bounded',        // Claude: 簇D get_new_events tail-loss
     'test-cookie-gateway-ok',           // Claude: 簇B gateway-ok vs empty-result

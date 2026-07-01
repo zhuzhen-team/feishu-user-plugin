@@ -30,8 +30,9 @@ function _readJsonConfigOrThrow(configPath) {
     throw e; // permission / IO error — surface it rather than overwrite blindly
   }
   if (raw.trim() === '') return {};
+  let parsed;
   try {
-    return JSON.parse(raw);
+    parsed = JSON.parse(raw);
   } catch (e) {
     throw new Error(
       `Refusing to overwrite ${configPath}: it exists but is not valid JSON (${e.message}). ` +
@@ -39,6 +40,17 @@ function _readJsonConfigOrThrow(configPath) {
       'Overwriting it would erase your other MCP servers and settings.'
     );
   }
+  // Valid JSON but not a config object (null / array / primitive) is still
+  // unexpected user content — refuse rather than crash downstream or write a
+  // malformed config.
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    const kind = Array.isArray(parsed) ? 'array' : parsed === null ? 'null' : typeof parsed;
+    throw new Error(
+      `Refusing to overwrite ${configPath}: it is valid JSON but not a config object (got ${kind}). ` +
+      'Fix or remove the file, then re-run `npx feishu-user-plugin setup`.'
+    );
+  }
+  return parsed;
 }
 
 // --- Minimal TOML helpers (only handles MCP server config structure) ---
