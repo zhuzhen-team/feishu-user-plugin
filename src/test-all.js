@@ -347,6 +347,7 @@ main().catch(console.error).finally(() => {
   require('./test-events-cursor').run();
   require('./test-events-owner').run();
   require('./test-error-codes').run();
+  require('./test-inspect-error').run();
   require('./test-identity-state').run().catch(e => {
     console.error('identity-state: FAIL', e);
     process.exitCode = 1;
@@ -397,6 +398,17 @@ main().catch(console.error).finally(() => {
   require('./test-lark-desktop').run();
   require('./test-display-label');  // standalone — runs on require, exits non-zero on fail
 
+  // Module-load smoke for the standalone live runner: proves test-comprehensive.js
+  // still parses / requires cleanly (it is credential-gated and never runs in CI,
+  // so it would otherwise rot undetected). require.main guard keeps it from executing.
+  try {
+    const comp = require('./test-comprehensive');
+    if (typeof comp.main !== 'function') throw new Error('test-comprehensive must export main()');
+  } catch (e) {
+    console.error('test-comprehensive load-smoke: FAIL', e.message);
+    process.exitCode = 1;
+  }
+
   // v1.3.17 health-check regression tests (fixture/stub-based, no live API).
   // Run as child processes so a failure fails CI regardless of each file's
   // internal harness style (run()-export vs IIFE-with-process.exit).
@@ -404,6 +416,8 @@ main().catch(console.error).finally(() => {
   const _p = require('path');
   for (const t of [
     'test-config-toml-removal',         // Claude: 簇E TOML rewrite data-loss
+    'test-config-write-safety',         // Claude: setup must not clobber invalid ~/.claude.json
+    'test-write-path-payloads',         // Claude: calendar/tasks/okr/drive/uploads request-body contracts
     'test-events-drain-bounded',        // Claude: 簇D get_new_events tail-loss
     'test-cookie-gateway-ok',           // Claude: 簇B gateway-ok vs empty-result
     'test-resolve-and-save',            // Claude: 簇A/B oc_ resolve + 簇E save_path
