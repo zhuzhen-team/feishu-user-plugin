@@ -12,7 +12,7 @@ jobs:
       id-token: write   # OIDC token for `mcp-publisher login github-oidc`
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: '20'
