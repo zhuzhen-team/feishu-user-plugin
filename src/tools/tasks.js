@@ -1,8 +1,9 @@
 // src/tools/tasks.js — Feishu Tasks v2 tools (v1.3.7 new domain).
 //
 // 7 tools backed by clients/official/tasks.js. All UAT-first.
-// Requires `task:task` scope on the OAuth — re-run `npx feishu-user-plugin oauth`
-// after enabling the scope on the Feishu app console.
+// Requires `task:task:read` / `task:task:write` scope on the OAuth (v1.4.0 split
+// the old undivided `task:task`) — re-run `npx feishu-user-plugin oauth` after
+// enabling both scopes on the Feishu app console.
 
 const { json, text } = require('./_registry');
 

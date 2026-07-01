@@ -51,6 +51,22 @@ function run() {
     assert.ok(s.length < 20000, `output must be capped well below the input size, got ${s.length}`);
   });
 
+  ok('many-key object is bounded — total output is hard-capped regardless of shape', () => {
+    // The failure mode maxStringLength does NOT cover: an unhandledRejection reason
+    // that is a large plain object (e.g. a big parsed JSON / HTTP response body).
+    const huge = {};
+    for (let i = 0; i < 200000; i++) huge['k' + i] = i;
+    const s = inspectError(huge);
+    assert.strictEqual(typeof s, 'string');
+    assert.ok(s.length < 20000, `many-key object must be truncated, got ${s.length}`);
+    assert.ok(/truncated/.test(s), 'truncation marker should be present for oversized output');
+  });
+
+  ok('large array is bounded', () => {
+    const s = inspectError(new Array(200000).fill('item'));
+    assert.ok(s.length < 20000, `large array must be bounded, got ${s.length}`);
+  });
+
   ok('value whose stack getter throws → caught, returns placeholder, never throws', () => {
     class Nasty extends Error { get stack() { throw new Error('stack blew up'); } }
     let threw = false, s = '';
