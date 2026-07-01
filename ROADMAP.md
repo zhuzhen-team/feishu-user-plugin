@@ -4,11 +4,11 @@
 >
 > 战略定位：聚焦官方做不到 / 做不好的差异化（cookie + protobuf 用户身份路径 + 文档生态 + 实时事件 SSOT + 多 profile 自动切换 + MCP 协议原生）。明确**不再扩展**与官方重叠的业务系统域（mail / approval / attendance / hr / minutes 等）。详见 [docs/COMPARISON.md](./docs/COMPARISON.md)。
 
-## v1.3.16+ 待办
+## v1.4.0+ 待办
 
-- PR #110（uncaughtException 加固 + zombie 进程清理，外部贡献）：已 request changes（`ps comm` 匹配不到进程、SIGKILL 误杀 WS-owner 风险、重入计数不可达、index.js 边界契约、缺测试），等贡献者按建议拆分后再合 util.inspect 加固部分
+- PR #110（uncaughtException 加固 + zombie 进程清理，外部贡献）：维护者 green-light 的 `util.inspect` 有界安全日志部分已在内部落地（`src/logger.js::inspectError`，两个 process handler 改走它）。其余被 request changes 的改动（`ps comm` 匹配不到进程、SIGKILL 误杀 WS-owner / 破坏 lockfile 存活模型、重入计数不可达、index.js 边界契约、缺测试）维持不并，等贡献者按建议拆分，或另行决定是否 close as stale
 
-v1.3.16 发现类读路径 UAT-first（list_files / search_docs / search_wiki / get_wiki_node + 分页游标 + protobufjs 8 / lark-sdk 1.66 依赖升级）已 ship — 见 [CHANGELOG.md v1.3.16 entry](./CHANGELOG.md)。前序版本 v1.3.14 / v1.3.15 见同 CHANGELOG。
+已发布版本逐项变更见 [CHANGELOG.md](./CHANGELOG.md)（最新：v1.4.0 可靠性收口 / v1.3.17 读路径完整性 / v1.3.16 发现类读路径 UAT-first）。
 
 ## 已调研但暂不实施
 

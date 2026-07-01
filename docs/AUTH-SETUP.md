@@ -30,7 +30,7 @@
 - `~/.feishu-user-plugin/ws-owner.lock`：拥有 WS 连接的那个 MCP 进程持有的锁文件（O_CREAT|O_EXCL，60 秒 stale；v1.3.12 起加 PID liveness check，SIGKILL'd owner 即时回收）
 - `~/.feishu-user-plugin/uat-refresh.lock`：UAT 刷新跨进程互斥锁（O_CREAT|O_EXCL，30 秒 stale；v1.3.14 起从 `~/.claude/feishu-uat-refresh.lock` 搬到此处以支持 Codex-only 用户）
 - `~/.feishu-user-plugin/events.jsonl`：WS owner 写入的 append-only 事件日志；10 MB 软 / 20 MB 硬上限触发轮转到 `events.jsonl.old`
-- `~/.feishu-user-plugin/events.cursor.json`：所有 MCP 进程共享的 drain cursor —— 推进它意味着事件被本机所有 harness 消费过
+- `~/.feishu-user-plugin/events.cursor.<profile>.json`：每个 profile 独立的 drain cursor（v1.4.0；`*` / `any` 用全局 `events.cursor.json`）—— 推进它意味着该 profile 的事件被本机所有 harness 消费过
 - **Lark Desktop 多账号 auto-switch（v1.3.11）**：当 `credentials.json::profiles[*].larkHash` 绑定后，owner heartbeat（15 秒）watch `~/Library/.../sdk_storage/<hash>/cookie_store.db` mtime；切换 Lark Desktop 活跃账号自动 flip `credentials.json::active` 到对应 profile。仅 macOS。绑定通过 `setup --bind-hash <hash>` 或 `setup` 时自动检测（单账号静默绑定；多账号交互模式 prompt / 非交互模式选最近活跃）。Cookie 仍按 profile 留在 `LARK_COOKIE` —— 加密的 `cookie_store.db` 永远不读
 
 ## 凭证库（v1.3.7+）

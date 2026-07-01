@@ -32,6 +32,6 @@ jobs:
       - run: npm run smoke
       # v1.3.13: fixture-based unit tests now run in CI (Reviewer D P2).
       # test-all.js's `main()` exits early when LARK_COOKIE is absent (CI
-      # has no creds); the bottom `.finally()` requires the 14 fixture
-      # unit tests regardless, so they always run.
+      # has no creds); the bottom `.finally()` runs the fixture / unit tests
+      # regardless of credentials, so they always run.
       - run: npm test
