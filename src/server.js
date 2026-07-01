@@ -31,6 +31,7 @@ const credentials = require('./auth/credentials');
 const profileRouter = require('./auth/profile-router');
 const { createCredentialsMonitor } = require('./auth/credentials-monitor');
 const identityState = require('./auth/identity-state');
+const { inspectError } = require('./logger');
 
 // --- Tool modules ---
 // Adding a new domain: create src/tools/<x>.js exporting { schemas, handlers }
@@ -553,13 +554,15 @@ server.setRequestHandler(GetPromptRequestSchema, async (req) => {
 });
 
 // --- Process-level error handlers ---
-// Prevent stray promise rejections or uncaught exceptions from killing the MCP server.
+// Prevent stray promise rejections or uncaught exceptions from killing the MCP
+// server. Log via inspectError (bounded, never-throws) instead of touching
+// err.stack directly: a non-Error throw or an unbounded/circular value could
+// otherwise throw inside the handler and turn one fault into a handler loop.
 process.on('uncaughtException', (err) => {
-  console.error('[feishu-user-plugin] Uncaught exception:', err.message);
-  console.error(err.stack);
+  console.error('[feishu-user-plugin] Uncaught exception:', inspectError(err));
 });
 process.on('unhandledRejection', (reason) => {
-  console.error('[feishu-user-plugin] Unhandled rejection:', reason);
+  console.error('[feishu-user-plugin] Unhandled rejection:', inspectError(reason));
 });
 process.on('SIGTERM', () => {
   _stopHeartbeat(); _stopNonOwnerPoll();
